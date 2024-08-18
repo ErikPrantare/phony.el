@@ -28,6 +28,7 @@
 
 ;; TODO
 ;; - Allow docstrings
+;;   - Put docstring in list description talon-side
 ;; - Create visualization with hierarchy.el
 ;; - Make output file defaultable
 ;; - Create subtree
@@ -50,7 +51,7 @@
                                    (my/talon-create-lookup-representation
                                     (my/talon-list-emacs-name list)
                                     (car entry))))
-                                (my/talon-list-list list)))))
+                                (my/talon-list-mapping list)))))
       json-serialize
       insert)))
 
@@ -69,31 +70,33 @@ expression looking up the value in EMACS-NAME."
   (thread-last
     my/talon-lists
     (seq-find (lambda (list) (equal (my/talon-list-emacs-name list) emacs-name)))
-    my/talon-list-list
+    my/talon-list-mapping
     (assoc utterance)
     cdr))
 
 (cl-defstruct my/talon-list
-  list emacs-name talon-name output-file)
+  mapping emacs-name talon-name output-file (docstring nil))
 
-(defun my/talon-set-list (emacs-name talon-name output-file list)
+
+
+(defun my/talon-set-list (emacs-name talon-name output-file mapping)
   (let ((old-list (seq-find
                    (lambda (list) (eq emacs-name (my/talon-list-emacs-name list)))
                    my/talon-lists)))
     (if (not old-list)
         (setq my/talon-lists (cons (make-my/talon-list
-                                   :emacs-name emacs-name
-                                   :talon-name talon-name
-                                   :output-file output-file
-                                   :list list)
+                                    :emacs-name emacs-name
+                                    :talon-name talon-name
+                                    :output-file output-file
+                                    :mapping mapping)
                                    my/talon-lists))
-      (setf (my/talon-list-list old-list) list)
+      (setf (my/talon-list-mapping old-list) mapping)
       (setf (my/talon-list-talon-name old-list) talon-name)
       (setf (my/talon-list-output-file old-list) output-file)))
   (thread-last
     my/talon-lists
     (seq-filter (lambda (list) (equal output-file
-                                     (my/talon-list-output-file list))))
+                                      (my/talon-list-output-file list))))
     (my/talon-send-lists output-file)))
 
 ;; TODO only specify output file optionally.
