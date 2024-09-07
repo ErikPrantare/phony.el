@@ -1,7 +1,31 @@
 * talon-list.el
-Define talon lists of elisp objects from elisp.
+Define talon lists of Elisp values, from Elisp.
 
-TBA setup.
+** Setup
+Clone this repo and add the following to your Emacs configuration:
+
+#+begin_src elisp
+  (add-to-list 'load-path "path/to/talon-list/directory")
+  (require 'talon-list)
+#+end_src
+
+Then, add [[file:talon/read-lists.py]] to ~\~/talon/user/~.
+
+Using this package requires the ability to evaluate arbitrary lisp
+expressions from talon.  If you don't already have this set up, add
+[[file:talon/evaluate-lisp.py]] to ~\~/.talon/user/~ and make sure to run
+emacs as a server (see [[info:emacs#Emacs Server][Using Emacs as a Server]] in the Emacs manual).
+
+You can now define talon lists using the ~define-talon-list~ macro.
+It takes three arguments: First, an emacs identifier for storing the
+list.  Second, the talon identifier.  This must be a valid talon
+identifier.  Finally, an alist, where each entry maps an utterance too
+a value.
+
+This macro will define the variable given as its first argument and
+store the alist in it.  It will also notify talon that the lists have
+been updated, causing talon to read the defined lists.  After this,
+the lists will become available for usage in talon files.
 
 ** Example usage
 *** Create list mapping spoken form of colors to hexcode
@@ -21,13 +45,13 @@ In talon:
       user.emacs_lisp("(insert {color})")
 #+end_src
 
-*** Create list containing commands
+*** Create list of commands
 In emacs:
 
 #+begin_src emacs-lisp
   (define-talon-list my/commands command
     `(("save" . #'save-buffer)
-      ("hello" . ,(lambda () (message "Hello, %s" (user-full-name))))))
+      ("hello" . ,(lambda () (message "Hello %s!" (user-full-name))))))
 #+end_src
 
 In talon:

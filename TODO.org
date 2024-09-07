@@ -1,11 +1,15 @@
 * TODO Commentary
-* TODO Describes setup
 
 * TODO Allow docstrings
 Should be put into the newly defined variable and in the list
 docstring on the talon side.
 
-* TODO Include talon-side code
+* TODO Handle errors in file reading
+In [[file:talon/read-lists.py]], both taken care of actually reading the
+file change information and handling misshaped json.
+
+* TODO Read list output directory from emacs
+In [[file:talon/read-lists.py]].
 
 * TODO Add changelog
 

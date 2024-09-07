@@ -4,7 +4,8 @@
 
 ;; Author: Erik Präntare
 ;; Keywords: files
-;; Version: 0.0.0
+;; Version: 0.1.0
+;; Homepage: https://github.com/ErikPrantare/talon-list.el
 ;; Package-Requires: ((emacs "27.1"))
 ;; Created: 13 Jul 2024
 
@@ -27,7 +28,6 @@
 ;; Define talon lists of elisp objects from elisp.
 
 ;;; Code:
-
 
 (require 'cl-lib)
 
