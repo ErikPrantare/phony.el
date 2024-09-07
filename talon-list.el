@@ -1,11 +1,11 @@
-;;; talon-list.el --- Declare talon lists from emacs -*- lexical-binding: t; -*-
+;;; talon-list.el --- Declare talon lists            -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024 Erik Präntare
 
 ;; Author: Erik Präntare
 ;; Keywords: files
 ;; Version: 0.0.0
-;; Package-Requires: ((emacs "25.1"))
+;; Package-Requires: ((emacs "27.1"))
 ;; Created: 13 Jul 2024
 
 ;; This program is free software; you can redistribute it and/or
@@ -31,89 +31,90 @@
 ;; TODO
 ;; - Allow docstrings
 ;;   - Put docstring in list description talon-side
-;; - Create visualization with hierarchy.el
+;; - Create visualization with hierarchy.el (for easier the bugging)
 ;; - Make output file defaultable
 ;; - Create subtree
 ;; - Put TODO in separate file
 ;; - Add documentation
 
 (require 'cl-lib)
-(require 'subr-x)
 
-;; TODO: Correctly handle errors (like?)
-(defun talon-list--send-lists (file lists)
-  "Sends LISTS to FILE.  Talon may read this to specify lists."
-  (with-temp-file file
-    (thread-last
-      lists
-      (seq-map (lambda (list)
-                 (cons (talon-list--list-talon-name list)
-                       (seq-map (lambda (entry)
-                                  (cons
-                                   (intern (car entry))
-                                   (talon-list--create-lookup-representation
-                                    (talon-list--list-emacs-name list)
-                                    (car entry))))
-                                (talon-list--list-mapping list)))))
-      json-serialize
-      insert)))
+(defgroup talon-list nil
+  "Functionality for defining talon lists in Emacs Lisp."
+  :group 'files)
 
-(defun talon-list--create-lookup-representation (emacs-name utterance)
-  "Create lookup string in list EMACS-NAME for key UTTERANCE.
+(defcustom talon-list-output-file "~/.talon/emacs-lists.json"
+  "Output file for defined lists."
+  :type 'file
+  :group 'talon-list)
 
-When evaluated through emacsclient, this corresponds to an
-expression looking up the value in EMACS-NAME."
-  (format "(my/talon-list-lookup '%s \"%s\")"
-          emacs-name
-          utterance))
+(defun talon-list--lookup (utterance list)
+  "Return the value corresponding to UTTERANCE in LIST."
+  (alist-get utterance list nil nil #'equal))
 
-(defvar talon-list--lists '())
+(defun talon-list--create-lookup-representation (utterance list-name)
+  "Create lookup string for UTTERANCE in LIST-NAME.
 
-(defun talon-list--lookup (emacs-name utterance)
-  (thread-last
-    talon-list--lists
-    (seq-find (lambda (list) (equal (talon-list--list-emacs-name list) emacs-name)))
-    talon-list--list-mapping
-    (assoc utterance)
-    cdr))
+When evaluating the returned value from emacsclient, this
+performs the lookup."
+  (format "(talon-list--lookup \"%s\" %s)"
+          utterance
+          list-name))
 
-(cl-defstruct talon-list--list
-  mapping emacs-name talon-name output-file (docstring nil))
+(defun talon-list--prepare-list-for-serialization (list-name)
+  "Return list in LIST-NAME as an entry for `json-serialize'.
 
+This represents one key-value pair, mapping the talon list name
+to its list.  `json-serielize' will create a JSON objective
+passed a list of such key-value pairs."
+  (cons (get list-name 'talon-list--talon-name)
+        (let ((mapping (symbol-value list-name)))
+          (mapcar (lambda (entry)
+                    (cons
+                     ;; json-serialize expects symbols for keys.
+                     (make-symbol (car entry))
+                     ;; Each value is a string, encoding a form that
+                     ;; will evaluate to the actual value.
+                     (talon-list--create-lookup-representation
+                      (car entry) list-name)))
+                  mapping))))
 
+;; TODO: Handle IO errors
+(defun talon-list--send-lists (list-names)
+  "Send lists coded in LIST-NAMES to `talon-list-output-file'.
 
-(defun talon-list--set-list (emacs-name talon-name output-file mapping)
-  (let ((old-list (seq-find
-                   (lambda (list) (eq emacs-name (talon-list--list-emacs-name list)))
-                   talon-list--lists)))
-    (if (not old-list)
-        (setq talon-list--lists (cons (make-talon-list--list
-                                    :emacs-name emacs-name
-                                    :talon-name talon-name
-                                    :output-file output-file
-                                    :mapping mapping)
-                                   talon-list--lists))
-      (setf (my/talon-list-mapping old-list) mapping)
-      (setf (my/talon-list-talon-name old-list) talon-name)
-      (setf (my/talon-list-output-file old-list) output-file)))
-  (thread-last
-    talon-list--lists
-    (seq-filter (lambda (list) (equal output-file
-                                      (talon-list--list-output-file list))))
-    (talon-list--send-lists output-file)))
+Talon can read this file to register the lists."
+  (with-temp-file talon-list-output-file
+    (insert
+     (json-serialize
+      (mapcar #'talon-list--prepare-list-for-serialization list-names)))))
 
-;; TODO only specify output file optionally.
-(defmacro define-talon-list (emacs-name talon-name output-file talon-list)
+(defvar talon-list--list-names '()
+  "All defined talon lists.")
+
+(defun talon-list--define-list (list-name talon-name mapping)
+  "Define list with LIST-NAME and TALON-NAME containing MAPPING.
+Update `talon-list-output-file' to contain the definition."
+  
+  (eval `(defvar ,list-name))
+  (setf (symbol-value list-name) mapping)
+  (put list-name 'talon-list--talon-name talon-name)
+
+  (add-to-list 'talon-list--list-names list-name)
+  (talon-list--send-lists talon-list--list-names)
+
+  list-name)
+
+(defmacro define-talon-list (list talon-name mapping)
+  "Define a LIST with TALON-NAME containing MAPPING.
+Update `talon-list-output-file' to contain the definition.
+
+MAPPING is an alist mapping utterances to values.  An utterance
+is a string containing the spoken form for referencing the value.
+
+MAPPING will be stored in the variable LIST."
   (declare (indent defun))
-  (let ((talon-list-variable (make-symbol "talon-list-variable")))
-    `(let ((,talon-list-variable ,talon-list))
-       (my/talon-set-list (quote ,emacs-name)
-                          (quote ,talon-name)
-                          ,output-file
-                          ,talon-list-variable)
-
-       (defvar ,emacs-name)
-       (setq ,emacs-name ,talon-list-variable))))
+  `(talon-list--define-list ',list ',talon-name ,mapping))
 
 (provide 'talon-list)
 ;;; talon-list.el ends here
