@@ -18,14 +18,14 @@ emacs as a server (see [[info:emacs#Emacs Server][Using Emacs as a Server]] in t
 
 You can now define talon lists using the ~define-talon-list~ macro.
 It takes three arguments: First, an emacs identifier for storing the
-list.  Second, the talon identifier.  This must be a valid talon
-identifier.  Finally, an alist, where each entry maps an utterance too
-a value.
+list.  Second, the talon identifier.  Finally, an alist, where each
+entry maps an utterance to a value.
 
 This macro will define the variable given as its first argument and
-store the alist in it.  It will also notify talon that the lists have
-been updated, causing talon to read the defined lists.  After this,
-the lists will become available for usage in talon files.
+store the alist in it, making it available for use in Elisp.  It will
+also notify talon that the lists have been updated, causing talon to
+read the defined lists.  After this, the lists will become available
+for usage in talon files.
 
 ** Example usage
 *** Create list mapping spoken form of colors to hexcode
