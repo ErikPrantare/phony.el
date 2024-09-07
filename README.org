@@ -9,11 +9,11 @@ Clone this repo and add the following to your Emacs configuration:
   (require 'talon-list)
 #+end_src
 
-Then, add [[file:talon/read-lists.py]] to ~~/.talon/user/~.
+Then, add [[file:talon/read-lists.py]] to =~/.talon/user/=.
 
 Using this package requires the ability to evaluate arbitrary lisp
 expressions from talon.  If you don't already have this set up, add
-[[file:talon/evaluate-lisp.py]] to ~~/.talon/user/~ and make sure to run
+[[file:talon/evaluate-lisp.py]] to =~/.talon/user/= and make sure to run
 emacs as a server (see [[info:emacs#Emacs Server][Using Emacs as a Server]] in the Emacs manual).
 
 You can now define talon lists using the ~define-talon-list~ macro.
