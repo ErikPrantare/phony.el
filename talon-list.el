@@ -3,8 +3,10 @@
 ;; Copyright (C) 2024 Erik Präntare
 
 ;; Author: Erik Präntare
-;; Keywords: convenience, abbrev
+;; Keywords: files
 ;; Version: 0.0.0
+;; Package-Requires: ((emacs "25.1"))
+;; Created: 13 Jul 2024
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU Affero General Public License
@@ -36,26 +38,27 @@
 ;; - Add documentation
 
 (require 'cl-lib)
+(require 'subr-x)
 
 ;; TODO: Correctly handle errors (like?)
-(defun my/talon-send-lists (file lists)
+(defun talon-list--send-lists (file lists)
   "Sends LISTS to FILE.  Talon may read this to specify lists."
   (with-temp-file file
     (thread-last
       lists
       (seq-map (lambda (list)
-                 (cons (my/talon-list-talon-name list)
+                 (cons (talon-list--list-talon-name list)
                        (seq-map (lambda (entry)
                                   (cons
                                    (intern (car entry))
-                                   (my/talon-create-lookup-representation
-                                    (my/talon-list-emacs-name list)
+                                   (talon-list--create-lookup-representation
+                                    (talon-list--list-emacs-name list)
                                     (car entry))))
-                                (my/talon-list-mapping list)))))
+                                (talon-list--list-mapping list)))))
       json-serialize
       insert)))
 
-(defun my/talon-create-lookup-representation (emacs-name utterance)
+(defun talon-list--create-lookup-representation (emacs-name utterance)
   "Create lookup string in list EMACS-NAME for key UTTERANCE.
 
 When evaluated through emacsclient, this corresponds to an
@@ -64,43 +67,43 @@ expression looking up the value in EMACS-NAME."
           emacs-name
           utterance))
 
-(defvar my/talon-lists '())
+(defvar talon-list--lists '())
 
-(defun my/talon-list-lookup (emacs-name utterance)
+(defun talon-list--lookup (emacs-name utterance)
   (thread-last
-    my/talon-lists
-    (seq-find (lambda (list) (equal (my/talon-list-emacs-name list) emacs-name)))
-    my/talon-list-mapping
+    talon-list--lists
+    (seq-find (lambda (list) (equal (talon-list--list-emacs-name list) emacs-name)))
+    talon-list--list-mapping
     (assoc utterance)
     cdr))
 
-(cl-defstruct my/talon-list
+(cl-defstruct talon-list--list
   mapping emacs-name talon-name output-file (docstring nil))
 
 
 
-(defun my/talon-set-list (emacs-name talon-name output-file mapping)
+(defun talon-list--set-list (emacs-name talon-name output-file mapping)
   (let ((old-list (seq-find
-                   (lambda (list) (eq emacs-name (my/talon-list-emacs-name list)))
-                   my/talon-lists)))
+                   (lambda (list) (eq emacs-name (talon-list--list-emacs-name list)))
+                   talon-list--lists)))
     (if (not old-list)
-        (setq my/talon-lists (cons (make-my/talon-list
+        (setq talon-list--lists (cons (make-talon-list--list
                                     :emacs-name emacs-name
                                     :talon-name talon-name
                                     :output-file output-file
                                     :mapping mapping)
-                                   my/talon-lists))
+                                   talon-list--lists))
       (setf (my/talon-list-mapping old-list) mapping)
       (setf (my/talon-list-talon-name old-list) talon-name)
       (setf (my/talon-list-output-file old-list) output-file)))
   (thread-last
-    my/talon-lists
+    talon-list--lists
     (seq-filter (lambda (list) (equal output-file
-                                      (my/talon-list-output-file list))))
-    (my/talon-send-lists output-file)))
+                                      (talon-list--list-output-file list))))
+    (talon-list--send-lists output-file)))
 
 ;; TODO only specify output file optionally.
-(defmacro my/define-talon-list (emacs-name talon-name output-file talon-list)
+(defmacro define-talon-list (emacs-name talon-name output-file talon-list)
   (declare (indent defun))
   (let ((talon-list-variable (make-symbol "talon-list-variable")))
     `(let ((,talon-list-variable ,talon-list))
@@ -110,7 +113,7 @@ expression looking up the value in EMACS-NAME."
                           ,talon-list-variable)
 
        (defvar ,emacs-name)
-       (setq ,emacs-name (seq-map #'cdr ,talon-list-variable)))))
+       (setq ,emacs-name ,talon-list-variable))))
 
 (provide 'talon-list)
 ;;; talon-list.el ends here
