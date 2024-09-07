@@ -24,18 +24,10 @@
 
 ;;; Commentary:
 
-;;
+;; Define talon lists of elisp objects from elisp.
 
 ;;; Code:
 
-;; TODO
-;; - Allow docstrings
-;;   - Put docstring in list description talon-side
-;; - Create visualization with hierarchy.el (for easier the bugging)
-;; - Make output file defaultable
-;; - Create subtree
-;; - Put TODO in separate file
-;; - Add documentation
 
 (require 'cl-lib)
 

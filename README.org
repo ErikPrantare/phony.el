@@ -1,0 +1,42 @@
+* talon-list.el
+Define talon lists of elisp objects from elisp.
+
+TBA setup.
+
+** Example usage
+*** Create list mapping spoken form of colors to hexcode
+In emacs:
+
+#+begin_src emacs-lisp
+  (define-talon-list my/colors color
+    '(("white" . "#fffff")
+      ("black" . "#000000")
+      ("red" . "#ff0000")))
+#+end_src
+
+In talon:
+
+#+begin_src talon
+  insert color {user.color}:
+      user.emacs_lisp("(insert {color})")
+#+end_src
+
+*** Create list containing commands
+In emacs:
+
+#+begin_src emacs-lisp
+  (define-talon-list my/commands command
+    `(("save" . #'save-buffer)
+      ("hello" . ,(lambda () (message "Hello, %s" (user-full-name))))))
+#+end_src
+
+In talon:
+
+#+begin_src talon
+  {user.command}:
+      user.emacs_lisp("(funcall {command})")
+#+end_src
+
+** Versioning system
+This project uses [[https://semver.org/][semantic versioning]].  While still on 0.y.z, an
+increment of y signals breaking changes.

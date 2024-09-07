@@ -1,0 +1,16 @@
+* TODO Commentary
+* TODO Describes setup
+
+* TODO Allow docstrings
+Should be put into the newly defined variable and in the list
+docstring on the talon side.
+
+* TODO Include talon-side code
+
+* TODO Add changelog
+
+* TODO Visualize with hierarchy.el
+For easier debugging.
+
+* TODO Testing
+Define list and try to look it up with the generated lookup string.
