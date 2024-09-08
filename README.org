@@ -50,7 +50,7 @@ In emacs:
 
 #+begin_src emacs-lisp
   (define-talon-list my/commands command
-    `(("save" . #'save-buffer)
+    `(("save" . ,#'save-buffer)
       ("hello" . ,(lambda () (message "Hello %s!" (user-full-name))))))
 #+end_src
 
