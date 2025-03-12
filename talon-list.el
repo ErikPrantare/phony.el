@@ -1,6 +1,6 @@
 ;;; talon-list.el --- Declare talon lists            -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024 Erik Präntare
+;; Copyright (C) 2024, 2025 Erik Präntare
 
 ;; Author: Erik Präntare
 ;; Keywords: files
@@ -44,14 +44,16 @@
   "Return the value corresponding to UTTERANCE in LIST."
   (alist-get utterance list nil nil #'equal))
 
-(defun talon-list--create-lookup-representation (utterance list-name)
+(defun talon-list--create-lookup-representation (entry list-name)
   "Create lookup string for UTTERANCE in LIST-NAME.
 
 When evaluating the returned value from emacsclient, this
 performs the lookup."
-  (format "(talon-list--lookup \"%s\" %s)"
-          utterance
-          list-name))
+  (if (get list-name 'talon-list--format-raw)
+      (cdr entry)
+    (format "(talon-list--lookup \"%s\" %s)"
+            (car entry)
+            list-name)))
 
 (defun talon-list--prepare-list-for-serialization (list-name)
   "Return list in LIST-NAME as an entry for `json-serialize'.
@@ -68,7 +70,7 @@ passed a list of such key-value pairs."
                      ;; Each value is a string, encoding a form that
                      ;; will evaluate to the actual value.
                      (talon-list--create-lookup-representation
-                      (car entry) list-name)))
+                      entry list-name)))
                   mapping))))
 
 ;; TODO: Handle IO errors
@@ -84,20 +86,22 @@ Talon can read this file to register the lists."
 (defvar talon-list--list-names '()
   "All defined talon lists.")
 
-(defun talon-list--define-list (list-name talon-name mapping)
+(defun talon-list--define-list (list-name talon-name mapping options)
   "Define list with LIST-NAME and TALON-NAME containing MAPPING.
 Update `talon-list-output-file' to contain the definition."
-  
+
   (eval `(defvar ,list-name))
   (setf (symbol-value list-name) mapping)
+  ;; TODO: Just put all properties in one plist
   (put list-name 'talon-list--talon-name talon-name)
+  (put list-name 'talon-list--format-raw (plist-get options :format-raw))
 
   (add-to-list 'talon-list--list-names list-name)
   (talon-list--send-lists talon-list--list-names)
 
   list-name)
 
-(defmacro define-talon-list (list talon-name mapping)
+(defmacro define-talon-list (list talon-name mapping &rest options)
   "Define a LIST with TALON-NAME containing MAPPING.
 Update `talon-list-output-file' to contain the definition.
 
@@ -106,7 +110,7 @@ is a string containing the spoken form for referencing the value.
 
 MAPPING will be stored in the variable LIST."
   (declare (indent defun))
-  `(talon-list--define-list ',list ',talon-name ,mapping))
+  `(talon-list--define-list ',list ',talon-name ,mapping ',options))
 
 (provide 'talon-list)
 ;;; talon-list.el ends here
