@@ -61,6 +61,19 @@ In talon:
       user.emacs_lisp("(funcall {command})")
 #+end_src
 
+** Accessing and modifying defined lists
+To access the value corresponding to an utterance, use the function
+~talon-list-get~.  This is a generalized variable, meaning you can use
+~setf~ to modify elements of it:
+
+#+begin_src elisp
+  (setf (talon-list-get "squash" my/colors) 'yellow)
+#+end_src
+
+This form allows you to add, remove and change values in the list.
+Removing an element is done by setting it to nil.  After modifying a
+list, the changes will automatically sync with talon.
+
 ** Versioning system
 This project uses [[https://semver.org/][semantic versioning]].  While still on 0.y.z, an
 increment of y signals breaking changes.

@@ -40,9 +40,32 @@
   :type 'file
   :group 'talon-list)
 
+(defun talon-list-get (utterance list)
+  "Return the value corresponding to UTTERANCE in LIST.
+If no such value exists, return nil."
+  (alist-get utterance list nil nil #'equal))
+
+(defmacro talon-list-put (utterance list value)
+  "Set the value of UTTERANCE in LIST to VALUE.
+If value is nil, remove the utterance from the list instead.
+
+Invoking this function will sync the list with talon."
+  `(prog1
+    (setf (alist-get ,utterance ,list nil t #'equal) ,value)
+    (talon-list--send-lists (list ',list))))
+
+(gv-define-expander talon-list-get
+  ;; We need to use `gv-define-expander', because the simpler versions
+  ;; expand to a let-expression binding the list to a local variable.
+  ;; That meant removing elements became impossible.
+  (lambda (do utterance list)
+    (funcall do `(talon-list-get ,utterance ,list)
+             (lambda (value)
+               `(talon-list-put ,utterance ,list ,value)))))
+
 (defun talon-list--lookup (utterance list)
   "Return the value corresponding to UTTERANCE in LIST."
-  (alist-get utterance list nil nil #'equal))
+  (talon-list-get utterance list))
 
 (defun talon-list--create-lookup-representation (entry list-name)
   "Create lookup string for UTTERANCE in LIST-NAME.
