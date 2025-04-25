@@ -82,7 +82,7 @@ performs the lookup."
   "Return list in LIST-NAME as an entry for `json-serialize'.
 
 This represents one key-value pair, mapping the talon list name
-to its list.  `json-serielize' will create a JSON objective
+to its list.  `json-serialize' will create a JSON object
 passed a list of such key-value pairs."
   (cons (get list-name 'talon-list--talon-name)
         (let ((mapping (symbol-value list-name)))
