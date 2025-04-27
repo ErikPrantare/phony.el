@@ -52,7 +52,7 @@ If value is nil, remove the utterance from the list instead.
 Invoking this function will sync the list with talon."
   `(prog1
     (setf (alist-get ,utterance ,list nil t #'equal) ,value)
-    (talon-list--send-lists (list ',list))))
+    (talon-list--request-sync (list ',list))))
 
 (gv-define-expander talon-list-get
   ;; We need to use `gv-define-expander', because the simpler versions
@@ -109,6 +109,12 @@ Talon can read this file to register the lists."
 (defvar talon-list--list-names '()
   "All defined talon lists.")
 
+(defun talon-list--request-sync (list-names)
+  "Sync LIST-NAMES when next idle."
+  ;; For now, were always resync everything.
+  (cancel-function-timers #'talon-list--send-lists)
+  (run-with-idle-timer 0.0 nil #'talon-list--send-lists talon-list--list-names))
+
 (defun talon-list--define-list (list-name talon-name mapping options)
   "Define list with LIST-NAME and TALON-NAME containing MAPPING.
 Update `talon-list-output-file' to contain the definition."
@@ -120,7 +126,7 @@ Update `talon-list-output-file' to contain the definition."
   (put list-name 'talon-list--format-raw (plist-get options :format-raw))
 
   (add-to-list 'talon-list--list-names list-name)
-  (talon-list--send-lists talon-list--list-names)
+  (talon-list--request-sync talon-list--list-names)
 
   list-name)
 
