@@ -109,9 +109,10 @@ Talon can read this file to register the lists."
 (defvar talon-list--list-names '()
   "All defined talon lists.")
 
-(defun talon-list--request-sync (list-names)
+(defun talon-list--request-sync (&optional list-names)
   "Sync LIST-NAMES when next idle."
-  ;; For now, were always resync everything.
+  (interactive)
+  ;; For now, we are always resync everything.
   (cancel-function-timers #'talon-list--send-lists)
   (run-with-idle-timer 0.0 nil #'talon-list--send-lists talon-list--list-names))
 
