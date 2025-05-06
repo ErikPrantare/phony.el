@@ -50,9 +50,10 @@ If no such value exists, return nil."
 If value is nil, remove the utterance from the list instead.
 
 Invoking this function will sync the list with talon."
+  (declare (indent defun))
   `(prog1
-    (setf (alist-get ,utterance ,list nil t #'equal) ,value)
-    (talon-list--request-sync (list ',list))))
+       (setf (alist-get ,utterance ,list nil t #'equal) ,value)
+     (talon-list--request-sync (list ',list))))
 
 (gv-define-expander talon-list-get
   ;; We need to use `gv-define-expander', because the simpler versions
