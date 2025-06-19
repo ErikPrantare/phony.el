@@ -103,9 +103,8 @@ passed a list of such key-value pairs."
 
 Talon can read this file to register the lists."
   (with-temp-file talon-list-output-file
-    (insert
-     (json-serialize
-      (mapcar #'talon-list--prepare-list-for-serialization list-names)))))
+    (json-insert
+     (mapcar #'talon-list--prepare-list-for-serialization list-names))))
 
 (defvar talon-list--list-names '()
   "All defined talon lists.")
