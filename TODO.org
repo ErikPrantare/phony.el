@@ -1,5 +1,8 @@
 * TODO Commentary
 
+* TODO Grep for talon
+Remove references to old name
+
 * TODO Allow docstrings
 Should be put into the newly defined variable and in the list
 docstring on the talon side.
