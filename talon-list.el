@@ -120,19 +120,18 @@ Talon can read this file to register the lists."
   "Define list with LIST-NAME and TALON-NAME containing MAPPING.
 Update `talon-list-output-file' to contain the definition."
 
-  (eval `(defvar ,list-name))
-  (setf (symbol-value list-name) mapping)
-  ;; TODO: Just put all properties in one plist
+  ;; TODO: Put all properties in a hash
   (put list-name 'talon-list--talon-name talon-name)
   (put list-name 'talon-list--format-raw (plist-get options :format-raw))
 
   (add-to-list 'talon-list--list-names list-name)
   (talon-list--request-sync talon-list--list-names)
 
-  list-name)
+  ;; Needs to return the actual mapping, see `define-talon-list'
+  mapping)
 
-(defmacro define-talon-list (list talon-name mapping &rest options)
-  "Define a LIST with TALON-NAME containing MAPPING.
+(defmacro define-talon-list (list-name talon-name mapping &rest options)
+  "Define a LIST-NAME with TALON-NAME containing MAPPING.
 Update `talon-list-output-file' to contain the definition.
 
 MAPPING is an alist mapping utterances to values.  An utterance
@@ -140,7 +139,12 @@ is a string containing the spoken form for referencing the value.
 
 MAPPING will be stored in the variable LIST."
   (declare (indent defun))
-  `(talon-list--define-list ',list ',talon-name ,mapping ',options))
+  ;; We need to expand to defvar, or else xref will not find the
+  ;; definition.  defvar only modifies the variable when it is void,
+  ;; so if it is not we revert to setq.
+  `(,(if (boundp list-name) 'setq 'defvar)
+    ,list-name
+    (talon-list--define-list ',list-name ',talon-name ,mapping ',options)))
 
 (provide 'talon-list)
 ;;; talon-list.el ends here
