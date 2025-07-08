@@ -156,7 +156,7 @@ MAPPING will be stored in the variable LIST."
 
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
-  (alternatives nil))
+  (alternatives nil) (transformation nil))
 
 (defun phony--add-alternative (alternative open-rule-name)
   (unless (gethash open-rule-name phony--rules)
@@ -180,27 +180,35 @@ MAPPING will be stored in the variable LIST."
                                                phony--rules)))))
   (remhash rule-name phony--rules)
   (seq-doseq (open-rule (seq-filter
-                         #'phony-open-alternative-p
+                         #'phony--open-rule-p
                          (hash-table-values phony--rules)))
-    (setf (phony-open-alternative-alternatives open-rule)
-          (remove rule-name (phony-open-alternative-alternatives open-rule))))
+    (setf (phony--open-rule-alternatives open-rule)
+          (remove rule-name (phony--open-rule-alternatives open-rule))))
   (phony-request-export))
 
-(cl-defmacro phony-define-open-rule (name &key talon-name (contributes-to nil))
+(cl-defmacro phony-define-open-rule (name &key
+                                          talon-name
+                                          (contributes-to nil)
+                                          (transformation nil))
   (declare (indent defun))
-  (let ((expanded
+  `(progn
+     ,@(seq-filter
+        #'identity
+        (list
+         ;; Code generation currently assumes that the transformation
+         ;; is given as a function symbol
+         `(cl-assert (symbolp ,transformation) nil
+                     "Argument transformation must be a symbol")
          `(puthash ',name
                    (make-phony--open-rule
-                    :talon-name ',talon-name)
-                   phony--rules)))
-    (when contributes-to
-      (setq expanded
-            `(progn
-               ,expanded
-               (phony--add-alternative
-                ',name
-                ',contributes-to))))
-    expanded))
+                    :talon-name ',talon-name
+                    :transformation ,transformation)
+                   phony--rules)
+         (when contributes-to
+           `(phony--add-alternative
+             ',name
+             ',contributes-to))
+         `',name))))
 
 (cl-defstruct phony--ast-literal
   string)
@@ -431,8 +439,12 @@ MAPPING will be stored in the variable LIST."
                          "\n        '| ")
             ")\n")
     (insert
-     (format "def %s(m) -> str:\n    return m[0]\n"
-             (phony--rule-talon-name rule)))))
+     (format "def %s(m) -> str:\n    return %s\n"
+             (phony--rule-talon-name rule)
+             (if (phony--open-rule-transformation rule)
+                 (format "f\"(%s {m[0]})\""
+                         (phony--open-rule-transformation rule))
+                 "m[0]")))))
 
 (cl-defmethod phony--speech-insert-python ((rule phony--procedure-rule))
   (insert "@module.capture(rule='" (phony--rule-talon-pattern rule) "')\n"
@@ -526,6 +538,7 @@ MAPPING will be stored in the variable LIST."
                                (contributes-to nil)
                                (export nil))
   (setq arglist (byte-compile-arglist-vars arglist))
+  (phony-remove-rule function)
   (let* ((components
           (seq-map (lambda (component)
                      (phony--parse-speech-component component (byte-compile-arglist-vars arglist)))
