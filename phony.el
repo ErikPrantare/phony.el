@@ -189,7 +189,8 @@ MAPPING will be stored in the variable LIST."
 (cl-defmacro phony-define-open-rule (name &key
                                           talon-name
                                           (contributes-to nil)
-                                          (transformation nil))
+                                          (transformation nil)
+                                          (export nil))
   (declare (indent defun))
   `(progn
      ,@(seq-filter
@@ -202,7 +203,8 @@ MAPPING will be stored in the variable LIST."
          `(puthash ',name
                    (make-phony--open-rule
                     :talon-name ',talon-name
-                    :transformation ,transformation)
+                    :transformation ,transformation
+                    :export ,export)
                    phony--rules)
          (when contributes-to
            `(phony--add-alternative
