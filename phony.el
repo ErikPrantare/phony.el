@@ -40,12 +40,12 @@
   :type 'file
   :group 'talon-list)
 
-(defun talon-list-get (utterance list)
+(defun phony-list-get (utterance list)
   "Return the value corresponding to UTTERANCE in LIST.
 If no such value exists, return nil."
   (alist-get utterance list nil nil #'equal))
 
-(defmacro talon-list-put (utterance list value)
+(defmacro phony-list-put (utterance list value)
   "Set the value of UTTERANCE in LIST to VALUE.
 If value is nil, remove the utterance from the list instead.
 
@@ -55,18 +55,14 @@ Invoking this function will sync the list with talon."
        (setf (alist-get ,utterance ,list nil t #'equal) ,value)
      (talon-list--request-sync (list ',list))))
 
-(gv-define-expander talon-list-get
+(gv-define-expander phony-list-get
   ;; We need to use `gv-define-expander', because the simpler versions
   ;; expand to a let-expression binding the list to a local variable.
   ;; That meant removing elements became impossible.
   (lambda (do utterance list)
-    (funcall do `(talon-list-get ,utterance ,list)
+    (funcall do `(phony-list-get ,utterance ,list)
              (lambda (value)
-               `(talon-list-put ,utterance ,list ,value)))))
-
-(defun talon-list--lookup (utterance list)
-  "Return the value corresponding to UTTERANCE in LIST."
-  (talon-list-get utterance list))
+               `(phony-list-put ,utterance ,list ,value)))))
 
 (defun talon-list--create-lookup-representation (entry list-name)
   "Create lookup string for UTTERANCE in LIST-NAME.
@@ -75,7 +71,7 @@ When evaluating the returned value from emacsclient, this
 performs the lookup."
   (if (get list-name 'talon-list--format-raw)
       (cdr entry)
-    (format "(talon-list--lookup \"%s\" %s)"
+    (format "(phony-list-get \"%s\" %s)"
             (car entry)
             list-name)))
 
@@ -127,10 +123,10 @@ Update `talon-list-output-file' to contain the definition."
   (add-to-list 'talon-list--list-names list-name)
   (talon-list--request-sync talon-list--list-names)
 
-  ;; Needs to return the actual mapping, see `define-talon-list'
+  ;; Needs to return the actual mapping, see `phony-define-list'
   mapping)
 
-(defmacro define-talon-list (list-name talon-name mapping &rest options)
+(defmacro phony-define-list (list-name talon-name mapping &rest options)
   "Define a LIST-NAME with TALON-NAME containing MAPPING.
 Update `talon-list-output-file' to contain the definition.
 
@@ -145,7 +141,6 @@ MAPPING will be stored in the variable LIST."
   `(,(if (boundp list-name) 'setq 'defvar)
     ,list-name
     (talon-list--define-list ',list-name ',talon-name ,mapping ',options)))
-
 
 (cl-defstruct phony--rule
   talon-name (mode 'global) (export nil))
@@ -187,7 +182,7 @@ MAPPING will be stored in the variable LIST."
   (phony-request-export))
 
 (cl-defmacro phony-define-open-rule (name &key
-                                          talon-name
+                                          (talon-name nil)
                                           (contributes-to nil)
                                           (transformation nil)
                                           (export nil))
@@ -202,7 +197,8 @@ MAPPING will be stored in the variable LIST."
                      "Argument transformation must be a symbol")
          `(puthash ',name
                    (make-phony--open-rule
-                    :talon-name ',talon-name
+                    :talon-name ,(or talon-name
+                                     (phony--to-python-identifier name))
                     :transformation ,transformation
                     :export ,export)
                    phony--rules)
@@ -424,7 +420,7 @@ MAPPING will be stored in the variable LIST."
                   (phony--rule-talon-name rule))))
 
 (defun phony--to-python-identifier (symbol)
-  (concat "cf_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
+  (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
 
 (cl-defgeneric phony--speech-insert-python (rule))
 
@@ -450,7 +446,7 @@ MAPPING will be stored in the variable LIST."
 
 (cl-defmethod phony--speech-insert-python ((rule phony--procedure-rule))
   (insert "@module.capture(rule='" (phony--rule-talon-pattern rule) "')\n"
-          "def " (symbol-name (phony--rule-talon-name rule)) "(m) -> str:\n")
+          "def " (phony--rule-talon-name rule) "(m) -> str:\n")
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
     (let ((variable
            (phony--find-variable-component
@@ -469,7 +465,7 @@ MAPPING will be stored in the variable LIST."
                (attribute-name
                 (phony--ast-talon-name form)))
           (when (eq variable-context 'repeat)
-            (setq attribute-name (intern (concat (symbol-name attribute-name) "_list"))))
+            (setq attribute-name (concat attribute-name "_list")))
           (if (phony--ast-talon-capture-p form)
               (insert (format "from_talon_capture(m.%1$s) if hasattr(m,'%1$s') else 'nil'" attribute-name))
             (pcase variable-context
@@ -536,7 +532,7 @@ MAPPING will be stored in the variable LIST."
                                speech-pattern
                                &key
                                (mode 'global)
-                               talon-name
+                               (talon-name nil)
                                (contributes-to nil)
                                (export nil))
   (setq arglist (byte-compile-arglist-vars arglist))
@@ -551,7 +547,8 @@ MAPPING will be stored in the variable LIST."
               :components components
               :arglist arglist
               :mode mode
-              :talon-name talon-name
+              :talon-name (or talon-name
+                              (phony--to-python-identifier function))
               :export export)
              phony--rules)
 
