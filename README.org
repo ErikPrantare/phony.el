@@ -1,12 +1,12 @@
-* talon-list.el
-Define talon lists of Elisp values, from Elisp.
+* phony.el
+Elisp bindings for defining talon rules.
 
 ** Setup
 Clone this repo and add the following to your Emacs configuration:
 
 #+begin_src elisp
-  (add-to-list 'load-path "path/to/talon-list/directory")
-  (require 'talon-list)
+  (add-to-list 'load-path "path/to/phony/directory")
+  (require 'phony)
 #+end_src
 
 Then, add [[file:talon/read_lists.py]] to =~/.talon/user/=.

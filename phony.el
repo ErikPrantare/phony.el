@@ -1,11 +1,11 @@
-;;; talon-list.el --- Declare talon lists            -*- lexical-binding: t; -*-
+;;; phony.el --- Speech bindings for Elisp           -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024, 2025 Erik Präntare
 
 ;; Author: Erik Präntare
 ;; Keywords: files
 ;; Version: 0.1.0
-;; Homepage: https://github.com/ErikPrantare/talon-list.el
+;; Homepage: https://github.com/ErikPrantare/phony.el
 ;; Package-Requires: ((emacs "27.1"))
 ;; Created: 13 Jul 2024
 
@@ -25,20 +25,20 @@
 
 ;;; Commentary:
 
-;; Define talon lists of elisp objects from elisp.
+;;
 
 ;;; Code:
 
 (require 'cl-lib)
 
-(defgroup talon-list nil
+(defgroup phony nil
   "Functionality for defining talon lists in Emacs Lisp."
   :group 'files)
 
-(defcustom talon-list-output-file "~/.talon/emacs-lists.json"
+(defcustom phony-output-file "~/.talon/emacs-lists.json"
   "Output file for defined lists."
   :type 'file
-  :group 'talon-list)
+  :group 'phony)
 
 (defun phony-list-get (utterance list)
   "Return the value corresponding to UTTERANCE in LIST.
@@ -53,7 +53,7 @@ Invoking this function will sync the list with talon."
   (declare (indent defun))
   `(prog1
        (setf (alist-get ,utterance ,list nil t #'equal) ,value)
-     (talon-list--request-sync (list ',list))))
+     (phony--request-sync (list ',list))))
 
 (gv-define-expander phony-list-get
   ;; We need to use `gv-define-expander', because the simpler versions
@@ -64,24 +64,24 @@ Invoking this function will sync the list with talon."
              (lambda (value)
                `(phony-list-put ,utterance ,list ,value)))))
 
-(defun talon-list--create-lookup-representation (entry list-name)
+(defun phony--create-lookup-representation (entry list-name)
   "Create lookup string for UTTERANCE in LIST-NAME.
 
 When evaluating the returned value from emacsclient, this
 performs the lookup."
-  (if (get list-name 'talon-list--format-raw)
+  (if (get list-name 'phony--format-raw)
       (cdr entry)
     (format "(phony-list-get \"%s\" %s)"
             (car entry)
             list-name)))
 
-(defun talon-list--prepare-list-for-serialization (list-name)
+(defun phony--prepare-list-for-serialization (list-name)
   "Return list in LIST-NAME as an entry for `json-serialize'.
 
 This represents one key-value pair, mapping the talon list name
 to its list.  `json-serialize' will create a JSON object
 passed a list of such key-value pairs."
-  (cons (get list-name 'talon-list--talon-name)
+  (cons (get list-name 'phony--talon-name)
         (let ((mapping (symbol-value list-name)))
           (mapcar (lambda (entry)
                     (cons
@@ -89,46 +89,46 @@ passed a list of such key-value pairs."
                      (make-symbol (car entry))
                      ;; Each value is a string, encoding a form that
                      ;; will evaluate to the actual value.
-                     (talon-list--create-lookup-representation
+                     (phony--create-lookup-representation
                       entry list-name)))
                   mapping))))
 
 ;; TODO: Handle IO errors
-(defun talon-list--send-lists (list-names)
-  "Send lists coded in LIST-NAMES to `talon-list-output-file'.
+(defun phony--send-lists (list-names)
+  "Send lists coded in LIST-NAMES to `phony-output-file'.
 
 Talon can read this file to register the lists."
-  (with-temp-file talon-list-output-file
+  (with-temp-file phony-output-file
     (json-insert
-     (mapcar #'talon-list--prepare-list-for-serialization list-names))))
+     (mapcar #'phony--prepare-list-for-serialization list-names))))
 
-(defvar talon-list--list-names '()
+(defvar phony--list-names '()
   "All defined talon lists.")
 
-(defun talon-list--request-sync (&optional list-names)
+(defun phony--request-sync (&optional list-names)
   "Sync LIST-NAMES when next idle."
   (interactive)
   ;; For now, we are always resync everything.
-  (cancel-function-timers #'talon-list--send-lists)
-  (run-with-idle-timer 0.0 nil #'talon-list--send-lists talon-list--list-names))
+  (cancel-function-timers #'phony--send-lists)
+  (run-with-idle-timer 0.0 nil #'phony--send-lists phony--list-names))
 
-(defun talon-list--define-list (list-name talon-name mapping options)
+(defun phony--define-list (list-name talon-name mapping options)
   "Define list with LIST-NAME and TALON-NAME containing MAPPING.
-Update `talon-list-output-file' to contain the definition."
+Update `phony-output-file' to contain the definition."
 
   ;; TODO: Put all properties in a hash
-  (put list-name 'talon-list--talon-name talon-name)
-  (put list-name 'talon-list--format-raw (plist-get options :format-raw))
+  (put list-name 'phony--talon-name talon-name)
+  (put list-name 'phony--format-raw (plist-get options :format-raw))
 
-  (add-to-list 'talon-list--list-names list-name)
-  (talon-list--request-sync talon-list--list-names)
+  (add-to-list 'phony--list-names list-name)
+  (phony--request-sync phony--list-names)
 
   ;; Needs to return the actual mapping, see `phony-define-list'
   mapping)
 
 (defmacro phony-define-list (list-name talon-name mapping &rest options)
   "Define a LIST-NAME with TALON-NAME containing MAPPING.
-Update `talon-list-output-file' to contain the definition.
+Update `phony-output-file' to contain the definition.
 
 MAPPING is an alist mapping utterances to values.  An utterance
 is a string containing the spoken form for referencing the value.
@@ -140,7 +140,7 @@ MAPPING will be stored in the variable LIST."
   ;; so if it is not we revert to setq.
   `(,(if (boundp list-name) 'setq 'defvar)
     ,list-name
-    (talon-list--define-list ',list-name ',talon-name ,mapping ',options)))
+    (phony--define-list ',list-name ',talon-name ,mapping ',options)))
 
 (cl-defstruct phony--rule
   talon-name (mode 'global) (export nil))
@@ -252,7 +252,7 @@ MAPPING will be stored in the variable LIST."
 (cl-defmethod phony--ast-talon-name ((component phony--ast-element))
   (get
    (phony--ast-element-list component)
-   'talon-list--talon-name))
+   'phony--talon-name))
 
 (defun phony--ast-children (component)
   (cond
@@ -309,7 +309,7 @@ MAPPING will be stored in the variable LIST."
 
 (cl-defmethod phony--ast-match-string ((component phony--ast-element))
   (format "{user.%s}" (get (phony--ast-element-list component)
-                           'talon-list--talon-name)))
+                           'phony--talon-name)))
 
 (cl-defmethod phony--ast-match-string ((component phony--ast-optional))
   (format "[%s]" (phony--ast-match-string
@@ -591,4 +591,4 @@ MAPPING will be stored in the variable LIST."
       (list #'phony--speech-declaration))
 
 (provide 'phony)
-;;; talon-list.el ends here
+;;; phony.el ends here
