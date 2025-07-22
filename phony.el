@@ -143,7 +143,7 @@ MAPPING will be stored in the variable LIST."
     (phony--define-list ',list-name ',talon-name ,mapping ',options)))
 
 (cl-defstruct phony--rule
-  talon-name (mode 'global) (export nil))
+  talon-name (modes '(global)) (export nil))
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
@@ -467,7 +467,8 @@ MAPPING will be stored in the variable LIST."
           (when (eq variable-context 'repeat)
             (setq attribute-name (concat attribute-name "_list")))
           (if (phony--ast-talon-capture-p form)
-              (insert (format "from_talon_capture(m.%1$s) if hasattr(m,'%1$s') else 'nil'" attribute-name))
+              (insert (format "from_talon_capture(m.%1$s) if hasattr(m,'%1$s') else 'nil'"
+                              attribute-name))
             (pcase variable-context
               ('none
                (insert (format "m.%s" attribute-name)))
@@ -494,33 +495,39 @@ MAPPING will be stored in the variable LIST."
     (insert "-\n")
     (seq-doseq (rule entries)
       (when (phony--rule-export rule)
-        (phony--speech-insert-rule rule))))
-
-  (with-temp-file (format "~/.talon/user/emacs-gen/%s.py" mode)
-    (insert "import talon\n\n"
-            "module = talon.Module()\n"
-            "context = talon.Context()\n\n"
-            ;; I heard you like escapes
-            "def escape(str):\n"
-            "    return str.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\")"
-            "\n\n"
-            "def from_talon_capture(capture):\n"
-            "    formatted = None\n"
-            "    if isinstance(capture,str):\n        formatted = '\"' + escape(capture) + '\"'\n"
-            "    elif isinstance(capture,int):\n        formatted = f\"{capture}\"\n"
-            "    elif isinstance(capture,list):\n        formatted = '(list ' + ' '.join([from_talon_capture(x) for x in capture]) + ')'\n"
-            "    elif isinstance(capture,talon.grammar.vm.Phrase):\n        formatted = '\"' + escape(\" \".join(capture.words)) + '\"'\n"
-            "    else:\n        raise TypeError(f\"Talon capture must have type str, int, list or talon.grammar.vm.Phrase, had type {type(capture)}\")\n"
-            "    return formatted\n\n")
-    (seq-doseq (command entries)
-      (insert "\n")
-      (phony--speech-insert-python command))))
+        (phony--speech-insert-rule rule)))))
 
 (defun phony--export-all ()
-  (let ((mode-maps (seq-group-by #'phony--rule-mode
-                                 (hash-table-values phony--rules))))
-    (seq-doseq (mode-map mode-maps)
-      (phony--export-mode (car mode-map) (cdr mode-map)))))
+  (let* ((rules (hash-table-values phony--rules))
+         (modes (seq-uniq
+                 (seq-mapcat #'phony--rule-modes
+                            rules))))
+    (seq-doseq (mode modes)
+      (phony--export-mode
+       mode
+       (seq-filter (lambda (rule)
+                     (seq-contains-p (phony--rule-modes rule) mode))
+                   rules)))
+
+    (with-temp-file "~/.talon/user/emacs-gen/rules.py"
+      (insert "import talon\n\n"
+              "module = talon.Module()\n"
+              "context = talon.Context()\n\n"
+              ;; I heard you like escapes
+              "def escape(str):\n"
+              "    return str.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\")"
+              "\n\n"
+              "def from_talon_capture(capture):\n"
+              "    formatted = None\n"
+              "    if isinstance(capture,str):\n        formatted = '\"' + escape(capture) + '\"'\n"
+              "    elif isinstance(capture,int):\n        formatted = f\"{capture}\"\n"
+              "    elif isinstance(capture,talon.grammar.vm.Phrase):\n        formatted = '\"' + escape(\" \".join(capture)) + '\"'\n"
+              "    elif isinstance(capture,list):\n        formatted = '(list ' + ' '.join([from_talon_capture(x) for x in capture]) + ')'\n"
+              "    else:\n        raise TypeError(f\"Talon capture must have type str, int, list or talon.grammar.vm.Phrase, had type {type(capture)}\")\n"
+              "    return formatted\n\n")
+      (seq-doseq (command rules)
+        (insert "\n")
+        (phony--speech-insert-python command)))))
 
 (defun phony-request-export ()
   (interactive)
@@ -536,6 +543,7 @@ MAPPING will be stored in the variable LIST."
                                (contributes-to nil)
                                (export nil))
   (setq arglist (byte-compile-arglist-vars arglist))
+  (setq mode (ensure-list mode))
   (phony-remove-rule function)
   (let* ((components
           (seq-map (lambda (component)
@@ -546,7 +554,7 @@ MAPPING will be stored in the variable LIST."
               :function function
               :components components
               :arglist arglist
-              :mode mode
+              :modes mode
               :talon-name (or talon-name
                               (phony--to-python-identifier function))
               :export export)
