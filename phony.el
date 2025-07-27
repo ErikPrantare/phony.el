@@ -143,7 +143,7 @@ MAPPING will be stored in the variable LIST."
     (phony--define-list ',list-name ',talon-name ,mapping ',options)))
 
 (cl-defstruct phony--rule
-  talon-name (modes '(global)) (export nil))
+  name talon-name (modes '(global)) (export nil))
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
@@ -197,6 +197,7 @@ MAPPING will be stored in the variable LIST."
                      "Argument transformation must be a symbol")
          `(puthash ',name
                    (make-phony--open-rule
+                    :name ',name
                     :talon-name ,(or talon-name
                                      (phony--to-python-identifier name))
                     :transformation ,transformation
@@ -384,6 +385,7 @@ MAPPING will be stored in the variable LIST."
                    speech-pattern)))
     (puthash function
              (make-phony--procedure-rule
+              :name function
               :function function
               :components components
               :arglist arglist

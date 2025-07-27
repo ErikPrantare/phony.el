@@ -27,7 +27,23 @@
 
 (require 'phony)
 
+(cl-defgeneric phony-dragonfly--serialize-rule-concrete (rule))
 
+(cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--procedure-rule))
+  (symbol-name (phony--procedure-rule-function rule)))
+
+(cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--open-rule))
+  (phony--open-rule-talon-name rule))
+
+(defun phony-dragonfly--serialize-rule (rule)
+  (cons (make-symbol (phony--rule-talon-name rule))
+        (phony-dragonfly--serialize-rule-concrete rule)))
+
+(defun phony-dragonfly-export ()
+  (let* ((rules (hash-table-values phony--rules)))
+    (with-temp-file "~/temp/rules.json"
+      (json-insert
+       (seq-map #'phony-dragonfly--serialize-rule rules)))))
 
 (provide 'phony-dragonfly)
 ;;; phony-dragonfly.el ends here

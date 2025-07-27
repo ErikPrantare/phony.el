@@ -156,7 +156,7 @@
                      (phony--procedure-rule-arglist rule))
             " "))))
 
-(cl-defun phony--export-mode (mode entries)
+(cl-defun phony-talon--export-mode (mode entries)
   (mkdir "~/.talon/user/emacs-gen" t)
   (with-temp-file (format "~/.talon/user/emacs-gen/%s.talon" mode)
     (unless (eq mode 'global)
@@ -172,7 +172,7 @@
                  (seq-mapcat #'phony--rule-modes
                              rules))))
     (seq-doseq (mode modes)
-      (phony--export-mode
+      (phony-talon--export-mode
        mode
        (seq-filter (lambda (rule)
                      (seq-contains-p (phony--rule-modes rule) mode))
