@@ -308,7 +308,7 @@ MAPPING will be stored in the variable LIST."
   (format "(%s)*" (phony--ast-match-string
                    (phony--ast-children component))))
 
-(cl-defmethod phony--ast-match-string ((component make-phony--ast-external-rule))
+(cl-defmethod phony--ast-match-string ((component phony--ast-external-rule))
   (format "<%s>" (string-join
                   (seq-map #'symbol-name
                            (append
