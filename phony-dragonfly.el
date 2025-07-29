@@ -27,23 +27,41 @@
 
 (require 'phony)
 
+(cl-defgeneric phony-dragonfly--serialize-pattern (pattern)
+  `((type . "undefined")))
+
+(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--ast-literal))
+  `((type . "literal")
+    (utterance . ,(phony--ast-literal-string literal))))
+
+(cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
+  `((type . "sequence")
+    (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-pattern pattern)
+                           'vector))))
+
 (cl-defgeneric phony-dragonfly--serialize-rule-concrete (rule))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--procedure-rule))
-  (symbol-name (phony--procedure-rule-function rule)))
+  `((type . "procedure-definition")
+    (name . ,(phony--procedure-rule-external-name rule))
+    (function . ,(symbol-name (phony--procedure-rule-function rule)))
+    (pattern . ,(phony-dragonfly--serialize-pattern
+                 (phony--procedure-rule-components rule)))))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--open-rule))
-  (phony--open-rule-talon-name rule))
+  `((type . "open")
+    (name . ,(phony--rule-external-name rule))))
 
 (defun phony-dragonfly--serialize-rule (rule)
-  (cons (make-symbol (phony--rule-talon-name rule))
+  (cons (make-symbol (phony--rule-external-name rule))
         (phony-dragonfly--serialize-rule-concrete rule)))
 
+(defun phony-dragonfly--serialize-rules ()
+  (seq-map #'phony-dragonfly--serialize-rule (hash-table-values phony--rules)))
+
 (defun phony-dragonfly-export ()
-  (let* ((rules (hash-table-values phony--rules)))
-    (with-temp-file "~/temp/rules.json"
-      (json-insert
-       (seq-map #'phony-dragonfly--serialize-rule rules)))))
+  (with-temp-file "~/temp/rules.json"
+    (json-insert (phony-dragonfly--serialize-rules))))
 
 (provide 'phony-dragonfly)
 ;;; phony-dragonfly.el ends here

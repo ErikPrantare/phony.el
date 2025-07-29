@@ -143,7 +143,7 @@ MAPPING will be stored in the variable LIST."
     (phony--define-list ',list-name ',talon-name ,mapping ',options)))
 
 (cl-defstruct phony--rule
-  name talon-name (modes '(global)) (export nil))
+  name external-name (modes '(global)) (export nil))
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
@@ -198,8 +198,8 @@ MAPPING will be stored in the variable LIST."
          `(puthash ',name
                    (make-phony--open-rule
                     :name ',name
-                    :talon-name ,(or talon-name
-                                     (phony--to-python-identifier name))
+                    :external-name ,(or talon-name
+                                        (phony--to-python-identifier name))
                     :transformation ,transformation
                     :export ,export)
                    phony--rules)
@@ -287,50 +287,6 @@ MAPPING will be stored in the variable LIST."
                                 :list (cadr component)))
    (t (error (format "No parse for %S" component)))))
 
-(cl-defgeneric phony--ast-match-string (component))
-
-(cl-defmethod phony--ast-match-string ((component phony--ast-literal))
-  (phony--ast-literal-string component))
-
-(cl-defmethod phony--ast-match-string ((component phony--ast-element))
-  (format "{user.%s}" (get (phony--ast-element-list component)
-                           'phony--talon-name)))
-
-(cl-defmethod phony--ast-match-string ((component phony--ast-optional))
-  (format "[%s]" (phony--ast-match-string
-                  (phony--ast-children component))))
-
-(cl-defmethod phony--ast-match-string ((component phony--ast-one-or-more))
-  (format "(%s)+" (phony--ast-match-string
-                   (phony--ast-children component))))
-
-(cl-defmethod phony--ast-match-string ((component phony--ast-zero-or-more))
-  (format "(%s)*" (phony--ast-match-string
-                   (phony--ast-children component))))
-
-(cl-defmethod phony--ast-match-string ((component phony--ast-external-rule))
-  (format "<%s>" (string-join
-                  (seq-map #'symbol-name
-                           (append
-                            (phony--ast-external-rule-namespace component)
-                            (list (phony--ast-external-rule-name component))))
-                  ".")))
-
-(cl-defmethod phony--ast-match-string ((component phony--ast-rule))
-  (format "<user.%s>"
-          (phony--rule-talon-name
-           (phony--get-rule
-            (phony--ast-rule-name component)))))
-
-(cl-defmethod phony--ast-match-string ((component phony--ast-variable))
-  (phony--ast-match-string
-   (phony--ast-variable-form component)))
-
-(cl-defmethod phony--ast-match-string ((component-list list))
-  (string-join (seq-map #'phony--ast-match-string
-                        component-list)
-               " "))
-
 (cl-defgeneric phony--collect (predicate component)
   (let ((collected-children
          (phony--collect
@@ -369,13 +325,13 @@ MAPPING will be stored in the variable LIST."
   (run-with-idle-timer 0 nil #'phony--export-all))
 
 (cl-defun phony--export-rule (function
-                               arglist
-                               speech-pattern
-                               &key
-                               (mode 'global)
-                               (talon-name nil)
-                               (contributes-to nil)
-                               (export nil))
+                              arglist
+                              speech-pattern
+                              &key
+                              (mode 'global)
+                              (talon-name nil)
+                              (contributes-to nil)
+                              (export nil))
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
   (phony-remove-rule function)
@@ -390,8 +346,8 @@ MAPPING will be stored in the variable LIST."
               :components components
               :arglist arglist
               :modes mode
-              :talon-name (or talon-name
-                              (phony--to-python-identifier function))
+              :external-name (or talon-name
+                                 (phony--to-python-identifier function))
               :export export)
              phony--rules)
 
@@ -410,8 +366,8 @@ MAPPING will be stored in the variable LIST."
 
 (defun phony--export-rule-declare (function arglist &rest speech-pattern)
   `(phony--export-rule #',function
-                        ',arglist
-                        ',speech-pattern))
+                       ',arglist
+                       ',speech-pattern))
 
 (defun phony--split-arguments-pattern (declaration-args)
   (let ((arguments '()))

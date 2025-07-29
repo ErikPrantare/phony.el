@@ -31,7 +31,7 @@
   (error "No talon name for component %S" component))
 
 (cl-defmethod phony--ast-talon-name ((component phony--ast-rule))
-  (phony--rule-talon-name
+  (phony--rule-external-name
    (phony--get-rule
     (phony--ast-rule-name component))))
 
@@ -42,6 +42,50 @@
   (get
    (phony--ast-element-list component)
    'phony--talon-name))
+
+(cl-defgeneric phony--ast-match-string (component))
+
+(cl-defmethod phony--ast-match-string ((component phony--ast-literal))
+  (phony--ast-literal-string component))
+
+(cl-defmethod phony--ast-match-string ((component phony--ast-element))
+  (format "{user.%s}" (get (phony--ast-element-list component)
+                           'phony--talon-name)))
+
+(cl-defmethod phony--ast-match-string ((component phony--ast-optional))
+  (format "[%s]" (phony--ast-match-string
+                  (phony--ast-children component))))
+
+(cl-defmethod phony--ast-match-string ((component phony--ast-one-or-more))
+  (format "(%s)+" (phony--ast-match-string
+                   (phony--ast-children component))))
+
+(cl-defmethod phony--ast-match-string ((component phony--ast-zero-or-more))
+  (format "(%s)*" (phony--ast-match-string
+                   (phony--ast-children component))))
+
+(cl-defmethod phony--ast-match-string ((component phony--ast-external-rule))
+  (format "<%s>" (string-join
+                  (seq-map #'symbol-name
+                           (append
+                            (phony--ast-external-rule-namespace component)
+                            (list (phony--ast-external-rule-name component))))
+                  ".")))
+
+(cl-defmethod phony--ast-match-string ((component phony--ast-rule))
+  (format "<user.%s>"
+          (phony--rule-external-name
+           (phony--get-rule
+            (phony--ast-rule-name component)))))
+
+(cl-defmethod phony--ast-match-string ((component phony--ast-variable))
+  (phony--ast-match-string
+   (phony--ast-variable-form component)))
+
+(cl-defmethod phony--ast-match-string ((component-list list))
+  (string-join (seq-map #'phony--ast-match-string
+                        component-list)
+               " "))
 
 (cl-defgeneric phony--rule-talon-pattern (rule))
 
@@ -56,7 +100,7 @@
   (string-join (seq-map
                 (lambda (alternative)
                   (format "<user.%s>"
-                          (phony--rule-talon-name
+                          (phony--rule-external-name
                            (gethash alternative phony--rules))))
                 (phony--open-rule-alternatives rule))
                " | "))
@@ -89,7 +133,7 @@
 
 (defun phony--speech-insert-rule (rule)
   (insert (format "<user.%1$s>:\n    user.emacs_lisp(%1$s)\n\n"
-                  (phony--rule-talon-name rule))))
+                  (phony--rule-external-name rule))))
 
 (cl-defgeneric phony--speech-insert-python (rule))
 
@@ -100,14 +144,14 @@
             (string-join (seq-map
                           (lambda (alternative)
                             (format "<user.%s>'"
-                                    (phony--rule-talon-name
+                                    (phony--rule-external-name
                                      (gethash alternative phony--rules))))
                           (phony--open-rule-alternatives rule))
                          "\n        '| ")
             ")\n")
     (insert
      (format "def %s(m) -> str:\n    return %s\n"
-             (phony--rule-talon-name rule)
+             (phony--rule-external-name rule)
              (if (phony--open-rule-transformation rule)
                  (format "f\"(%s {m[0]})\""
                          (phony--open-rule-transformation rule))
@@ -115,7 +159,7 @@
 
 (cl-defmethod phony--speech-insert-python ((rule phony--procedure-rule))
   (insert "@module.capture(rule='" (phony--rule-talon-pattern rule) "')\n"
-          "def " (phony--rule-talon-name rule) "(m) -> str:\n")
+          "def " (phony--rule-external-name rule) "(m) -> str:\n")
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
     (let ((variable
            (phony--find-variable-component
