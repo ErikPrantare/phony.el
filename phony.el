@@ -126,6 +126,31 @@ Update `phony-output-file' to contain the definition."
   ;; Needs to return the actual mapping, see `phony-define-list'
   mapping)
 
+(defun phony--to-python-identifier (symbol)
+  (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
+
+(cl-defun phony--define-dictionary (name mapping &key (external-name nil) (format-raw nil))
+  (eval `(phony-define-list ,name ,(intern (or external-name (phony--to-python-identifier name)))
+           ',mapping
+           :format-raw ,format-raw)))
+
+(defun phony--split-keywords-rest (declaration-args)
+  "Split DECLARATION-ARGS into keyword arguments and rest arguments.
+
+Keyword arguments are assumed to occur first.  Returns a cons-cell with
+the car being a plist of the keyword arguments and the cdr the rest
+arguments."
+  (let ((arguments '()))
+    (while (keywordp (car declaration-args))
+      (push (seq-take declaration-args 2) arguments)
+      (setq declaration-args (seq-drop declaration-args 2)))
+    (cons (apply #'append arguments) declaration-args)))
+
+(defmacro phony-define-dictionary (name &rest arguments)
+  (declare (indent defun))
+  (let ((split-arguments (phony--split-keywords-rest arguments)))
+    `(phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments))))
+
 (defmacro phony-define-list (list-name talon-name mapping &rest options)
   "Define a LIST-NAME with TALON-NAME containing MAPPING.
 Update `phony-output-file' to contain the definition.
@@ -134,7 +159,8 @@ MAPPING is an alist mapping utterances to values.  An utterance
 is a string containing the spoken form for referencing the value.
 
 MAPPING will be stored in the variable LIST."
-  (declare (indent defun))
+  (declare (indent defun)
+           (obsolete phony-define-dictionary "0.1.0"))
   ;; We need to expand to defvar, or else xref will not find the
   ;; definition.  defvar only modifies the variable when it is void,
   ;; so if it is not we revert to setq.
@@ -204,9 +230,14 @@ MAPPING will be stored in the variable LIST."
                     :export ,export)
                    phony--rules)
          (when contributes-to
-           `(phony--add-alternative
-             ',name
-             ',contributes-to))
+           (if (listp contributes-to)
+               `(seq-doseq (to ',contributes-to)
+                  (phony--add-alternative
+                 ',name
+                 to))
+             `(phony--add-alternative
+               ',name
+               ',contributes-to)))
          `',name))))
 
 (cl-defstruct phony--ast-literal
@@ -311,9 +342,6 @@ MAPPING will be stored in the variable LIST."
              #'phony--ast-variable-p
              components)))
 
-(defun phony--to-python-identifier (symbol)
-  (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
-
 (defvar phony-export-function nil)
 
 (defun phony--export-all ()
@@ -369,15 +397,8 @@ MAPPING will be stored in the variable LIST."
                        ',arglist
                        ',speech-pattern))
 
-(defun phony--split-arguments-pattern (declaration-args)
-  (let ((arguments '()))
-    (while (keywordp (car declaration-args))
-      (push (seq-take declaration-args 2) arguments)
-      (setq declaration-args (seq-drop declaration-args 2)))
-    (cons (apply #'append arguments) declaration-args)))
-
 (cl-defun phony--speech-declaration (function arglist &rest declaration-args)
-  (let* ((split-args (phony--split-arguments-pattern declaration-args))
+  (let* ((split-args (phony--split-keywords-rest declaration-args))
          (keyword-arguments (car split-args))
          (pattern (cdr split-args)))
     `(phony--export-rule

@@ -3,6 +3,8 @@
 - Added rule definitions.
 - Added ~phony-list-get~ and ~phony-list-put~ for working with defined
   lists.  The former is also a generalized variable of the latter.
+- Removed ~phony-define-list~, use ~phony-define-dictionary~ instead.
+  (REREAD README BEFORE UPDATING)
 
 * 0.1.0 [2024-09-07 Sat]
 Initial release.

@@ -32,7 +32,8 @@ for usage in talon files.
 In emacs:
 
 #+begin_src emacs-lisp
-  (phony-define-list my/colors color
+  (phony-define-dictionary my/colors
+    :external-name "color"
     '(("white" . "#fffff")
       ("black" . "#000000")
       ("red" . "#ff0000")))
@@ -49,7 +50,8 @@ In talon:
 In emacs:
 
 #+begin_src emacs-lisp
-  (phony-define-list my/commands command
+  (phony-define-dictionary my/commands
+    :external-name "command"
     `(("save" . ,#'save-buffer)
       ("hello" . ,(lambda () (message "Hello %s!" (user-full-name))))))
 #+end_src
