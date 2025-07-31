@@ -359,7 +359,7 @@ MAPPING will be stored in the variable LIST."
                               (mode 'global)
                               (talon-name nil)
                               (contributes-to nil)
-                              (export nil))
+                              (export t))
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
   (phony-remove-rule function)
