@@ -35,6 +35,13 @@
   `((type . "literal")
     (utterance . ,(phony--ast-literal-string literal))))
 
+(cl-defmethod phony-dragonfly--serialize-pattern ((variable phony--ast-variable))
+  `((type . "argument")
+    (name . ,(symbol-name
+              (phony--ast-variable-argument variable)))
+    (rule . ,(phony-dragonfly--serialize-pattern
+              (phony--ast-variable-form variable)))))
+
 (cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--ast-element))
   `((type . "dictionary")
     (name . ,(symbol-name
@@ -53,15 +60,20 @@
     (name . ,(phony--procedure-rule-external-name rule))
     (function . ,(symbol-name (phony--procedure-rule-function rule)))
     (pattern . ,(phony-dragonfly--serialize-pattern
-                 (phony--procedure-rule-components rule)))))
+                 (phony--procedure-rule-components rule)))
+    (argument-list . ,(seq-into
+                       (seq-map #'symbol-name
+                                (phony--procedure-rule-arglist rule))
+                       'vector))
+    (export . ,(if (phony--procedure-rule-export rule) t :false))))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--open-rule))
   `((type . "open")
     (name . ,(phony--rule-external-name rule))))
 
 (defun phony-dragonfly--serialize-rule (rule)
-  (cons (make-symbol (phony--rule-external-name rule))
-        (phony-dragonfly--serialize-rule-concrete rule)))
+  `((,(make-symbol (phony--rule-external-name rule)))
+    . (phony-dragonfly--serialize-rule-concrete rule)))
 
 (defun phony-dragonfly--serialize-rules ()
   (seq-map #'phony-dragonfly--serialize-rule (hash-table-values phony--rules)))
@@ -69,7 +81,8 @@
 (defun phony-dragonfly-export ()
   (interactive)
   (with-temp-file "~/temp/rules.json"
-    (json-insert (phony-dragonfly--serialize-rules))))
+    (json-insert (phony-dragonfly--serialize-rules))
+    (json-pretty-print-buffer)))
 
 (provide 'phony-dragonfly)
 ;;; phony-dragonfly.el ends here
