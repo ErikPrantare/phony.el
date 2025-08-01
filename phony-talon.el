@@ -39,9 +39,8 @@
   (phony--ast-external-rule-name component))
 
 (cl-defmethod phony--ast-talon-name ((component phony--ast-element))
-  (get
-   (phony--ast-element-list component)
-   'phony--talon-name))
+  (phony--dictionary-external-name
+   (phony--ast-element-list component)))
 
 (cl-defgeneric phony--ast-match-string (component))
 
@@ -49,8 +48,8 @@
   (phony--ast-literal-string component))
 
 (cl-defmethod phony--ast-match-string ((component phony--ast-element))
-  (format "{user.%s}" (get (phony--ast-element-list component)
-                           'phony--talon-name)))
+  (format "{user.%s}" (phony--dictionary-external-name
+                       (phony--ast-element-list component))))
 
 (cl-defmethod phony--ast-match-string ((component phony--ast-optional))
   (format "[%s]" (phony--ast-match-string

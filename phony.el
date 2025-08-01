@@ -81,7 +81,7 @@ performs the lookup."
 This represents one key-value pair, mapping the talon list name
 to its list.  `json-serialize' will create a JSON object
 passed a list of such key-value pairs."
-  (cons (get list-name 'phony--talon-name)
+  (cons (phony--dictionary-external-name list-name)
         (let ((mapping (symbol-value list-name)))
           (mapcar (lambda (entry)
                     (cons
@@ -111,6 +111,9 @@ Talon can read this file to register the lists."
   ;; For now, we are always resync everything.
   (cancel-function-timers #'phony--send-lists)
   (run-with-idle-timer 0.0 nil #'phony--send-lists phony--list-names))
+
+(defun phony--dictionary-external-name (dictionary-name)
+  (get dictionary-name 'phony--talon-name))
 
 (defun phony--define-list (list-name talon-name mapping options)
   "Define list with LIST-NAME and TALON-NAME containing MAPPING.

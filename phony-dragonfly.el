@@ -28,11 +28,18 @@
 (require 'phony)
 
 (cl-defgeneric phony-dragonfly--serialize-pattern (pattern)
+  (message "%s" pattern)
   `((type . "undefined")))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--ast-literal))
   `((type . "literal")
     (utterance . ,(phony--ast-literal-string literal))))
+
+(cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--ast-element))
+  `((type . "dictionary")
+    (name . ,(symbol-name
+              (phony--dictionary-external-name
+               (phony--ast-element-list dictionary))))))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
   `((type . "sequence")
@@ -60,6 +67,7 @@
   (seq-map #'phony-dragonfly--serialize-rule (hash-table-values phony--rules)))
 
 (defun phony-dragonfly-export ()
+  (interactive)
   (with-temp-file "~/temp/rules.json"
     (json-insert (phony-dragonfly--serialize-rules))))
 
