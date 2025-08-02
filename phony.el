@@ -194,9 +194,16 @@ MAPPING will be stored in the variable LIST."
 
 (defvar phony--rules (make-hash-table))
 
+(defun phony--rules ()
+  (hash-table-values phony--rules))
+
 (defun phony--get-rule (name)
-  (or (gethash name phony--rules)
-      (error "No rule with name %S" name)))
+  (cond
+   ((gethash name phony--rules)
+    (gethash name phony--rules))
+   ((get name 'phony--talon-name)
+    (symbol-value name))
+   (t (error "No rule with name %S" name))))
 
 (defun phony-remove-rule (rule-name)
   (interactive (list (intern (completing-read "Remove rule: "
@@ -345,10 +352,68 @@ MAPPING will be stored in the variable LIST."
              #'phony--ast-variable-p
              components)))
 
+(cl-defgeneric phony--dependencies (rule))
+
+(cl-defmethod phony--dependencies ((rule phony--procedure-rule))
+  (seq-map (lambda (element)
+             (phony--get-rule
+              (cond
+               ((phony--ast-rule-p element)
+                (phony--ast-rule-name element))
+               ((phony--ast-element-p element)
+                (phony--ast-element-list element)))))
+           (phony--collect
+            (lambda (element)
+              (or (phony--ast-rule-p element)
+                  (phony--ast-element-p element)))
+            (phony--procedure-rule-components rule))))
+
+(cl-defmethod phony--dependencies ((rule phony--open-rule))
+  (seq-map #'phony--get-rule
+           (phony--open-rule-alternatives rule)))
+
+(cl-defmethod phony--dependencies ((rule list))
+  ;; In this case the rule is a dictionary
+  nil)
+
+(defun phony--contains-cycle-search (rule visited finished)
+  "Return list of dependency cycle if detected, or nil otherwise."
+  (cl-block nil
+    (when (gethash rule finished)
+      (cl-return nil))
+    (when (gethash rule visited)
+      (cl-return (list rule)))
+
+    (puthash rule t visited)
+    (seq-doseq (successor (phony--dependencies rule))
+      (when-let ((path (phony--contains-cycle-search successor visited finished)))
+        (if (and (not (length= path 1))
+                 (eq (seq-first path) (car (last path))))
+            (cl-return path)
+          (cl-return (cons rule path)))))
+    (puthash rule t finished)
+    (cl-return nil)))
+
+(cl-defun phony--contains-cycle ()
+  (let ((stack '())
+        (visited (make-hash-table))
+        (finished (make-hash-table)))
+    (seq-doseq (rule (phony--rules))
+      (when-let ((cycle (phony--contains-cycle-search
+                         rule visited finished)))
+        (warn "Cycle found: %s" (seq-map #'phony--rule-name cycle))
+        (cl-return-from phony--contains-cycle t))))
+  nil)
+
+(defun phony--check-grammar-consistency ()
+  (let ((contains-cycles (phony--contains-cycle)))
+    (not contains-cycles)))
+
 (defvar phony-export-function nil)
 
 (defun phony--export-all ()
-  (funcall phony-export-function))
+  (when (phony--check-grammar-consistency)
+    (funcall phony-export-function)))
 
 (defun phony-request-export ()
   (interactive)
