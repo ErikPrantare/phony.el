@@ -10,6 +10,7 @@ def load_lists(path, dummy_argument):
         for list_name in message:
             module.list(list_name, "")
             context.lists["user." + list_name] = message[list_name]
+            print("Loaded list " + list_name)
 
 path = os.path.expanduser("~/.talon/emacs-lists.json")
 load_lists(path, None)

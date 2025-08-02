@@ -7,6 +7,7 @@ Clone this repo and add the following to your Emacs configuration:
 #+begin_src elisp
   (add-to-list 'load-path "path/to/phony/directory")
   (require 'phony)
+  (setopt phony-dictionaries-output-file "~/.talon/emacs-lists.json")
 #+end_src
 
 Then, add [[file:talon/read_lists.py]] to =~/.talon/user/=.
@@ -16,12 +17,11 @@ expressions from talon.  If you don't already have this set up, add
 [[file:talon/evaluate-lisp.py]] to =~/.talon/user/= and make sure to run
 emacs as a server (see [[info:emacs#Emacs Server][Using Emacs as a Server]] in the Emacs manual).
 
-You can now define talon lists using the ~phony-define-list~ macro.
-It takes three arguments: First, an emacs identifier for storing the
-list.  Second, the talon identifier.  Finally, an alist, where each
-entry maps an utterance to a value.
+You can now define talon lists using the ~phony-define-dictionary~
+macro.  It takes two mandatory arguments: An emacs identifier for
+storing the list and an alist mapping utterances to values.
 
-This macro will define the variable given as its first argument and
+The macro will define the variable given as its first argument and
 store the alist in it, making it available for use in Elisp.  It will
 also notify talon that the lists have been updated, causing talon to
 read the defined lists.  After this, the lists will become available
@@ -65,11 +65,11 @@ In talon:
 
 ** Accessing and modifying defined lists
 To access the value corresponding to an utterance, use the function
-~phony-list-get~.  This is a generalized variable, meaning you can use
-~setf~ to modify elements of it:
+~phony-dictionary-get~.  This is a generalized variable, meaning you
+can use ~setf~ to modify elements of it:
 
 #+begin_src elisp
-  (setf (phony-list-get "squash" my/colors) 'yellow)
+  (setf (phony-dictionary-get "squash" my/colors) 'yellow)
 #+end_src
 
 This form allows you to add, remove and change values in the list.

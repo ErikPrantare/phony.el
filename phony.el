@@ -35,54 +35,54 @@
   "Functionality for defining speech bindings."
   :group 'files)
 
-(defcustom phony-output-file "~/.talon/emacs-lists.json"
+(defcustom phony-dictionaries-output-file nil
   "Output file for defined lists."
   :type 'file
   :group 'phony)
 
-(defun phony-list-get (utterance list)
+(defun phony-dictionary-get (utterance dictionary)
   "Return the value corresponding to UTTERANCE in LIST.
 If no such value exists, return nil."
-  (alist-get utterance list nil nil #'equal))
+  (alist-get utterance dictionary nil nil #'equal))
 
-(defmacro phony-list-put (utterance list value)
+(defmacro phony-dictionary-put (utterance dictionary value)
   "Set the value of UTTERANCE in LIST to VALUE.
 If value is nil, remove the utterance from the list instead.
 
 Invoking this function will sync the list with talon."
   (declare (indent defun))
   `(prog1
-       (setf (alist-get ,utterance ,list nil t #'equal) ,value)
-     (phony--request-sync (list ',list))))
+       (setf (alist-get ,utterance ,dictionary nil t #'equal) ,value)
+     (phony--request-sync (list ',dictionary))))
 
-(gv-define-expander phony-list-get
+(gv-define-expander phony-dictionary-get
   ;; We need to use `gv-define-expander', because the simpler versions
-  ;; expand to a let-expression binding the list to a local variable.
-  ;; That meant removing elements became impossible.
-  (lambda (do utterance list)
-    (funcall do `(phony-list-get ,utterance ,list)
+  ;; expand to a let-expression binding the dictionary to a local
+  ;; variable.  That meant removing elements became impossible.
+  (lambda (do utterance dictionary)
+    (funcall do `(phony-dictionary-get ,utterance ,dictionary)
              (lambda (value)
-               `(phony-list-put ,utterance ,list ,value)))))
+               `(phony-dictionary-put ,utterance ,dictionary ,value)))))
 
-(defun phony--create-lookup-representation (entry list-name)
-  "Create lookup string for UTTERANCE in LIST-NAME.
+(defun phony--create-lookup-representation (entry dictionary-name)
+  "Create lookup string for UTTERANCE in DICTIONARY-NAME.
 
 When evaluating the returned value from emacsclient, this
 performs the lookup."
-  (if (get list-name 'phony--format-raw)
+  (if (get dictionary-name 'phony--format-raw)
       (cdr entry)
-    (format "(phony-list-get \"%s\" %s)"
+    (format "(phony-dictionary-get \"%s\" %s)"
             (car entry)
-            list-name)))
+            dictionary-name)))
 
-(defun phony--prepare-list-for-serialization (list-name)
-  "Return list in LIST-NAME as an entry for `json-serialize'.
+(defun phony--prepare-dictionary-for-serialization (dictionary-name)
+  "Return dictionary in DICTIONARY-NAME as an entry for `json-serialize'.
 
-This represents one key-value pair, mapping the talon list name
-to its list.  `json-serialize' will create a JSON object
-passed a list of such key-value pairs."
-  (cons (phony--dictionary-external-name list-name)
-        (let ((mapping (symbol-value list-name)))
+This represents one key-value pair, mapping the talon dictionary name to
+its dictionary.  `json-serialize' will create a JSON object passed a
+dictionary of such key-value pairs."
+  (cons (phony--dictionary-external-name dictionary-name)
+        (let ((mapping (symbol-value dictionary-name)))
           (mapcar (lambda (entry)
                     (cons
                      ;; json-serialize expects symbols for keys.
@@ -90,52 +90,56 @@ passed a list of such key-value pairs."
                      ;; Each value is a string, encoding a form that
                      ;; will evaluate to the actual value.
                      (phony--create-lookup-representation
-                      entry list-name)))
+                      entry dictionary-name)))
                   mapping))))
 
 ;; TODO: Handle IO errors
-(defun phony--send-lists (list-names)
-  "Send lists coded in LIST-NAMES to `phony-output-file'.
+(defun phony--send-dictionaries (dictionary-names)
+  "Send dictionaries DICTIONARY-NAMES to `phony-dictionaries-output-file'.
 
-Talon can read this file to register the lists."
-  (with-temp-file phony-output-file
+Talon can read this file to register the dictionaries."
+  (with-temp-file phony-dictionaries-output-file
     (json-insert
-     (mapcar #'phony--prepare-list-for-serialization list-names))))
+     (mapcar #'phony--prepare-dictionary-for-serialization dictionary-names))))
 
-(defvar phony--list-names '()
-  "All defined talon lists.")
+(defvar phony--dictionary-names '()
+  "All defined talon dictionaries.")
 
-(defun phony--request-sync (&optional list-names)
-  "Sync LIST-NAMES when next idle."
+(defun phony--request-sync (&optional dictionary-names)
+  "Sync DICTIONARY-NAMES when next idle."
   (interactive)
   ;; For now, we are always resync everything.
-  (cancel-function-timers #'phony--send-lists)
-  (run-with-idle-timer 0.0 nil #'phony--send-lists phony--list-names))
+  (cancel-function-timers #'phony--send-dictionaries)
+  (run-with-idle-timer 0.0 nil #'phony--send-dictionaries phony--dictionary-names))
 
 (defun phony--dictionary-external-name (dictionary-name)
   (get dictionary-name 'phony--talon-name))
-
-(defun phony--define-list (list-name talon-name mapping options)
-  "Define list with LIST-NAME and TALON-NAME containing MAPPING.
-Update `phony-output-file' to contain the definition."
-
-  ;; TODO: Put all properties in a hash
-  (put list-name 'phony--talon-name talon-name)
-  (put list-name 'phony--format-raw (plist-get options :format-raw))
-
-  (add-to-list 'phony--list-names list-name)
-  (phony--request-sync phony--list-names)
-
-  ;; Needs to return the actual mapping, see `phony-define-list'
-  mapping)
 
 (defun phony--to-python-identifier (symbol)
   (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
 
 (cl-defun phony--define-dictionary (name mapping &key (external-name nil) (format-raw nil))
-  (eval `(phony-define-list ,name ,(intern (or external-name (phony--to-python-identifier name)))
-           ',mapping
-           :format-raw ,format-raw)))
+  (setq external-name (intern
+                       (or external-name
+                           (phony--to-python-identifier name))))
+  ;; TODO: Put all properties in a hash
+  (put name 'phony--talon-name external-name)
+  (put name 'phony--format-raw format-raw)
+
+  (add-to-list 'phony--dictionary-names name)
+  (phony--request-sync phony--dictionary-names)
+
+  ;; Needs to return the actual mapping, see `phony-define-list'
+  mapping)
+
+(defun phony--define-list (dictionary-name talon-name mapping options)
+  "Define list with LIST-NAME and TALON-NAME containing MAPPING.
+Update `phony-dictionaries-output-file' to contain the definition."
+  (phony--define-dictionary
+   dictionary-name
+   mapping
+   :external-name (symbol-name talon-name)
+   :format-raw (plist-get options :format-raw)))
 
 (defun phony--split-keywords-rest (declaration-args)
   "Split DECLARATION-ARGS into keyword arguments and rest arguments.
@@ -152,11 +156,16 @@ arguments."
 (defmacro phony-define-dictionary (name &rest arguments)
   (declare (indent defun))
   (let ((split-arguments (phony--split-keywords-rest arguments)))
-    `(phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments))))
+    ;; We need to expand to defvar, or else xref will not find the
+    ;; definition.  defvar only modifies the variable when it is void,
+    ;; so if it is not we revert to setq.
+  `(,(if (boundp name) 'setq 'defvar)
+    ,name
+    (phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments)))))
 
 (defmacro phony-define-list (list-name talon-name mapping &rest options)
   "Define a LIST-NAME with TALON-NAME containing MAPPING.
-Update `phony-output-file' to contain the definition.
+Update `phony-dictionaries-output-file' to contain the definition.
 
 MAPPING is an alist mapping utterances to values.  An utterance
 is a string containing the spoken form for referencing the value.
