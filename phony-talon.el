@@ -27,73 +27,73 @@
 
 (require 'phony)
 
-(cl-defgeneric phony--ast-talon-name (component)
-  (error "No talon name for component %S" component))
+(cl-defgeneric phony--ast-talon-name (element)
+  (error "No talon name for element %S" element))
 
-(cl-defmethod phony--ast-talon-name ((component phony--ast-rule))
+(cl-defmethod phony--ast-talon-name ((element phony--element-rule))
   (phony--rule-external-name
    (phony--get-rule
-    (phony--ast-rule-name component))))
+    (phony--element-rule-name element))))
 
-(cl-defmethod phony--ast-talon-name ((component phony--ast-external-rule))
-  (phony--ast-external-rule-name component))
+(cl-defmethod phony--ast-talon-name ((element phony--element-external-rule))
+  (phony--element-external-rule-name element))
 
-(cl-defmethod phony--ast-talon-name ((component phony--ast-element))
+(cl-defmethod phony--ast-talon-name ((element phony--element-dictionary))
   (phony--dictionary-external-name
-   (phony--ast-element-list component)))
+   (phony--element-dictionary-name element)))
 
-(cl-defgeneric phony--ast-match-string (component))
+(cl-defgeneric phony--ast-match-string (element))
 
-(cl-defmethod phony--ast-match-string ((component phony--ast-literal))
-  (phony--ast-literal-string component))
+(cl-defmethod phony--ast-match-string ((element phony--element-literal))
+  (phony--element-literal-string element))
 
-(cl-defmethod phony--ast-match-string ((component phony--ast-element))
+(cl-defmethod phony--ast-match-string ((element phony--element-dictionary))
   (format "{user.%s}" (phony--dictionary-external-name
-                       (phony--ast-element-list component))))
+                       (phony--element-dictionary-name element))))
 
-(cl-defmethod phony--ast-match-string ((component phony--ast-optional))
+(cl-defmethod phony--ast-match-string ((element phony--element-optional))
   (format "[%s]" (phony--ast-match-string
-                  (phony--ast-children component))))
+                  (phony--ast-children element))))
 
-(cl-defmethod phony--ast-match-string ((component phony--ast-one-or-more))
+(cl-defmethod phony--ast-match-string ((element phony--element-one-or-more))
   (format "(%s)+" (phony--ast-match-string
-                   (phony--ast-children component))))
+                   (phony--ast-children element))))
 
-(cl-defmethod phony--ast-match-string ((component phony--ast-zero-or-more))
+(cl-defmethod phony--ast-match-string ((element phony--element-zero-or-more))
   (format "(%s)*" (phony--ast-match-string
-                   (phony--ast-children component))))
+                   (phony--ast-children element))))
 
-(cl-defmethod phony--ast-match-string ((component phony--ast-external-rule))
+(cl-defmethod phony--ast-match-string ((element phony--element-external-rule))
   (format "<%s>" (string-join
                   (seq-map #'symbol-name
                            (append
-                            (phony--ast-external-rule-namespace component)
-                            (list (phony--ast-external-rule-name component))))
+                            (phony--element-external-rule-namespace element)
+                            (list (phony--element-external-rule-name element))))
                   ".")))
 
-(cl-defmethod phony--ast-match-string ((component phony--ast-rule))
+(cl-defmethod phony--ast-match-string ((element phony--element-rule))
   (format "<user.%s>"
           (phony--rule-external-name
            (phony--get-rule
-            (phony--ast-rule-name component)))))
+            (phony--element-rule-name element)))))
 
-(cl-defmethod phony--ast-match-string ((component phony--ast-variable))
+(cl-defmethod phony--ast-match-string ((element phony--element-argument))
   (phony--ast-match-string
-   (phony--ast-variable-form component)))
+   (phony--element-argument-form element)))
 
-(cl-defmethod phony--ast-match-string ((component-list list))
+(cl-defmethod phony--ast-match-string ((element-list list))
   (string-join (seq-map #'phony--ast-match-string
-                        component-list)
+                        element-list)
                " "))
 
 (cl-defgeneric phony--rule-talon-pattern (rule))
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--procedure-rule))
-  (let* ((components
-          (phony--procedure-rule-components rule))
-         (spoken-components
-          (seq-map #'phony--ast-match-string components)))
-    (string-join spoken-components " ")))
+  (let* ((elements
+          (phony--procedure-rule-elements rule))
+         (spoken-elements
+          (seq-map #'phony--ast-match-string elements)))
+    (string-join spoken-elements " ")))
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--open-rule))
   (string-join (seq-map
@@ -104,30 +104,30 @@
                 (phony--open-rule-alternatives rule))
                " | "))
 
-(cl-defgeneric phony--variable-context (variable components)
+(cl-defgeneric phony--variable-context (variable elements)
   nil)
 
-(cl-defmethod phony--variable-context (variable (components list))
+(cl-defmethod phony--variable-context (variable (elements list))
   (thread-last
-    components
-    (seq-map (lambda (component) (phony--variable-context variable component)))
+    elements
+    (seq-map (lambda (element) (phony--variable-context variable element)))
     (seq-find #'identity)))
 
-(cl-defmethod phony--variable-context (variable (component phony--ast-variable))
-  (when (eq variable component) 'none))
+(cl-defmethod phony--variable-context (variable (element phony--element-argument))
+  (when (eq variable element) 'none))
 
-(cl-defmethod phony--variable-context (variable (component phony--ast-optional))
+(cl-defmethod phony--variable-context (variable (element phony--element-optional))
   (let ((downstream-context (phony--variable-context
                              variable
-                             (phony--ast-children component))))
+                             (phony--ast-children element))))
     (if (eq downstream-context 'none)
         'optional
       downstream-context)))
 
-(cl-defmethod phony--variable-context (variable (component phony--repeat-component))
+(cl-defmethod phony--variable-context (variable (element phony--element-repeat))
   (if-let ((downstream-context (phony--variable-context
                                 variable
-                                (phony--ast-children component))))
+                                (phony--ast-children element))))
       'repeat))
 
 (defun phony--speech-insert-rule (rule)
@@ -161,24 +161,24 @@
           "def " (phony--rule-external-name rule) "(m) -> str:\n")
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
     (let ((variable
-           (phony--find-variable-component
+           (phony--find-variable-element
             argument
-            (phony--procedure-rule-components rule))))
+            (phony--procedure-rule-elements rule))))
       (insert "    " (phony--to-python-identifier
-                      (phony--ast-variable-argument variable))
+                      (phony--element-argument-name variable))
               " = ")
       (if (not variable)
           (insert "'nil'")
         (let* ((variable-context
                 (phony--variable-context
                  variable
-                 (phony--procedure-rule-components rule)))
-               (form (phony--ast-variable-form variable))
+                 (phony--procedure-rule-elements rule)))
+               (form (phony--element-argument-form variable))
                (attribute-name
                 (phony--ast-talon-name form)))
           (when (eq variable-context 'repeat)
             (setq attribute-name (concat attribute-name "_list")))
-          (if (phony--ast-external-rule-p form)
+          (if (phony--element-external-rule-p form)
               (insert (format "from_talon_capture(m.%1$s) if hasattr(m,'%1$s') else 'nil'"
                               attribute-name))
             (pcase variable-context

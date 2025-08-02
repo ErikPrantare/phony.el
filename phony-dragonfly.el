@@ -31,22 +31,22 @@
   (message "%s" pattern)
   `((type . "undefined")))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--ast-literal))
+(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-literal))
   `((type . "literal")
-    (utterance . ,(phony--ast-literal-string literal))))
+    (utterance . ,(phony--element-literal-string literal))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((variable phony--ast-variable))
+(cl-defmethod phony-dragonfly--serialize-pattern ((variable phony--element-argument))
   `((type . "argument")
     (name . ,(symbol-name
-              (phony--ast-variable-argument variable)))
+              (phony--element-argument-name variable)))
     (rule . ,(phony-dragonfly--serialize-pattern
-              (phony--ast-variable-form variable)))))
+              (phony--element-argument-form variable)))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--ast-element))
+(cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--element-dictionary))
   `((type . "dictionary")
     (name . ,(symbol-name
               (phony--dictionary-external-name
-               (phony--ast-element-list dictionary))))))
+               (phony--element-dictionary-name dictionary))))))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
   `((type . "sequence")
@@ -60,7 +60,7 @@
     (name . ,(phony--procedure-rule-external-name rule))
     (function . ,(symbol-name (phony--procedure-rule-function rule)))
     (pattern . ,(phony-dragonfly--serialize-pattern
-                 (phony--procedure-rule-components rule)))
+                 (phony--procedure-rule-elements rule)))
     (argument-list . ,(seq-into
                        (seq-map #'symbol-name
                                 (phony--procedure-rule-arglist rule))

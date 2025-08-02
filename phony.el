@@ -176,7 +176,7 @@ MAPPING will be stored in the variable LIST."
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
-  function components arglist)
+  function elements arglist)
 
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
@@ -250,107 +250,105 @@ MAPPING will be stored in the variable LIST."
                ',contributes-to)))
          `',name))))
 
-(cl-defstruct phony--ast-literal
+(cl-defstruct phony--element-literal
   string)
 
-(cl-defstruct phony--compound-component
+(cl-defstruct phony--element-compound
   forms)
 
-(cl-defstruct (phony--ast-optional
-               (:include phony--compound-component)))
+(cl-defstruct (phony--element-optional
+               (:include phony--element-compound)))
 
-(cl-defstruct (phony--repeat-component
-               (:include phony--compound-component)))
+(cl-defstruct (phony--element-repeat
+               (:include phony--element-compound)))
 
-(cl-defstruct (phony--ast-one-or-more
-               (:include phony--repeat-component)))
+(cl-defstruct (phony--element-one-or-more
+               (:include phony--element-repeat)))
 
-(cl-defstruct (phony--ast-zero-or-more
-               (:include phony--repeat-component)))
+(cl-defstruct (phony--element-zero-or-more
+               (:include phony--element-repeat)))
 
-(cl-defstruct phony--ast-element
-  list)
-
-(cl-defstruct phony--ast-variable
-  argument form)
-
-(cl-defstruct phony--ast-external-rule
-  name namespace)
-
-(cl-defstruct phony--ast-rule
+(cl-defstruct phony--element-dictionary
   name)
 
-(defun phony--ast-children (component)
+(cl-defstruct phony--element-argument
+  name form)
+
+(cl-defstruct phony--element-external-rule
+  name namespace)
+
+(cl-defstruct phony--element-rule
+  name)
+
+(defun phony--ast-children (element)
   (cond
-   ((phony--compound-component-p component)
-    (phony--compound-component-forms component))
-   ((phony--ast-variable-p component)
-    (list (phony--ast-variable-form component)))
+   ((phony--element-compound-p element)
+    (phony--element-compound-forms element))
+   ((phony--element-argument-p element)
+    (list (phony--element-argument-form element)))
    (t nil)))
 
-(defun phony--parse-speech-component (component arglist)
+(defun phony--parse-speech-element (element arglist)
   (cond
-   ((stringp component) (make-phony--ast-literal
-                         :string component))
-   ((symbolp component) (make-phony--ast-element
-                         :list component))
-   ((member (car component) arglist) (make-phony--ast-variable
-                                      :argument (car component)
-                                      :form (phony--parse-speech-component (cadr component) arglist)))
+   ((stringp element) (make-phony--element-literal
+                         :string element))
+   ((member (car element) arglist) (make-phony--element-argument
+                                      :name (car element)
+                                      :form (phony--parse-speech-element (cadr element) arglist)))
    ;; NOTE: The reader interprets ? as a character escape, so to use
    ;; it in the specification of the pattern we actually need to
    ;; match on the character after that, which we require to be
    ;; space.
-   ((eq (car component) ?\s) (make-phony--ast-optional
+   ((eq (car element) ?\s) (make-phony--element-optional
                               :forms (mapcar
-                                      (lambda (subcomponent)
-                                        (phony--parse-speech-component
-                                         subcomponent arglist))
-                                      (cdr component))))
-   ((eq (car component) '+) (make-phony--ast-one-or-more
+                                      (lambda (subelement)
+                                        (phony--parse-speech-element
+                                         subelement arglist))
+                                      (cdr element))))
+   ((eq (car element) '+) (make-phony--element-one-or-more
                              :forms (mapcar
-                                     (lambda (subcomponent)
-                                       (phony--parse-speech-component
-                                        subcomponent arglist))
-                                     (cdr component))))
-   ((eq (car component) '*) (make-phony--ast-zero-or-more
+                                     (lambda (subelement)
+                                       (phony--parse-speech-element
+                                        subelement arglist))
+                                     (cdr element))))
+   ((eq (car element) '*) (make-phony--element-zero-or-more
                              :forms (mapcar
-                                     (lambda (subcomponent)
-                                       (phony--parse-speech-component
-                                        subcomponent arglist))
-                                     (cdr component))))
-   ((eq (car component) 'rule) (make-phony--ast-rule
-                                :name (cadr component)))
-   ((eq (car component) 'talon-capture) (make-phony--ast-external-rule
-                                         :name (car (last (cdr component)))
-                                         :namespace (butlast (cdr component))))
-   ((eq (car component) 'list) (make-phony--ast-element
-                                :list (cadr component)))
-   (t (error (format "No parse for %S" component)))))
+                                     (lambda (subelement)
+                                       (phony--parse-speech-element
+                                        subelement arglist))
+                                     (cdr element))))
+   ((eq (car element) 'rule) (make-phony--element-rule
+                                :name (cadr element)))
+   ((eq (car element) 'talon-capture) (make-phony--element-external-rule
+                                         :name (car (last (cdr element)))
+                                         :namespace (butlast (cdr element))))
+   ((eq (car element) 'list) (make-phony--element-dictionary
+                                :name (cadr element)))
+   (t (error (format "No parse for %S" element)))))
 
-(cl-defgeneric phony--collect (predicate component)
+(cl-defgeneric phony--collect (predicate element)
   (let ((collected-children
          (phony--collect
           predicate
-          (phony--ast-children component))))
-    (if (funcall predicate component)
-        (cons component collected-children)
+          (phony--ast-children element))))
+    (if (funcall predicate element)
+        (cons element collected-children)
       collected-children)))
 
-(cl-defmethod phony--collect (predicate (component-list list))
+(cl-defmethod phony--collect (predicate (element-list list))
   (apply #'append
          (seq-map
-          (lambda (component) (phony--collect predicate component))
-          component-list)))
+          (lambda (element) (phony--collect predicate element))
+          element-list)))
 
-(defun phony--find-variable-component (argument components)
+(defun phony--find-variable-element (argument elements)
   (seq-find (lambda (variable)
               (eq
-               (phony--ast-variable-argument variable)
+               (phony--element-argument-name variable)
                argument))
             (phony--collect
-             #'phony--ast-variable-p
-             components)))
+             #'phony--element-argument-p
+             elements)))
 
 (cl-defgeneric phony--dependencies (rule))
 
@@ -358,15 +356,15 @@ MAPPING will be stored in the variable LIST."
   (seq-map (lambda (element)
              (phony--get-rule
               (cond
-               ((phony--ast-rule-p element)
-                (phony--ast-rule-name element))
-               ((phony--ast-element-p element)
-                (phony--ast-element-list element)))))
+               ((phony--element-rule-p element)
+                (phony--element-rule-name element))
+               ((phony--element-dictionary-p element)
+                (phony--element-dictionary-name element)))))
            (phony--collect
             (lambda (element)
-              (or (phony--ast-rule-p element)
-                  (phony--ast-element-p element)))
-            (phony--procedure-rule-components rule))))
+              (or (phony--element-rule-p element)
+                  (phony--element-dictionary-p element)))
+            (phony--procedure-rule-elements rule))))
 
 (cl-defmethod phony--dependencies ((rule phony--open-rule))
   (seq-map #'phony--get-rule
@@ -431,15 +429,15 @@ MAPPING will be stored in the variable LIST."
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
   (phony-remove-rule function)
-  (let* ((components
-          (seq-map (lambda (component)
-                     (phony--parse-speech-component component (byte-compile-arglist-vars arglist)))
+  (let* ((elements
+          (seq-map (lambda (element)
+                     (phony--parse-speech-element element (byte-compile-arglist-vars arglist)))
                    speech-pattern)))
     (puthash function
              (make-phony--procedure-rule
               :name function
               :function function
-              :components components
+              :elements elements
               :arglist arglist
               :modes mode
               :external-name (or talon-name
