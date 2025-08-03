@@ -132,15 +132,6 @@ Talon can read this file to register the dictionaries."
   ;; Needs to return the actual mapping, see `phony-define-list'
   mapping)
 
-(defun phony--define-list (dictionary-name talon-name mapping options)
-  "Define list with LIST-NAME and TALON-NAME containing MAPPING.
-Update `phony-dictionaries-output-file' to contain the definition."
-  (phony--define-dictionary
-   dictionary-name
-   mapping
-   :external-name (symbol-name talon-name)
-   :format-raw (plist-get options :format-raw)))
-
 (defun phony--split-keywords-rest (declaration-args)
   "Split DECLARATION-ARGS into keyword arguments and rest arguments.
 
@@ -154,6 +145,13 @@ arguments."
     (cons (apply #'append arguments) declaration-args)))
 
 (defmacro phony-define-dictionary (name &rest arguments)
+  "Define a dictionary with NAME and containing ALIST.
+Update `phony-dictionaries-output-file' to contain the definition.
+
+ALIST is an alist mapping utterances to values.  An utterance
+is a string containing the spoken form for referencing the value.
+
+ALIST will be stored in a variable named NAME."
   (declare (indent defun))
   (let ((split-arguments (phony--split-keywords-rest arguments)))
     ;; We need to expand to defvar, or else xref will not find the
@@ -162,23 +160,6 @@ arguments."
   `(,(if (boundp name) 'setq 'defvar)
     ,name
     (phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments)))))
-
-(defmacro phony-define-list (list-name talon-name mapping &rest options)
-  "Define a LIST-NAME with TALON-NAME containing MAPPING.
-Update `phony-dictionaries-output-file' to contain the definition.
-
-MAPPING is an alist mapping utterances to values.  An utterance
-is a string containing the spoken form for referencing the value.
-
-MAPPING will be stored in the variable LIST."
-  (declare (indent defun)
-           (obsolete phony-define-dictionary "0.1.0"))
-  ;; We need to expand to defvar, or else xref will not find the
-  ;; definition.  defvar only modifies the variable when it is void,
-  ;; so if it is not we revert to setq.
-  `(,(if (boundp list-name) 'setq 'defvar)
-    ,list-name
-    (phony--define-list ',list-name ',talon-name ,mapping ',options)))
 
 (cl-defstruct phony--rule
   name external-name (modes '(global)) (export nil))
