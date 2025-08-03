@@ -27,6 +27,8 @@
 
 (require 'phony)
 
+(defvar phony-talon-rule-directory nil)
+
 (cl-defgeneric phony--ast-talon-name (element)
   (error "No talon name for element %S" element))
 
@@ -201,7 +203,7 @@
 
 (cl-defun phony-talon--export-mode (mode entries)
   (mkdir "~/.talon/user/emacs-gen" t)
-  (with-temp-file (format "~/.talon/user/emacs-gen/%s.talon" mode)
+  (with-temp-file (file-name-concat phony-talon-rule-directory (format "%s.talon" mode))
     (unless (eq mode 'global)
       (insert (format "user.emacs_mode: /:%s:/\n" mode)))
     (insert "-\n")

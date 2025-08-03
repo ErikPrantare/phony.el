@@ -8,6 +8,9 @@ Clone this repo and add the following to your Emacs configuration:
   (add-to-list 'load-path "path/to/phony/directory")
   (require 'phony)
   (setopt phony-dictionaries-output-file "~/.talon/emacs-lists.json")
+  (require 'phony-talon)
+  (setopt phony-talon-rule-directory "~/.talon/user/emacs-gen")
+  (setopt phony-export-function #'phony-talon-export)
 #+end_src
 
 Then, add [[file:talon/read_lists.py]] to =~/.talon/user/=.
