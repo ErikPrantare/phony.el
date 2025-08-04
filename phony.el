@@ -40,6 +40,51 @@
   :type 'file
   :group 'phony)
 
+(defun phony--to-python-identifier (symbol)
+  (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
+
+(cl-defstruct (phony--dictionary
+               (:constructor nil)
+               (:constructor phony--make-dictionary
+                             (name
+                              &key
+                              (external-name (phony--to-python-identifier name))
+                              format-raw-p)))
+  "A dictionary mapping utterances to values.
+
+NAME is the symbol storing the mapping, an alist.
+
+EXTERNAL-NAME is the name this dictionary will have for the speech
+recognition engine, and should be a string
+
+FORMAT-RAW-P is t if this dictionary is intended to be used on the
+speech recognition side.  In that case, the mapping may only map to
+strings."
+  (name nil :type symbol)
+  (external-name nil :type string)
+  (format-raw-p nil :type boolean))
+
+(defun phony--dictionary-alist (dictionary)
+  "Return the alist stored in DICTIONARY."
+  (symbol-value (phony--dictionary-name dictionary)))
+
+(defvar phony--dictionaries (make-hash-table))
+
+(defun phony--add-dictionary (dictionary)
+  (puthash (phony--dictionary-name dictionary)
+           dictionary
+           phony--dictionaries))
+
+(defun phony--get-dictionary (name)
+  "Return the dictionary with NAME.
+
+If no dictionary is found, this function returns nil."
+  (gethash name phony--dictionaries))
+
+(defun phony--get-dictionaries ()
+  "Return a list containing all dictionaries."
+  (hash-table-values phony--dictionaries))
+
 (defun phony-dictionary-get (utterance dictionary)
   "Return the value corresponding to UTTERANCE in LIST.
 If no such value exists, return nil."
@@ -53,7 +98,7 @@ Invoking this function will sync the list with talon."
   (declare (indent defun))
   `(prog1
        (setf (alist-get ,utterance ,dictionary nil t #'equal) ,value)
-     (phony--request-sync (list ',dictionary))))
+     (phony--request-sync)))
 
 (gv-define-expander phony-dictionary-get
   ;; We need to use `gv-define-expander', because the simpler versions
@@ -64,72 +109,64 @@ Invoking this function will sync the list with talon."
              (lambda (value)
                `(phony-dictionary-put ,utterance ,dictionary ,value)))))
 
-(defun phony--create-lookup-representation (entry dictionary-name)
-  "Create lookup string for UTTERANCE in DICTIONARY-NAME.
+(cl-defgeneric phony--external-name (rule))
+
+(cl-defmethod phony--external-name ((dictionary phony--dictionary))
+  (phony--dictionary-external-name dictionary))
+
+(defun phony--create-lookup-representation (entry dictionary)
+  "Create lookup string for UTTERANCE in DICTIONARY.
 
 When evaluating the returned value from emacsclient, this
 performs the lookup."
-  (if (get dictionary-name 'phony--format-raw)
+  (if (phony--dictionary-format-raw-p dictionary)
       (cdr entry)
     (format "(phony-dictionary-get \"%s\" %s)"
             (car entry)
-            dictionary-name)))
+            (phony--dictionary-name dictionary))))
 
-(defun phony--prepare-dictionary-for-serialization (dictionary-name)
-  "Return dictionary in DICTIONARY-NAME as an entry for `json-serialize'.
+(defun phony--prepare-dictionary-for-serialization (dictionary)
+  "Return DICTIONARY as an entry for `json-serialize'.
 
-This represents one key-value pair, mapping the talon dictionary name to
-its dictionary.  `json-serialize' will create a JSON object passed a
-dictionary of such key-value pairs."
-  (cons (phony--dictionary-external-name dictionary-name)
-        (let ((mapping (symbol-value dictionary-name)))
-          (mapcar (lambda (entry)
-                    (cons
-                     ;; json-serialize expects symbols for keys.
-                     (make-symbol (car entry))
-                     ;; Each value is a string, encoding a form that
-                     ;; will evaluate to the actual value.
-                     (phony--create-lookup-representation
-                      entry dictionary-name)))
-                  mapping))))
+This represents one key-value pair, mapping the external dictionary name
+to its dictionary."
+  (cons (make-symbol (phony--external-name dictionary))
+        (mapcar (lambda (entry)
+                  (cons
+                   (make-symbol (car entry))
+                   ;; Each value is a string, encoding a form that
+                   ;; will evaluate to the actual value.
+                   (phony--create-lookup-representation
+                    entry dictionary)))
+                (phony--dictionary-alist dictionary))))
 
 ;; TODO: Handle IO errors
-(defun phony--send-dictionaries (dictionary-names)
-  "Send dictionaries DICTIONARY-NAMES to `phony-dictionaries-output-file'.
+(defun phony--send-dictionaries ()
+  "Send dictionaries to `phony-dictionaries-output-file'.
 
 Talon can read this file to register the dictionaries."
   (with-temp-file phony-dictionaries-output-file
     (json-insert
-     (mapcar #'phony--prepare-dictionary-for-serialization dictionary-names))))
+     (mapcar #'phony--prepare-dictionary-for-serialization
+             (phony--get-dictionaries)))))
 
-(defvar phony--dictionary-names '()
-  "All defined talon dictionaries.")
-
-(defun phony--request-sync (&optional dictionary-names)
+(defun phony--request-sync ()
   "Sync DICTIONARY-NAMES when next idle."
   (interactive)
-  ;; For now, we are always resync everything.
   (cancel-function-timers #'phony--send-dictionaries)
-  (run-with-idle-timer 0.0 nil #'phony--send-dictionaries phony--dictionary-names))
-
-(defun phony--dictionary-external-name (dictionary-name)
-  (get dictionary-name 'phony--talon-name))
-
-(defun phony--to-python-identifier (symbol)
-  (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
+  (run-with-idle-timer 0.0 nil #'phony--send-dictionaries))
 
 (cl-defun phony--define-dictionary (name mapping &key (external-name nil) (format-raw nil))
-  (setq external-name (intern
-                       (or external-name
-                           (phony--to-python-identifier name))))
-  ;; TODO: Put all properties in a hash
-  (put name 'phony--talon-name external-name)
-  (put name 'phony--format-raw format-raw)
+  (setq external-name (or external-name
+                          (phony--to-python-identifier name)))
+  (phony--add-dictionary
+   (phony--make-dictionary
+    name
+    :external-name external-name
+    :format-raw-p format-raw))
+  (phony--request-sync)
 
-  (add-to-list 'phony--dictionary-names name)
-  (phony--request-sync phony--dictionary-names)
-
-  ;; Needs to return the actual mapping, see `phony-define-list'
+  ;; Needs to return the actual mapping, see `phony-define-dictionary'
   mapping)
 
 (defun phony--split-keywords-rest (declaration-args)
@@ -188,12 +225,9 @@ ALIST will be stored in a variable named NAME."
   (hash-table-values phony--rules))
 
 (defun phony--get-rule (name)
-  (cond
-   ((gethash name phony--rules)
-    (gethash name phony--rules))
-   ((get name 'phony--talon-name)
-    (symbol-value name))
-   (t (error "No rule with name %S" name))))
+  (or (gethash name phony--rules)
+      (phony--get-dictionary name)
+      (error "No rule with name %S" name)))
 
 (defun phony-remove-rule (rule-name)
   (interactive (list (intern (completing-read "Remove rule: "
@@ -360,9 +394,8 @@ ALIST will be stored in a variable named NAME."
   (seq-map #'phony--get-rule
            (phony--open-rule-alternatives rule)))
 
-(cl-defmethod phony--dependencies ((rule list))
-  ;; In this case the rule is a dictionary
-  nil)
+(cl-defmethod phony--dependencies ((rule phony--dictionary))
+  '())
 
 (defun phony--contains-cycle-search (rule visited finished)
   "Return list of dependency cycle if detected, or nil otherwise."

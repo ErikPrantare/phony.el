@@ -41,8 +41,9 @@
   (phony--element-external-rule-name element))
 
 (cl-defmethod phony--ast-talon-name ((element phony--element-dictionary))
-  (phony--dictionary-external-name
-   (phony--element-dictionary-name element)))
+  (phony--external-name
+   (phony--get-dictionary
+    (phony--element-dictionary-name element))))
 
 (cl-defgeneric phony--ast-match-string (element))
 
@@ -50,9 +51,12 @@
   (phony--element-literal-string element))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-dictionary))
-  (format "{user.%s}" (phony--dictionary-external-name
-                       (phony--element-dictionary-name element))))
+  (format "{user.%s}" (phony--external-name
+                       (phony--get-dictionary
+                        (phony--element-dictionary-name element)))))
 
+(member 'my/any-alphanumeric-key (hash-table-keys phony--dictionaries
+                                                  ))
 (cl-defmethod phony--ast-match-string ((element phony--element-optional))
   (format "[%s]" (phony--ast-match-string
                   (phony--ast-children element))))
@@ -176,8 +180,7 @@
                  variable
                  (phony--procedure-rule-elements rule)))
                (form (phony--element-argument-form variable))
-               (attribute-name
-                (phony--ast-talon-name form)))
+               (attribute-name (phony--ast-talon-name form)))
           (when (eq variable-context 'repeat)
             (setq attribute-name (concat attribute-name "_list")))
           (if (phony--element-external-rule-p form)

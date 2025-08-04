@@ -44,8 +44,8 @@
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--element-dictionary))
   `((type . "dictionary")
-    (name . ,(symbol-name
-              (phony--dictionary-external-name
+    (name . ,(phony--external-name
+              (phony--get-dictionary
                (phony--element-dictionary-name dictionary))))))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
