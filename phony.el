@@ -43,6 +43,17 @@
 (defun phony--to-python-identifier (symbol)
   (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
 
+(cl-defstruct phony--rule
+  name external-name (modes '(global)) (export nil))
+
+(cl-defstruct (phony--procedure-rule
+               (:include phony--rule))
+  function elements arglist)
+
+(cl-defstruct (phony--open-rule
+               (:include phony--rule))
+  (alternatives nil) (transformation nil))
+
 (cl-defstruct (phony--dictionary
                (:constructor nil)
                (:constructor phony--make-dictionary
@@ -199,17 +210,6 @@ ALIST will be stored in a variable named NAME."
     ,name
     (phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments)))))
 
-(cl-defstruct phony--rule
-  name external-name (modes '(global)) (export nil))
-
-(cl-defstruct (phony--procedure-rule
-               (:include phony--rule))
-  function elements arglist)
-
-(cl-defstruct (phony--open-rule
-               (:include phony--rule))
-  (alternatives nil) (transformation nil))
-
 (defun phony--add-alternative (alternative open-rule-name)
   (unless (gethash open-rule-name phony--rules)
     (error "No rule %s defined" open-rule-name))
@@ -222,8 +222,10 @@ ALIST will be stored in a variable named NAME."
 
 (defvar phony--rules (make-hash-table))
 
-(defun phony--rules ()
-  (hash-table-values phony--rules))
+(defun phony--get-rules ()
+  (append
+   (phony--get-dictionaries)
+   (hash-table-values phony--rules)))
 
 (defun phony--get-rule (name)
   (or (gethash name phony--rules)
@@ -378,6 +380,10 @@ ALIST will be stored in a variable named NAME."
 (cl-defgeneric phony--dependencies (rule))
 
 (cl-defmethod phony--dependencies ((rule phony--procedure-rule))
+  "Return list of RULES rule depends on.
+
+Rules in the list occur the same amount of times they are referenced in
+RULE."
   (seq-map (lambda (element)
              (phony--get-rule
               (cond
@@ -398,8 +404,34 @@ ALIST will be stored in a variable named NAME."
 (cl-defmethod phony--dependencies ((rule phony--dictionary))
   '())
 
-(defun phony--contains-cycle-search (rule visited finished)
-  "Return list of dependency cycle if detected, or nil otherwise."
+(cl-defstruct (phony--analysis-data
+               (:constructor nil)
+               (:constructor phony--make-analysis-data))
+  ;; DEPENDENCIES and DEPENDENTS should contain multiple occurrences
+  ;; of a dependency if the rule refers to the dependancy multiple
+  ;; times.
+  (dependencies (make-hash-table))
+  (dependents (make-hash-table))
+  (dependency-cycle nil)
+  (contains-errors nil))
+
+(defun phony--populate-dependency-graph (analysis-data)
+  (let ((dependencies (make-hash-table))
+        (dependents (make-hash-table)))
+    (seq-doseq (rule (phony--get-rules))
+      (puthash rule '() dependencies)
+      (puthash rule '() dependents))
+    (seq-doseq (rule (phony--get-rules))
+      (seq-doseq (dependency (phony--dependencies rule))
+        (push dependency (gethash rule dependencies))
+        (push rule (gethash dependency dependents))))
+    (setf (phony--analysis-data-dependencies analysis-data)
+          dependencies)
+    (setf (phony--analysis-data-dependents analysis-data)
+          dependents)))
+
+(defun phony--find-cycle (rule visited finished successors)
+  "Return path of dependency cycle if detected, or nil otherwise."
   (cl-block nil
     (when (gethash rule finished)
       (cl-return nil))
@@ -407,7 +439,7 @@ ALIST will be stored in a variable named NAME."
       (cl-return (list rule)))
 
     (puthash rule t visited)
-    (seq-doseq (successor (phony--dependencies rule))
+    (seq-doseq (successor (gethash rule successors))
       (when-let ((path (phony--contains-cycle-search successor visited finished)))
         (if (and (not (length= path 1))
                  (eq (seq-first path) (car (last path))))
@@ -416,26 +448,33 @@ ALIST will be stored in a variable named NAME."
     (puthash rule t finished)
     (cl-return nil)))
 
-(cl-defun phony--contains-cycle ()
-  (let ((stack '())
-        (visited (make-hash-table))
+(cl-defun phony--try-finding-dependency-cycle (analysis-data)
+  (let ((visited (make-hash-table))
         (finished (make-hash-table)))
-    (seq-doseq (rule (phony--rules))
-      (when-let ((cycle (phony--contains-cycle-search
-                         rule visited finished)))
-        (warn "Cycle found: %s" (seq-map #'phony--rule-name cycle))
-        (cl-return-from phony--contains-cycle t))))
-  nil)
+    (seq-doseq (rule (phony--get-rules))
+      (when-let ((cycle (phony--find-cycle
+                         rule visited finished
+                         (phony--analysis-data-dependencies analysis-data))))
+        (setf (phony--analysis-data-dependency-cycle analysis-data)
+              (seq-map #'phony--rule-name cycle))
+        (cl-return-from phony--try-finding-dependency-cycle)))))
 
-(defun phony--check-grammar-consistency ()
-  (let ((contains-cycles (phony--contains-cycle)))
-    (not contains-cycles)))
+(defun phony--analyze-grammar ()
+  (let ((analysis-data (phony--make-analysis-data)))
+    (phony--populate-dependency-graph analysis-data)
+    (phony--try-finding-dependency-cycle analysis-data)
+    (when-let (cycle (phony--analysis-data-dependency-cycle analysis-data))
+      (warn "Cycle found: %s" cycle)
+      (setf (phony--analysis-data-contains-errors analysis-data) t))
+    analysis-data))
 
 (defvar phony-export-function nil)
 
 (defun phony--export-all ()
-  (when (phony--check-grammar-consistency)
-    (funcall phony-export-function)))
+  (let ((analysis-data (phony--analyze-grammar)))
+    (if (phony--analysis-data-contains-errors analysis-data)
+        (warn "Grammar contains errors, not exporting")
+      (funcall phony-export-function))))
 
 (defun phony-request-export ()
   (interactive)
