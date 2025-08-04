@@ -43,8 +43,19 @@
 (defun phony--to-python-identifier (symbol)
   (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
 
-(cl-defstruct phony--rule
-  name external-name (modes '(global)) (export nil))
+(cl-defstruct phony--rule-provisional-super
+  "A rule for matching an utterance.
+
+NAME is the name of the rule.
+
+EXTERNAL-NAME is the name this rule will have for the speech recognition
+engine, and should be a string."
+  (name nil :type symbol)
+  (external-name nil :type string))
+
+(cl-defstruct (phony--rule
+               (:include phony--rule-provisional-super))
+  (modes '(global)) (export nil))
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
@@ -55,6 +66,7 @@
   (alternatives nil) (transformation nil))
 
 (cl-defstruct (phony--dictionary
+               (:include phony--rule-provisional-super)
                (:constructor nil)
                (:constructor phony--make-dictionary
                              (name
@@ -63,21 +75,56 @@
                               format-raw-p)))
   "A dictionary mapping utterances to values.
 
-NAME is the symbol storing the mapping, an alist.
-
-EXTERNAL-NAME is the name this dictionary will have for the speech
-recognition engine, and should be a string
+NAME must be the symbol containing the mapping, an alist.
 
 FORMAT-RAW-P is t if this dictionary is intended to be used on the
 speech recognition side.  In that case, the mapping may only map to
 strings."
-  (name nil :type symbol)
-  (external-name nil :type string)
   (format-raw-p nil :type boolean))
 
 (defun phony--dictionary-alist (dictionary)
   "Return the alist stored in DICTIONARY."
   (symbol-value (phony--dictionary-name dictionary)))
+
+(defun phony--normalize-rule (rule-or-name)
+  (if (symbolp rule-or-name)
+      (phony--get-rule rule-or-name)
+    rule-or-name))
+
+(defun phony--external-name (rule-or-name)
+  (phony--rule-provisional-super-external-name
+   (phony--normalize-rule rule-or-name)))
+
+(defvar phony--rules (make-hash-table))
+
+(defun phony--get-rules ()
+  (append
+   (phony--get-dictionaries)
+   (hash-table-values phony--rules)))
+
+(defun phony--get-rule (name)
+  (or (gethash name phony--rules)
+      (phony--get-dictionary name)))
+
+(defun phony--get-non-dictionary-rules ()
+  (seq-remove #'phony--dictionary-p (phony--get-rules)))
+
+(defun phony--add-rule (rule)
+  (if (phony--dictionary-p rule)
+      (phony--add-dictionary rule)
+    (puthash (phony--rule-provisional-super-name rule) rule phony--rules)))
+
+(defun phony-remove-rule (rule-name)
+  (interactive (list (intern (completing-read "Remove rule: "
+                                              (hash-table-keys
+                                               phony--rules)))))
+  (remhash rule-name phony--rules)
+  (seq-doseq (open-rule (seq-filter
+                         #'phony--open-rule-p
+                         (phony--get-rules)))
+    (setf (phony--open-rule-alternatives open-rule)
+          (remove rule-name (phony--open-rule-alternatives open-rule))))
+  (phony-request-export))
 
 (defvar phony--dictionaries (make-hash-table))
 
@@ -121,11 +168,6 @@ recognition engine."
              (lambda (value)
                `(phony-dictionary-put ,utterance ,dictionary ,value)))))
 
-(cl-defgeneric phony--external-name (rule))
-
-(cl-defmethod phony--external-name ((dictionary phony--dictionary))
-  (phony--dictionary-external-name dictionary))
-
 (defun phony--create-lookup-representation (entry dictionary)
   "Create lookup string for UTTERANCE in DICTIONARY.
 
@@ -160,7 +202,8 @@ Talon can read this file to register the dictionaries."
   (with-temp-file phony-dictionaries-output-file
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
-             (phony--get-dictionaries)))))
+             (phony--get-dictionaries)))
+    (json-pretty-print-buffer)))
 
 (defun phony--request-sync ()
   "Sync DICTIONARY-NAMES when next idle."
@@ -171,7 +214,7 @@ Talon can read this file to register the dictionaries."
 (cl-defun phony--define-dictionary (name mapping &key (external-name nil) (format-raw nil))
   (setq external-name (or external-name
                           (phony--to-python-identifier name)))
-  (phony--add-dictionary
+  (phony--add-rule
    (phony--make-dictionary
     name
     :external-name external-name
@@ -206,43 +249,17 @@ ALIST will be stored in a variable named NAME."
     ;; We need to expand to defvar, or else xref will not find the
     ;; definition.  defvar only modifies the variable when it is void,
     ;; so if it is not we revert to setq.
-  `(,(if (boundp name) 'setq 'defvar)
-    ,name
-    (phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments)))))
+    `(,(if (boundp name) 'setq 'defvar)
+      ,name
+      (phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments)))))
 
 (defun phony--add-alternative (alternative open-rule-name)
-  (unless (gethash open-rule-name phony--rules)
-    (error "No rule %s defined" open-rule-name))
-  (unless (phony--open-rule-p
-           (gethash open-rule-name phony--rules))
-    (error "No open rule %s defined" open-rule-name))
-  (cl-pushnew alternative
-              (phony--open-rule-alternatives
-               (gethash open-rule-name phony--rules))))
-
-(defvar phony--rules (make-hash-table))
-
-(defun phony--get-rules ()
-  (append
-   (phony--get-dictionaries)
-   (hash-table-values phony--rules)))
-
-(defun phony--get-rule (name)
-  (or (gethash name phony--rules)
-      (phony--get-dictionary name)
-      (error "No rule with name %S" name)))
-
-(defun phony-remove-rule (rule-name)
-  (interactive (list (intern (completing-read "Remove rule: "
-                                              (hash-table-keys
-                                               phony--rules)))))
-  (remhash rule-name phony--rules)
-  (seq-doseq (open-rule (seq-filter
-                         #'phony--open-rule-p
-                         (hash-table-values phony--rules)))
-    (setf (phony--open-rule-alternatives open-rule)
-          (remove rule-name (phony--open-rule-alternatives open-rule))))
-  (phony-request-export))
+  (let ((rule (phony--get-rule open-rule-name)))
+    (unless rule
+      (error "No rule %s defined" open-rule-name))
+    (unless (phony--open-rule-p rule)
+      (error "No open rule %s defined" open-rule-name))
+    (cl-pushnew alternative (phony--open-rule-alternatives rule))))
 
 (cl-defmacro phony-define-open-rule (name &key
                                           (talon-name nil)
@@ -258,20 +275,19 @@ ALIST will be stored in a variable named NAME."
          ;; is given as a function symbol
          `(cl-assert (symbolp ,transformation) nil
                      "Argument transformation must be a symbol")
-         `(puthash ',name
-                   (make-phony--open-rule
-                    :name ',name
-                    :external-name ,(or talon-name
-                                        (phony--to-python-identifier name))
-                    :transformation ,transformation
-                    :export ,export)
-                   phony--rules)
+         `(phony--add-rule
+           (make-phony--open-rule
+            :name ',name
+            :external-name ,(or talon-name
+                                (phony--to-python-identifier name))
+            :transformation ,transformation
+            :export ,export))
          (when contributes-to
            (if (listp contributes-to)
                `(seq-doseq (to ',contributes-to)
                   (phony--add-alternative
-                 ',name
-                 to))
+                   ',name
+                   to))
              `(phony--add-alternative
                ',name
                ',contributes-to)))
@@ -318,39 +334,39 @@ ALIST will be stored in a variable named NAME."
 (defun phony--parse-speech-element (element arglist)
   (cond
    ((stringp element) (make-phony--element-literal
-                         :string element))
+                       :string element))
    ((member (car element) arglist) (make-phony--element-argument
-                                      :name (car element)
-                                      :form (phony--parse-speech-element (cadr element) arglist)))
+                                    :name (car element)
+                                    :form (phony--parse-speech-element (cadr element) arglist)))
    ;; NOTE: The reader interprets ? as a character escape, so to use
    ;; it in the specification of the pattern we actually need to
    ;; match on the character after that, which we require to be
    ;; space.
    ((eq (car element) ?\s) (make-phony--element-optional
-                              :forms (mapcar
-                                      (lambda (subelement)
-                                        (phony--parse-speech-element
-                                         subelement arglist))
-                                      (cdr element))))
+                            :forms (mapcar
+                                    (lambda (subelement)
+                                      (phony--parse-speech-element
+                                       subelement arglist))
+                                    (cdr element))))
    ((eq (car element) '+) (make-phony--element-one-or-more
-                             :forms (mapcar
-                                     (lambda (subelement)
-                                       (phony--parse-speech-element
-                                        subelement arglist))
-                                     (cdr element))))
+                           :forms (mapcar
+                                   (lambda (subelement)
+                                     (phony--parse-speech-element
+                                      subelement arglist))
+                                   (cdr element))))
    ((eq (car element) '*) (make-phony--element-zero-or-more
-                             :forms (mapcar
-                                     (lambda (subelement)
-                                       (phony--parse-speech-element
-                                        subelement arglist))
-                                     (cdr element))))
+                           :forms (mapcar
+                                   (lambda (subelement)
+                                     (phony--parse-speech-element
+                                      subelement arglist))
+                                   (cdr element))))
    ((eq (car element) 'rule) (make-phony--element-rule
-                                :name (cadr element)))
+                              :name (cadr element)))
    ((eq (car element) 'talon-capture) (make-phony--element-external-rule
-                                         :name (car (last (cdr element)))
-                                         :namespace (butlast (cdr element))))
+                                       :name (car (last (cdr element)))
+                                       :namespace (butlast (cdr element))))
    ((eq (car element) 'list) (make-phony--element-dictionary
-                                :name (cadr element)))
+                              :name (cadr element)))
    (t (error (format "No parse for %S" element)))))
 
 (cl-defgeneric phony--collect (predicate element)
@@ -440,7 +456,7 @@ RULE."
 
     (puthash rule t visited)
     (seq-doseq (successor (gethash rule successors))
-      (when-let ((path (phony--contains-cycle-search successor visited finished)))
+      (when-let ((path (phony--find-cycle successor visited finished successors)))
         (if (and (not (length= path 1))
                  (eq (seq-first path) (car (last path))))
             (cl-return path)
@@ -496,28 +512,19 @@ RULE."
           (seq-map (lambda (element)
                      (phony--parse-speech-element element (byte-compile-arglist-vars arglist)))
                    speech-pattern)))
-    (puthash function
-             (make-phony--procedure-rule
-              :name function
-              :function function
-              :elements elements
-              :arglist arglist
-              :modes mode
-              :external-name (or talon-name
-                                 (phony--to-python-identifier function))
-              :export export)
-             phony--rules)
+    (phony--add-rule
+     (make-phony--procedure-rule
+      :name function
+      :function function
+      :elements elements
+      :arglist arglist
+      :modes mode
+      :external-name (or talon-name
+                         (phony--to-python-identifier function))
+      :export export))
 
     (when contributes-to
-      (phony--add-alternative function contributes-to)
-      (unless (gethash contributes-to phony--rules)
-        (error "No rule %s defined" contributes-to))
-      (unless (phony--open-rule-p
-               (gethash contributes-to phony--rules))
-        (error "No open rule %s defined" contributes-to))
-      (cl-pushnew function
-                  (phony--open-rule-alternatives
-                   (gethash contributes-to phony--rules))))
+      (phony--add-alternative function contributes-to))
 
     (phony-request-export)))
 

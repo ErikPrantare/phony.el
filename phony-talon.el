@@ -55,8 +55,6 @@
                        (phony--get-dictionary
                         (phony--element-dictionary-name element)))))
 
-(member 'my/any-alphanumeric-key (hash-table-keys phony--dictionaries
-                                                  ))
 (cl-defmethod phony--ast-match-string ((element phony--element-optional))
   (format "[%s]" (phony--ast-match-string
                   (phony--ast-children element))))
@@ -106,7 +104,7 @@
                 (lambda (alternative)
                   (format "<user.%s>"
                           (phony--rule-external-name
-                           (gethash alternative phony--rules))))
+                           (phony--get-rule alternative))))
                 (phony--open-rule-alternatives rule))
                " | "))
 
@@ -149,8 +147,7 @@
             (string-join (seq-map
                           (lambda (alternative)
                             (format "<user.%s>'"
-                                    (phony--rule-external-name
-                                     (gethash alternative phony--rules))))
+                                    (phony--external-name alternative)))
                           (phony--open-rule-alternatives rule))
                          "\n        '| ")
             ")\n")
@@ -215,7 +212,7 @@
         (phony--speech-insert-rule rule)))))
 
 (defun phony-talon-export ()
-  (let* ((rules (hash-table-values phony--rules))
+  (let* ((rules (phony--get-non-dictionary-rules))
          (modes (seq-uniq
                  (seq-mapcat #'phony--rule-modes
                              rules))))

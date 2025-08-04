@@ -76,7 +76,7 @@
     . (phony-dragonfly--serialize-rule-concrete rule)))
 
 (defun phony-dragonfly--serialize-rules ()
-  (seq-map #'phony-dragonfly--serialize-rule (hash-table-values phony--rules)))
+  (seq-map #'phony-dragonfly--serialize-rule (phony--get-non-dictionary-rules)))
 
 (defun phony-dragonfly-export ()
   (interactive)
