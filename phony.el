@@ -86,15 +86,16 @@ If no dictionary is found, this function returns nil."
   (hash-table-values phony--dictionaries))
 
 (defun phony-dictionary-get (utterance dictionary)
-  "Return the value corresponding to UTTERANCE in LIST.
+  "Return the value corresponding to UTTERANCE in DICTIONARY.
 If no such value exists, return nil."
   (alist-get utterance dictionary nil nil #'equal))
 
 (defmacro phony-dictionary-put (utterance dictionary value)
-  "Set the value of UTTERANCE in LIST to VALUE.
+  "Set the value of UTTERANCE in DICTIONARY to VALUE.
 If value is nil, remove the utterance from the list instead.
 
-Invoking this function will sync the list with talon."
+Invoking this function will resync the dictionary to the external speech
+recognition engine."
   (declare (indent defun))
   `(prog1
        (setf (alist-get ,utterance ,dictionary nil t #'equal) ,value)
