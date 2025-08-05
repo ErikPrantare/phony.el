@@ -179,7 +179,7 @@ Talon can read this file to register the dictionaries."
   (with-temp-file phony-dictionaries-output-file
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
-             (seq-filter phony--dictionary-p (phony--get-rules))))
+             (seq-filter #'phony--dictionary-p (phony--get-rules))))
     (json-pretty-print-buffer)))
 
 (defun phony--request-sync ()
