@@ -98,21 +98,15 @@ strings."
 (defvar phony--rules (make-hash-table))
 
 (defun phony--get-rules ()
-  (append
-   (phony--get-dictionaries)
-   (hash-table-values phony--rules)))
+  (hash-table-values phony--rules))
 
 (defun phony--get-rule (name)
-  (or (gethash name phony--rules)
-      (phony--get-dictionary name)))
-
-(defun phony--get-non-dictionary-rules ()
-  (seq-remove #'phony--dictionary-p (phony--get-rules)))
+  (gethash name phony--rules))
 
 (defun phony--add-rule (rule)
-  (if (phony--dictionary-p rule)
-      (phony--add-dictionary rule)
-    (puthash (phony--rule-provisional-super-name rule) rule phony--rules)))
+  (puthash (phony--rule-provisional-super-name rule)
+           rule
+           phony--rules))
 
 (defun phony-remove-rule (rule-name)
   (interactive (list (intern (completing-read "Remove rule: "
@@ -125,23 +119,6 @@ strings."
     (setf (phony--open-rule-alternatives open-rule)
           (remove rule-name (phony--open-rule-alternatives open-rule))))
   (phony-request-export))
-
-(defvar phony--dictionaries (make-hash-table))
-
-(defun phony--add-dictionary (dictionary)
-  (puthash (phony--dictionary-name dictionary)
-           dictionary
-           phony--dictionaries))
-
-(defun phony--get-dictionary (name)
-  "Return the dictionary with NAME.
-
-If no dictionary is found, this function returns nil."
-  (gethash name phony--dictionaries))
-
-(defun phony--get-dictionaries ()
-  "Return a list containing all dictionaries."
-  (hash-table-values phony--dictionaries))
 
 (defun phony-dictionary-get (utterance dictionary)
   "Return the value corresponding to UTTERANCE in DICTIONARY.
@@ -202,7 +179,7 @@ Talon can read this file to register the dictionaries."
   (with-temp-file phony-dictionaries-output-file
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
-             (phony--get-dictionaries)))
+             (seq-filter phony--dictionary-p (phony--get-rules))))
     (json-pretty-print-buffer)))
 
 (defun phony--request-sync ()

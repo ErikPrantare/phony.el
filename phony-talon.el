@@ -42,8 +42,7 @@
 
 (cl-defmethod phony--ast-talon-name ((element phony--element-dictionary))
   (phony--external-name
-   (phony--get-dictionary
-    (phony--element-dictionary-name element))))
+   (phony--element-dictionary-name element)))
 
 (cl-defgeneric phony--ast-match-string (element))
 
@@ -52,8 +51,7 @@
 
 (cl-defmethod phony--ast-match-string ((element phony--element-dictionary))
   (format "{user.%s}" (phony--external-name
-                       (phony--get-dictionary
-                        (phony--element-dictionary-name element)))))
+                       (phony--element-dictionary-name element))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-optional))
   (format "[%s]" (phony--ast-match-string
@@ -212,7 +210,8 @@
         (phony--speech-insert-rule rule)))))
 
 (defun phony-talon-export ()
-  (let* ((rules (phony--get-non-dictionary-rules))
+  (let* (;; Handle dictionaries here as well?
+         (rules (seq-remove #'phony--dictionary-p (phony--get-rules)))
          (modes (seq-uniq
                  (seq-mapcat #'phony--rule-modes
                              rules))))

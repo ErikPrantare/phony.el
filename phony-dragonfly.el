@@ -45,8 +45,7 @@
 (cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--element-dictionary))
   `((type . "dictionary")
     (name . ,(phony--external-name
-              (phony--get-dictionary
-               (phony--element-dictionary-name dictionary))))))
+              (phony--element-dictionary-name dictionary)))))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
   `((type . "sequence")
@@ -57,7 +56,7 @@
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--procedure-rule))
   `((type . "procedure-definition")
-    (name . ,(phony--procedure-rule-external-name rule))
+    (name . ,(phony--external-name rule))
     (function . ,(symbol-name (phony--procedure-rule-function rule)))
     (pattern . ,(phony-dragonfly--serialize-pattern
                  (phony--procedure-rule-elements rule)))
@@ -69,14 +68,19 @@
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--open-rule))
   `((type . "open")
-    (name . ,(phony--rule-external-name rule))))
+    (name . ,(phony--external-name rule))))
+
+(cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--dictionary))
+  `((type . "dictionary")
+    (name . ,(phony--external-name rule))))
 
 (defun phony-dragonfly--serialize-rule (rule)
   `((,(make-symbol (phony--rule-external-name rule)))
     . (phony-dragonfly--serialize-rule-concrete rule)))
 
 (defun phony-dragonfly--serialize-rules ()
-  (seq-map #'phony-dragonfly--serialize-rule (phony--get-non-dictionary-rules)))
+  (seq-map #'phony-dragonfly--serialize-rule
+          (phony--get-rules)))
 
 (defun phony-dragonfly-export ()
   (interactive)
