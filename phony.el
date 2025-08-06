@@ -191,6 +191,20 @@ Talon can read this file to register the dictionaries."
 (cl-defun phony--define-dictionary (name mapping &key (external-name nil) (format-raw nil))
   (setq external-name (or external-name
                           (phony--to-python-identifier name)))
+
+  (unless (proper-list-p mapping)
+    (error "The mapping of %s must be a list" name))
+
+  (when-let ((non-cons (seq-find (lambda (x) (not (consp x))) mapping)))
+    (error "The mapping of %s must be a alist, but %s is not a cons cell"
+           name non-cons))
+
+  (when-let ((non-string-key (seq-find
+                              (lambda (entry) (not (stringp (car-safe entry))))
+                              mapping)))
+    (error "The keys of %s must be strings, but %s is not a string"
+           name (car non-string-key)))
+
   (phony--add-rule
    (phony--make-dictionary
     name
