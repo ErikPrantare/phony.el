@@ -495,11 +495,12 @@ RULE."
                               speech-pattern
                               &key
                               (mode 'global)
-                              (talon-name nil)
                               (contributes-to nil)
+                              (external-name nil)
                               (export t))
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
+  (setq external-name (or external-name (phony--to-python-identifier function)))
   (phony-remove-rule function)
   (let* ((elements
           (seq-map (lambda (element)
@@ -508,12 +509,11 @@ RULE."
     (phony--add-rule
      (make-phony--procedure-rule
       :name function
+      :external-name external-name
       :function function
       :elements elements
       :arglist arglist
       :modes mode
-      :external-name (or talon-name
-                         (phony--to-python-identifier function))
       :export export))
 
     (seq-doseq (to (ensure-list contributes-to))
