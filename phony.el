@@ -134,7 +134,7 @@ recognition engine."
   (declare (indent defun))
   `(prog1
        (setf (alist-get ,utterance ,dictionary nil t #'equal) ,value)
-     (phony--request-sync)))
+     (phony--request-sync-dictionaries)))
 
 (gv-define-expander phony-dictionary-get
   ;; We need to use `gv-define-expander', because the simpler versions
@@ -182,11 +182,14 @@ Talon can read this file to register the dictionaries."
              (seq-filter #'phony--dictionary-p (phony--get-rules))))
     (json-pretty-print-buffer)))
 
-(defun phony--request-sync ()
+(defun phony--request-sync-dictionaries ()
   "Sync DICTIONARY-NAMES when next idle."
   (interactive)
   (cancel-function-timers #'phony--send-dictionaries)
   (run-with-idle-timer 0.0 nil #'phony--send-dictionaries))
+
+(defun phony--dictionary-variable-watcher (symbol new-value operation buffer)
+  (phony--request-sync-dictionaries))
 
 (cl-defun phony--define-dictionary (name mapping &key (external-name nil) (format-raw nil))
   (setq external-name (or external-name
@@ -210,7 +213,11 @@ Talon can read this file to register the dictionaries."
     name
     :external-name external-name
     :format-raw-p format-raw))
-  (phony--request-sync)
+  (phony--request-sync-dictionaries)
+
+  ;; TODO: Do the above sanity check on updates as well
+  (unless (memq #'phony--dictionary-variable-watcher (get-variable-watchers name))
+    (add-variable-watcher name #'phony--dictionary-variable-watcher))
 
   ;; Needs to return the actual mapping, see `phony-define-dictionary'
   mapping)
