@@ -273,15 +273,10 @@ ALIST will be stored in a variable named NAME."
                                 (phony--to-python-identifier name))
             :transformation ,transformation
             :export ,export))
-         (when contributes-to
-           (if (listp contributes-to)
-               `(seq-doseq (to ',contributes-to)
-                  (phony--add-alternative
-                   ',name
-                   to))
-             `(phony--add-alternative
-               ',name
-               ',contributes-to)))
+         `(seq-doseq (to (ensure-list ',contributes-to))
+            (phony--add-alternative
+             ',name
+             to))
          `',name))))
 
 (cl-defstruct phony--element-literal
@@ -514,8 +509,8 @@ RULE."
                          (phony--to-python-identifier function))
       :export export))
 
-    (when contributes-to
-      (phony--add-alternative function contributes-to))
+    (seq-doseq (to (ensure-list contributes-to))
+      (phony--add-alternative function to))
 
     (phony-request-export)))
 
