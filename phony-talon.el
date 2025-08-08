@@ -133,7 +133,12 @@
       'repeat))
 
 (defun phony--speech-insert-rule (rule)
-  (insert (format "<user.%1$s>:\n    user.emacs_lisp(%1$s)\n\n"
+  (when (phony--procedure-rule-anchor-beginning-p rule)
+    (insert "^"))
+  (insert (format "<user.%s>" (phony--rule-external-name rule)))
+  (when (phony--procedure-rule-anchor-end-p rule)
+    (insert "$"))
+  (insert (format ":\n    user.emacs_lisp(%s)\n\n"
                   (phony--rule-external-name rule))))
 
 (cl-defgeneric phony--speech-insert-python (rule))

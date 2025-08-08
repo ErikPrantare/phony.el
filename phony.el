@@ -59,7 +59,7 @@ engine, and should be a string."
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
-  function elements arglist)
+  function elements arglist anchor-beginning-p anchor-end-p)
 
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
@@ -439,31 +439,32 @@ RULE."
     (setf (phony--analysis-data-dependents analysis-data)
           dependents)))
 
-(defun phony--find-cycle (rule visited finished successors)
-  "Return path of dependency cycle if detected, or nil otherwise."
-  (cl-block nil
-    (when (gethash rule finished)
-      (cl-return nil))
-    (when (gethash rule visited)
-      (cl-return (list rule)))
+(defun phony--dfs-analysis (rule visited finished analysis-data)
+  "Perform depth-first-search to collect data into analysis-data."
+  (let ((successors (phony--analysis-data-dependencies analysis-data)))
+    (cl-block nil
+      (when (gethash rule finished)
+        (cl-return nil))
+      (when (gethash rule visited)
+        (cl-return (list rule)))
 
-    (puthash rule t visited)
-    (seq-doseq (successor (gethash rule successors))
-      (when-let ((path (phony--find-cycle successor visited finished successors)))
-        (if (and (not (length= path 1))
-                 (eq (seq-first path) (car (last path))))
-            (cl-return path)
-          (cl-return (cons rule path)))))
-    (puthash rule t finished)
-    (cl-return nil)))
+      (puthash rule t visited)
+      (seq-doseq (successor (gethash rule successors))
+        (when-let ((path (phony--dfs-analysis successor visited finished analysis-data)))
+          (if (and (not (length= path 1))
+                   (eq (seq-first path) (car (last path))))
+              (cl-return path)
+            (cl-return (cons rule path)))))
+      (puthash rule t finished)
+      (cl-return nil))))
 
 (cl-defun phony--try-finding-dependency-cycle (analysis-data)
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
-      (when-let ((cycle (phony--find-cycle
+      (when-let ((cycle (phony--dfs-analysis
                          rule visited finished
-                         (phony--analysis-data-dependencies analysis-data))))
+                         analysis-data)))
         (setf (phony--analysis-data-dependency-cycle analysis-data)
               (seq-map #'phony--rule-name cycle))
         (cl-return-from phony--try-finding-dependency-cycle)))))
@@ -497,7 +498,9 @@ RULE."
                               (mode 'global)
                               (contributes-to nil)
                               (external-name nil)
-                              (export t))
+                              (export t)
+                              (anchor-beginning nil)
+                              (anchor-end nil))
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
   (setq external-name (or external-name (phony--to-python-identifier function)))
@@ -514,7 +517,9 @@ RULE."
       :elements elements
       :arglist arglist
       :modes mode
-      :export export))
+      :export export
+      :anchor-beginning-p anchor-beginning
+      :anchor-end-p anchor-end))
 
     (seq-doseq (to (ensure-list contributes-to))
       (phony--add-alternative function to))
