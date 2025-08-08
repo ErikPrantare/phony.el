@@ -413,18 +413,19 @@ RULE."
 (cl-defmethod phony--dependencies ((rule phony--dictionary))
   '())
 
-(cl-defstruct (phony--analysis-data
+(cl-defstruct (phony--dependency-data
                (:constructor nil)
-               (:constructor phony--make-analysis-data))
+               (:constructor phony--make-dependency-data))
   ;; DEPENDENCIES and DEPENDENTS should contain multiple occurrences
   ;; of a dependency if the rule refers to the dependancy multiple
   ;; times.
-  (dependencies (make-hash-table))
-  (dependents (make-hash-table))
-  (dependency-cycle nil)
-  (contains-errors nil))
+  (forward (make-hash-table))
+  (backward (make-hash-table))
+  (cycle nil)
+  (contains-errors nil)
+  (linear-extension nil))
 
-(defun phony--populate-dependency-graph (analysis-data)
+(defun phony--populate-dependency-graph (dependency-data)
   (let ((dependencies (make-hash-table))
         (dependents (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
@@ -434,14 +435,14 @@ RULE."
       (seq-doseq (dependency (phony--dependencies rule))
         (push dependency (gethash rule dependencies))
         (push rule (gethash dependency dependents))))
-    (setf (phony--analysis-data-dependencies analysis-data)
+    (setf (phony--dependency-data-forward dependency-data)
           dependencies)
-    (setf (phony--analysis-data-dependents analysis-data)
+    (setf (phony--dependency-data-backward dependency-data)
           dependents)))
 
-(defun phony--dfs-analysis (rule visited finished analysis-data)
-  "Perform depth-first-search to collect data into analysis-data."
-  (let ((successors (phony--analysis-data-dependencies analysis-data)))
+(defun phony--dfs-analysis (rule visited finished dependency-data)
+  "Perform depth-first-search to collect data into dependency-data."
+  (let ((successors (phony--dependency-data-forward dependency-data)))
     (cl-block nil
       (when (gethash rule finished)
         (cl-return nil))
@@ -450,39 +451,44 @@ RULE."
 
       (puthash rule t visited)
       (seq-doseq (successor (gethash rule successors))
-        (when-let ((path (phony--dfs-analysis successor visited finished analysis-data)))
+        (when-let ((path (phony--dfs-analysis successor visited finished dependency-data)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
               (cl-return path)
             (cl-return (cons rule path)))))
+
       (puthash rule t finished)
+      (push rule (phony--dependency-data-linear-extension dependency-data))
       (cl-return nil))))
 
-(cl-defun phony--try-finding-dependency-cycle (analysis-data)
+(cl-defun phony--try-finding-dependency-cycle (dependency-data)
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
       (when-let ((cycle (phony--dfs-analysis
                          rule visited finished
-                         analysis-data)))
-        (setf (phony--analysis-data-dependency-cycle analysis-data)
+                         dependency-data)))
+        (setf (phony--dependency-data-cycle dependency-data)
               (seq-map #'phony--rule-name cycle))
+        (setf (phony--dependency-data-linear-extension dependency-data)
+              (nreverse
+               (phony--dependency-data-linear-extension dependency-data)))
         (cl-return-from phony--try-finding-dependency-cycle)))))
 
 (defun phony--analyze-grammar ()
-  (let ((analysis-data (phony--make-analysis-data)))
-    (phony--populate-dependency-graph analysis-data)
-    (phony--try-finding-dependency-cycle analysis-data)
-    (when-let (cycle (phony--analysis-data-dependency-cycle analysis-data))
+  (let ((dependency-data (phony--make-dependency-data)))
+    (phony--populate-dependency-graph dependency-data)
+    (phony--try-finding-dependency-cycle dependency-data)
+    (when-let (cycle (phony--dependency-data-cycle dependency-data))
       (warn "Cycle found: %s" cycle)
-      (setf (phony--analysis-data-contains-errors analysis-data) t))
-    analysis-data))
+      (setf (phony--dependency-data-contains-errors dependency-data) t))
+    dependency-data))
 
 (defvar phony-export-function nil)
 
 (defun phony--export-all ()
-  (let ((analysis-data (phony--analyze-grammar)))
-    (if (phony--analysis-data-contains-errors analysis-data)
+  (let ((dependency-data (phony--analyze-grammar)))
+    (if (phony--dependency-data-contains-errors dependency-data)
         (warn "Grammar contains errors, not exporting")
       (funcall phony-export-function))))
 
