@@ -46,6 +46,11 @@
     (name . ,(phony--external-name
               (phony--element-dictionary-name dictionary)))))
 
+(cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--element-rule))
+  `((type . "rule")
+    (name . ,(phony--external-name
+              (phony--element-dictionary-name dictionary)))))
+
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
   `((type . "sequence")
     (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-pattern pattern)

@@ -29,18 +29,21 @@
 
 (defvar phony-talon-rule-directory nil)
 
-(cl-defgeneric phony--ast-talon-name (element)
+(cl-defgeneric phony-talon--element-name (element)
   (error "No talon name for element %S" element))
 
-(cl-defmethod phony--ast-talon-name ((element phony--element-rule))
-  (phony--rule-external-name
-   (phony--get-rule
-    (phony--element-rule-name element))))
+(cl-defmethod phony-talon--element-name ((element phony--element-rule))
+  (phony--external-name
+   (phony--element-rule-name element)))
 
-(cl-defmethod phony--ast-talon-name ((element phony--element-external-rule))
+(cl-defmethod phony-talon--element-name ((element phony--element-rule-any))
+  (phony--external-name
+   (phony--element-rule-any-name element)))
+
+(cl-defmethod phony-talon--element-name ((element phony--element-external-rule))
   (phony--element-external-rule-name element))
 
-(cl-defmethod phony--ast-talon-name ((element phony--element-dictionary))
+(cl-defmethod phony-talon--element-name ((element phony--element-dictionary))
   (phony--external-name
    (phony--element-dictionary-name element)))
 
@@ -52,6 +55,22 @@
 (cl-defmethod phony--ast-match-string ((element phony--element-dictionary))
   (format "{user.%s}" (phony--external-name
                        (phony--element-dictionary-name element))))
+
+(cl-defmethod phony--ast-match-string ((element phony--element-rule))
+  (format "<user.%s>"
+          (phony--rule-external-name
+           (phony--get-rule
+            (phony--element-rule-name element)))))
+
+(cl-defmethod phony--ast-match-string ((element phony--element-rule-any))
+  (format (if (phony--dictionary-p
+               (phony--get-rule
+                (phony--element-rule-any-name element)))
+              "{user.%s}"
+            "<user.%s>")
+          (phony--external-name
+           (phony--get-rule
+            (phony--element-rule-any-name element)))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-optional))
   (format "[%s]" (phony--ast-match-string
@@ -72,12 +91,6 @@
                             (phony--element-external-rule-namespace element)
                             (list (phony--element-external-rule-name element))))
                   ".")))
-
-(cl-defmethod phony--ast-match-string ((element phony--element-rule))
-  (format "<user.%s>"
-          (phony--rule-external-name
-           (phony--get-rule
-            (phony--element-rule-name element)))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-argument))
   (phony--ast-match-string
@@ -180,7 +193,7 @@
                  variable
                  (phony--procedure-rule-elements rule)))
                (form (phony--element-argument-form variable))
-               (attribute-name (phony--ast-talon-name form)))
+               (attribute-name (phony-talon--element-name form)))
           (when (eq variable-context 'repeat)
             (setq attribute-name (concat attribute-name "_list")))
           (if (phony--element-external-rule-p form)

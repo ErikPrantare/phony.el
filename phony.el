@@ -318,6 +318,9 @@ ALIST will be stored in a variable named NAME."
 (cl-defstruct phony--element-rule
   name)
 
+(cl-defstruct phony--element-rule-any
+  name)
+
 (defun phony--ast-children (element)
   (cond
    ((phony--element-compound-p element)
@@ -326,13 +329,30 @@ ALIST will be stored in a variable named NAME."
     (list (phony--element-argument-form element)))
    (t nil)))
 
+(defun phony--parse-speech-value-element (element)
+  (cond
+   ((symbolp element) (make-phony--element-rule-any
+                       :name element))
+   ((eq (car element) 'rule) (make-phony--element-rule
+                              :name (cadr element)))
+   ((eq (car element) 'list) (make-phony--element-dictionary
+                              :name (cadr element)))
+   ((eq (car element) 'external-rule) (make-phony--element-external-rule
+                                       :name (car (last (cdr element)))
+                                       :namespace (butlast (cdr element))))
+   ((eq (car element) 'talon-capture) (make-phony--element-external-rule
+                                       :name (car (last (cdr element)))
+                                       :namespace (butlast (cdr element))))
+   (t (error (format "No parse for %S" element)))))
+
 (defun phony--parse-speech-element (element arglist)
   (cond
    ((stringp element) (make-phony--element-literal
                        :string element))
    ((member (car element) arglist) (make-phony--element-argument
                                     :name (car element)
-                                    :form (phony--parse-speech-element (cadr element) arglist)))
+                                    :form (phony--parse-speech-value-element
+                                           (cadr element))))
    ;; NOTE: The reader interprets ? as a character escape, so to use
    ;; it in the specification of the pattern we actually need to
    ;; match on the character after that, which we require to be
@@ -362,7 +382,7 @@ ALIST will be stored in a variable named NAME."
                                        :namespace (butlast (cdr element))))
    ((eq (car element) 'list) (make-phony--element-dictionary
                               :name (cadr element)))
-   (t (error (format "No parse for %S" element)))))
+   (t (phony--parse-speech-value-element rule))))
 
 (cl-defgeneric phony--collect (predicate element)
   (let ((collected-children
