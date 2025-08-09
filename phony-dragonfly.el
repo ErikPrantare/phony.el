@@ -28,7 +28,6 @@
 (require 'phony)
 
 (cl-defgeneric phony-dragonfly--serialize-pattern (pattern)
-  (message "%s" pattern)
   `((type . "undefined")))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-literal))
@@ -75,17 +74,23 @@
     (name . ,(phony--external-name rule))))
 
 (defun phony-dragonfly--serialize-rule (rule)
-  `((,(make-symbol (phony--rule-external-name rule)))
-    . (phony-dragonfly--serialize-rule-concrete rule)))
+  `(,(make-symbol (phony--external-name rule))
+    . ,(phony-dragonfly--serialize-rule-concrete rule)))
 
-(defun phony-dragonfly--serialize-rules ()
-  (seq-map #'phony-dragonfly--serialize-rule
-          (phony--get-rules)))
+(defun phony-dragonfly--serialize-rules (dependency-data)
+  `((dependency-linear-extension
+     . ,(apply #'vector
+                (seq-map
+                 (lambda (rule) (phony--external-name rule))
+                 (phony--dependency-data-linear-extension dependency-data))))
+    (rules
+     . ,(seq-map #'phony-dragonfly--serialize-rule
+                 (phony--get-rules)))))
 
-(defun phony-dragonfly-export ()
-  (interactive)
+(defun phony-dragonfly-export (dependency-data)
+  (interactive (list (phony--analyze-grammar)))
   (with-temp-file "~/temp/rules.json"
-    (json-insert (phony-dragonfly--serialize-rules))
+    (json-insert (phony-dragonfly--serialize-rules dependency-data))
     (json-pretty-print-buffer)))
 
 (provide 'phony-dragonfly)

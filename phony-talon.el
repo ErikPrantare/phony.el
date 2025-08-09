@@ -214,7 +214,7 @@
       (when (phony--rule-export rule)
         (phony--speech-insert-rule rule)))))
 
-(defun phony-talon-export ()
+(defun phony-talon-export (dependency-data)
   (let* (;; Handle dictionaries here as well?
          (rules (seq-remove #'phony--dictionary-p (phony--get-rules)))
          (modes (seq-uniq

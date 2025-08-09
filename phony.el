@@ -490,7 +490,7 @@ RULE."
   (let ((dependency-data (phony--analyze-grammar)))
     (if (phony--dependency-data-contains-errors dependency-data)
         (warn "Grammar contains errors, not exporting")
-      (funcall phony-export-function))))
+      (funcall phony-export-function dependency-data))))
 
 (defun phony-request-export ()
   (interactive)
