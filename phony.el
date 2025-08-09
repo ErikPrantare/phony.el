@@ -263,7 +263,8 @@ ALIST will be stored in a variable named NAME."
                                           (talon-name nil)
                                           (contributes-to nil)
                                           (transformation nil)
-                                          (export nil))
+                                          (export nil)
+                                          (alternatives nil))
   (declare (indent defun))
   `(progn
      ,@(seq-filter
@@ -279,6 +280,7 @@ ALIST will be stored in a variable named NAME."
             :external-name ,(or talon-name
                                 (phony--to-python-identifier name))
             :transformation ,transformation
+            :alternatives ',alternatives
             :export ,export))
          `(seq-doseq (to (ensure-list ',contributes-to))
             (phony--add-alternative
