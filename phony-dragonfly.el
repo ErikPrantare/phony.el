@@ -41,15 +41,10 @@
     (rule . ,(phony-dragonfly--serialize-pattern
               (phony--element-argument-form variable)))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--element-dictionary))
-  `((type . "dictionary")
-    (name . ,(phony--external-name
-              (phony--element-dictionary-name dictionary)))))
-
 (cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--element-rule))
   `((type . "rule")
     (name . ,(phony--external-name
-              (phony--element-dictionary-name dictionary)))))
+              (phony--element-rule-name dictionary)))))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
   `((type . "sequence")

@@ -179,8 +179,7 @@ Talon can read this file to register the dictionaries."
   (with-temp-file phony-dictionaries-output-file
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
-             (seq-filter #'phony--dictionary-p (phony--get-rules))))
-    (json-pretty-print-buffer)))
+             (seq-filter #'phony--dictionary-p (phony--get-rules))))))
 
 (defun phony--request-sync-dictionaries ()
   "Sync DICTIONARY-NAMES when next idle."
@@ -306,9 +305,6 @@ ALIST will be stored in a variable named NAME."
 (cl-defstruct (phony--element-zero-or-more
                (:include phony--element-repeat)))
 
-(cl-defstruct phony--element-dictionary
-  name)
-
 (cl-defstruct phony--element-argument
   name form)
 
@@ -316,9 +312,6 @@ ALIST will be stored in a variable named NAME."
   name namespace)
 
 (cl-defstruct phony--element-rule
-  name)
-
-(cl-defstruct phony--element-rule-any
   name)
 
 (defun phony--ast-children (element)
@@ -331,16 +324,9 @@ ALIST will be stored in a variable named NAME."
 
 (defun phony--parse-speech-value-element (element)
   (cond
-   ((symbolp element) (make-phony--element-rule-any
+   ((symbolp element) (make-phony--element-rule
                        :name element))
-   ((eq (car element) 'rule) (make-phony--element-rule
-                              :name (cadr element)))
-   ((eq (car element) 'list) (make-phony--element-dictionary
-                              :name (cadr element)))
    ((eq (car element) 'external-rule) (make-phony--element-external-rule
-                                       :name (car (last (cdr element)))
-                                       :namespace (butlast (cdr element))))
-   ((eq (car element) 'talon-capture) (make-phony--element-external-rule
                                        :name (car (last (cdr element)))
                                        :namespace (butlast (cdr element))))
    (t (error (format "No parse for %S" element)))))
@@ -375,14 +361,7 @@ ALIST will be stored in a variable named NAME."
                                      (phony--parse-speech-element
                                       subelement arglist))
                                    (cdr element))))
-   ((eq (car element) 'rule) (make-phony--element-rule
-                              :name (cadr element)))
-   ((eq (car element) 'talon-capture) (make-phony--element-external-rule
-                                       :name (car (last (cdr element)))
-                                       :namespace (butlast (cdr element))))
-   ((eq (car element) 'list) (make-phony--element-dictionary
-                              :name (cadr element)))
-   (t (phony--parse-speech-value-element rule))))
+   (t (phony--parse-speech-value-element element))))
 
 (cl-defgeneric phony--collect (predicate element)
   (let ((collected-children
@@ -417,15 +396,9 @@ Rules in the list occur the same amount of times they are referenced in
 RULE."
   (seq-map (lambda (element)
              (phony--get-rule
-              (cond
-               ((phony--element-rule-p element)
-                (phony--element-rule-name element))
-               ((phony--element-dictionary-p element)
-                (phony--element-dictionary-name element)))))
+              (phony--element-rule-name element)))
            (phony--collect
-            (lambda (element)
-              (or (phony--element-rule-p element)
-                  (phony--element-dictionary-p element)))
+            #'phony--element-rule-p
             (phony--procedure-rule-elements rule))))
 
 (cl-defmethod phony--dependencies ((rule phony--open-rule))
