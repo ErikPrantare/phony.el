@@ -56,15 +56,15 @@
 
 (cl-defmethod phony--ast-match-string ((element phony--element-optional))
   (format "[%s]" (phony--ast-match-string
-                  (phony--ast-children element))))
+                  (phony--element-children element))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-one-or-more))
   (format "(%s)+" (phony--ast-match-string
-                   (phony--ast-children element))))
+                   (phony--element-children element))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-zero-or-more))
   (format "(%s)*" (phony--ast-match-string
-                   (phony--ast-children element))))
+                   (phony--element-children element))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-external-rule))
   (format "<%s>" (string-join
@@ -116,7 +116,7 @@
 (cl-defmethod phony--variable-context (variable (element phony--element-optional))
   (let ((downstream-context (phony--variable-context
                              variable
-                             (phony--ast-children element))))
+                             (phony--element-children element))))
     (if (eq downstream-context 'none)
         'optional
       downstream-context)))
@@ -124,7 +124,7 @@
 (cl-defmethod phony--variable-context (variable (element phony--element-repeat))
   (if-let ((downstream-context (phony--variable-context
                                 variable
-                                (phony--ast-children element))))
+                                (phony--element-children element))))
       'repeat))
 
 (defun phony--speech-insert-rule (rule)

@@ -59,7 +59,11 @@ engine, and should be a string."
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
-  function elements arglist anchor-beginning-p anchor-end-p)
+  function
+  elements
+  arglist
+  anchor-beginning-p
+  anchor-end-p)
 
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
@@ -323,7 +327,7 @@ ALIST will be stored in a variable named NAME."
 (cl-defstruct phony--element-rule
   name)
 
-(defun phony--ast-children (element)
+(defun phony--element-children (element)
   (cond
    ((phony--element-compound-p element)
     (phony--element-compound-forms element))
@@ -376,7 +380,7 @@ ALIST will be stored in a variable named NAME."
   (let ((collected-children
          (phony--collect
           predicate
-          (phony--ast-children element))))
+          (phony--element-children element))))
     (if (funcall predicate element)
         (cons element collected-children)
       collected-children)))
@@ -529,7 +533,8 @@ RULE."
       :modes mode
       :export export
       :anchor-beginning-p anchor-beginning
-      :anchor-end-p anchor-end))
+      :anchor-end-p anchor-end
+      :pattern speech-pattern))
 
     (seq-doseq (to (ensure-list contributes-to))
       (phony--add-alternative function to))
