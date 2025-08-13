@@ -84,7 +84,7 @@ strings."
 
 (defun phony--dictionary-alist (dictionary)
   "Return the alist stored in DICTIONARY."
-  (symbol-value (phony--dictionary-name dictionary)))
+  (funcall (phony--dictionary-name dictionary)))
 
 (defun phony--normalize-rule (rule-or-name)
   (if (symbolp rule-or-name)
@@ -123,7 +123,7 @@ strings."
 (defun phony-dictionary-get (utterance dictionary)
   "Return the value corresponding to UTTERANCE in DICTIONARY.
 If no such value exists, return nil."
-  (alist-get utterance dictionary nil nil #'equal))
+  (funcall dictionary utterance))
 
 (defmacro phony-dictionary-put (utterance dictionary value)
   "Set the value of UTTERANCE in DICTIONARY to VALUE.
@@ -152,9 +152,9 @@ When evaluating the returned value from emacsclient, this
 performs the lookup."
   (if (phony--dictionary-format-raw-p dictionary)
       (cdr entry)
-    (format "(phony-dictionary-get \"%s\" %s)"
-            (car entry)
-            (phony--dictionary-name dictionary))))
+    (format "(%s \"%s\")"
+            (phony--dictionary-name dictionary)
+            (car entry))))
 
 (defun phony--prepare-dictionary-for-serialization (dictionary)
   "Return DICTIONARY as an entry for `json-serialize'.
@@ -206,6 +206,15 @@ Talon can read this file to register the dictionaries."
                               mapping)))
     (error "The keys of %s must be strings, but %S is not a string"
            name (car non-string-key)))
+
+  (defalias name
+    (lambda (&optional utterance)
+      (:documentation (concat "Return the alist of dictionary "
+                              (symbol-name name)
+                              ".\nIf UTTERANCE is given, return instead the corresponding value of the alist."))
+      (if utterance
+          (alist-get utterance (symbol-value name) nil nil #'equal)
+        (symbol-value name))))
 
   (phony--add-rule
    (phony--make-dictionary
