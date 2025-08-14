@@ -483,6 +483,8 @@ RULE."
                (phony--dependency-data-linear-extension dependency-data)))
         (cl-return-from phony--try-finding-dependency-cycle)))))
 
+(defvar phony--last-analysis nil)
+
 (defun phony--analyze-grammar ()
   (let ((dependency-data (phony--make-dependency-data)))
     (phony--populate-dependency-graph dependency-data)
@@ -490,7 +492,13 @@ RULE."
     (when-let (cycle (phony--dependency-data-cycle dependency-data))
       (warn "Cycle found: %s" cycle)
       (setf (phony--dependency-data-contains-errors dependency-data) t))
+    (setq phony--last-analysis dependency-data)
     dependency-data))
+
+(defun phony--dependents (rule-or-name)
+  (gethash
+   (phony--normalize-rule rule-or-name)
+   (phony--dependency-data-backward phony--last-analysis)))
 
 (defvar phony-export-function nil)
 
