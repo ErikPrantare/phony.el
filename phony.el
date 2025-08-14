@@ -67,7 +67,8 @@ engine, and should be a string."
 
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
-  (alternatives nil) (transformation nil))
+  (alternatives nil :type (repeat symbol))
+  (transformation nil :type function))
 
 (cl-defstruct (phony--dictionary
                (:include phony--rule-provisional-super)
@@ -279,26 +280,24 @@ ALIST will be stored in a variable named NAME."
                                           (alternatives nil))
   (declare (indent defun))
   `(progn
-     ,@(seq-filter
-        #'identity
-        (list
-         ;; Code generation currently assumes that the transformation
-         ;; is given as a function symbol
-         `(cl-assert (symbolp ,transformation) nil
-                     "Argument transformation must be a symbol")
-         `(phony--add-rule
-           (make-phony--open-rule
-            :name ',name
-            :external-name ,(or talon-name
-                                (phony--to-python-identifier name))
-            :transformation ,transformation
-            :alternatives ',alternatives
-            :export ,export))
-         `(seq-doseq (to (ensure-list ',contributes-to))
-            (phony--add-alternative
-             ',name
-             to))
-         `',name))))
+     (cl-assert (symbolp ,transformation) nil
+                "Argument transformation must be a symbol")
+
+     ;; For finding the definition of this rule
+     (defalias ',name #'ignore)
+
+     (phony--add-rule
+      (make-phony--open-rule
+       :name ',name
+       :external-name ,(or talon-name (phony--to-python-identifier name))
+       :transformation ,transformation
+       :alternatives ',alternatives
+       :export ,export))
+
+     (seq-doseq (to (ensure-list ',contributes-to))
+       (phony--add-alternative ',name to))
+
+     ',name))
 
 (cl-defstruct phony--element-literal
   string)
