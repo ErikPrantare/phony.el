@@ -399,9 +399,13 @@ ALIST will be stored in a variable named NAME."
              #'phony--element-argument-p
              elements)))
 
-(cl-defgeneric phony--dependencies (rule))
+(defun phony--dependencies (rule-or-name)
+  (phony--dependencies-implementation
+   (phony--normalize-rule rule-or-name)))
 
-(cl-defmethod phony--dependencies ((rule phony--procedure-rule))
+(cl-defgeneric phony--dependencies-implementation (rule))
+
+(cl-defmethod phony--dependencies-implementation ((rule phony--procedure-rule))
   "Return list of RULES rule depends on.
 
 Rules in the list occur the same amount of times they are referenced in
@@ -413,11 +417,11 @@ RULE."
             #'phony--element-rule-p
             (phony--procedure-rule-elements rule))))
 
-(cl-defmethod phony--dependencies ((rule phony--open-rule))
+(cl-defmethod phony--dependencies-implementation ((rule phony--open-rule))
   (seq-map #'phony--get-rule
            (phony--open-rule-alternatives rule)))
 
-(cl-defmethod phony--dependencies ((rule phony--dictionary))
+(cl-defmethod phony--dependencies-implementation ((rule phony--dictionary))
   '())
 
 (cl-defstruct (phony--dependency-data

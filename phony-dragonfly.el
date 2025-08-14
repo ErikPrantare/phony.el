@@ -67,7 +67,8 @@
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--open-rule))
   `((type . "open")
-    (name . ,(phony--external-name rule))))
+    (name . ,(phony--external-name rule))
+    (alternatives . ,(phony--dependencies rule))))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--dictionary))
   `((type . "dictionary")
