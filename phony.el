@@ -481,9 +481,6 @@ RULE."
                          dependency-data)))
         (setf (phony--dependency-data-cycle dependency-data)
               (seq-map #'phony--rule-name cycle))
-        (setf (phony--dependency-data-linear-extension dependency-data)
-              (nreverse
-               (phony--dependency-data-linear-extension dependency-data)))
         (cl-return-from phony--try-finding-dependency-cycle)))))
 
 (defvar phony--last-analysis nil)
@@ -492,6 +489,9 @@ RULE."
   (let ((dependency-data (phony--make-dependency-data)))
     (phony--populate-dependency-graph dependency-data)
     (phony--try-finding-dependency-cycle dependency-data)
+    (setf (phony--dependency-data-linear-extension dependency-data)
+          (reverse
+           (phony--dependency-data-linear-extension dependency-data)))
     (when-let (cycle (phony--dependency-data-cycle dependency-data))
       (warn "Cycle found: %s" cycle)
       (setf (phony--dependency-data-contains-errors dependency-data) t))

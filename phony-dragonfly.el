@@ -46,6 +46,21 @@
     (name . ,(phony--external-name
               (phony--element-rule-name dictionary)))))
 
+(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-one-or-more))
+  `((type . "one-or-more")
+    (element . ,(phony-dragonfly--serialize-pattern
+                 (phony--element-compound-forms literal)))))
+
+(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-zero-or-more))
+  `((type . "zero-or-more")
+    (element . ,(phony-dragonfly--serialize-pattern
+                 (phony--element-compound-forms literal)))))
+
+(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-optional))
+  `((type . "optional")
+    (element . ,(phony-dragonfly--serialize-pattern
+                 (phony--element-compound-forms literal)))))
+
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
   `((type . "sequence")
     (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-pattern pattern)
@@ -68,7 +83,9 @@
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--open-rule))
   `((type . "open")
     (name . ,(phony--external-name rule))
-    (alternatives . ,(phony--dependencies rule))))
+    (alternatives . ,(seq-into (seq-map #'phony--external-name
+                                        (phony--open-rule-alternatives rule))
+                               'vector))))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--dictionary))
   `((type . "dictionary")
