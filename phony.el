@@ -533,8 +533,7 @@ RULE."
       :modes mode
       :export export
       :anchor-beginning-p anchor-beginning
-      :anchor-end-p anchor-end
-      :pattern speech-pattern))
+      :anchor-end-p anchor-end))
 
     (seq-doseq (to (ensure-list contributes-to))
       (phony--add-alternative function to))
