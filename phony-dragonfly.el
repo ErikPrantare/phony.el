@@ -61,6 +61,9 @@
     (element . ,(phony-dragonfly--serialize-pattern
                  (phony--element-compound-forms literal)))))
 
+(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-external-rule))
+  `((type . "impossible")))
+
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
   `((type . "sequence")
     (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-pattern pattern)
