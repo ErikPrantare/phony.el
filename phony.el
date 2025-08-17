@@ -284,14 +284,15 @@ ALIST will be stored in a variable named NAME."
                 "Argument transformation must be a symbol")
 
      ;; For finding the definition of this rule
-     (defalias ',name #'ignore)
+     (defalias ',name #'ignore
+       "Open rule for phony.")
 
      (phony--add-rule
       (make-phony--open-rule
        :name ',name
        :external-name ,(or talon-name (phony--to-python-identifier name))
        :transformation ,transformation
-       :alternatives ',alternatives
+       :alternatives ,alternatives
        :export ,export))
 
      (seq-doseq (to (ensure-list ',contributes-to))
