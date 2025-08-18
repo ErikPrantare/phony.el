@@ -348,7 +348,7 @@ ALIST will be stored in a variable named NAME."
   (cond
    ((stringp element) (make-phony--element-literal
                        :string element))
-   ((member (car element) arglist) (make-phony--element-argument
+   ((member (car-safe element) arglist) (make-phony--element-argument
                                     :name (car element)
                                     :form (phony--parse-speech-value-element
                                            (cadr element))))
@@ -356,24 +356,24 @@ ALIST will be stored in a variable named NAME."
    ;; it in the specification of the pattern we actually need to
    ;; match on the character after that, which we require to be
    ;; space.
-   ((eq (car element) ?\s) (make-phony--element-optional
-                            :forms (mapcar
-                                    (lambda (subelement)
-                                      (phony--parse-speech-element
-                                       subelement arglist))
-                                    (cdr element))))
-   ((eq (car element) '+) (make-phony--element-one-or-more
-                           :forms (mapcar
-                                   (lambda (subelement)
-                                     (phony--parse-speech-element
-                                      subelement arglist))
-                                   (cdr element))))
-   ((eq (car element) '*) (make-phony--element-zero-or-more
-                           :forms (mapcar
-                                   (lambda (subelement)
-                                     (phony--parse-speech-element
-                                      subelement arglist))
-                                   (cdr element))))
+   ((eq (car-safe element) ?\s) (make-phony--element-optional
+                                 :forms (mapcar
+                                         (lambda (subelement)
+                                           (phony--parse-speech-element
+                                            subelement arglist))
+                                         (cdr element))))
+   ((eq (car-safe element) '+) (make-phony--element-one-or-more
+                                :forms (mapcar
+                                        (lambda (subelement)
+                                          (phony--parse-speech-element
+                                           subelement arglist))
+                                        (cdr element))))
+   ((eq (car-safe element) '*) (make-phony--element-zero-or-more
+                                :forms (mapcar
+                                        (lambda (subelement)
+                                          (phony--parse-speech-element
+                                           subelement arglist))
+                                        (cdr element))))
    (t (phony--parse-speech-value-element element))))
 
 (cl-defgeneric phony--collect (predicate element)
