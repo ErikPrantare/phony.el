@@ -273,11 +273,17 @@ ALIST will be stored in a variable named NAME."
     (cl-pushnew alternative (phony--open-rule-alternatives rule))))
 
 (cl-defmacro phony-define-open-rule (name &key
-                                          (talon-name nil)
+                                          (alternatives nil)
                                           (contributes-to nil)
                                           (transformation nil)
-                                          (export nil)
-                                          (alternatives nil))
+                                          (external-name nil))
+  "Define NAME as an open rule.
+
+Open rules match any of the rules specified in ALTERNATIVES.  Other
+rules can contribute to the list of alternatives through the
+CONTRIBUTES-TO argument CONTRIBUTES-TO is an open rule or list of open
+rules that this rule contributes to.  See also `phony-rule', which
+admits this argument as well."
   (declare (indent defun))
   `(progn
      (cl-assert (symbolp ,transformation) nil
@@ -293,7 +299,7 @@ ALIST will be stored in a variable named NAME."
        :external-name ,(or talon-name (phony--to-python-identifier name))
        :transformation ,transformation
        :alternatives ,alternatives
-       :export ,export))
+       :export nil))
 
      (seq-doseq (to (ensure-list ',contributes-to))
        (phony--add-alternative ',name to))
@@ -569,6 +575,42 @@ RULE."
 
 (setf (alist-get 'phony-rule defun-declarations-alist)
       (list #'phony--speech-declaration))
+
+(defmacro phony-rule (args)
+  "Declare function to be a rule invokeable by voice.
+
+This form should must occur inside a `declare' form to take effect.
+
+ELEMENTS is a sequence of elements declaring when this rule gets
+matched.  An element may have one of the following forms:
+
+  STRING           Match a literal STRING.
+  SYMBOL           Match a rule named SYMBOL.
+  (ARG SYMBOL)     Match a rule named SYMBOL, bind its value to argument
+                   ARG.  ARG must be part of the function's arglist.
+  (? ELEMS...)     Optionally match elements ELEMS.
+  (* ELEMS...)     Match elements ELEMS zero or more times.
+  (+ ELEMS...)     Match elements ELEMS one or more times.
+
+Optional arguments for the rule are given before ELEMENTS as a sequence
+of alternating KEY and VALUE.  Optional arguments are:
+
+  :export            If nil, this rule cannot be spoken directly but may
+                     occur as part of other rules.  Default is t.
+  :mode              A mode or list of modes for this rule should be
+                     active.  Only relevant for exported rules.  Default
+                     is 'global.
+  :contributes-to    A symbol or list of symbols of open rules that this
+                     procedure should contribute to.  See
+                     `phony-define-open-rule' for open rules.  Default
+                     is nil.
+  :anchor-beginning  If t, this rule must occur first in an utterance.
+                     Default is nil.
+  :anchor-end        If t, this rule must occur last in an utterance.
+                     Default is nil.
+
+\(fn [KEY VALUE]... ELEMENTS...)"
+  `(message "Stray `phony-rule' form: %S" '(phony-rule . ,args)))
 
 (provide 'phony)
 ;;; phony.el ends here

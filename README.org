@@ -30,6 +30,9 @@ also notify talon that the lists have been updated, causing talon to
 read the defined lists.  After this, the lists will become available
 for usage in talon files.
 
+You can also define more complex rules.  See the documentation for
+~phony-rule~ for more information.
+
 ** Example usage
 *** Create list mapping spoken form of colors to hexcode
 In emacs:
