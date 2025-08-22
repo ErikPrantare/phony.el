@@ -296,7 +296,7 @@ admits this argument as well."
      (phony--add-rule
       (make-phony--open-rule
        :name ',name
-       :external-name ,(or talon-name (phony--to-python-identifier name))
+       :external-name ,(or external-name (phony--to-python-identifier name))
        :transformation ,transformation
        :alternatives ,alternatives
        :export nil))
