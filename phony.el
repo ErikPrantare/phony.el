@@ -579,7 +579,7 @@ RULE."
 (defmacro phony-rule (args)
   "Declare function to be a rule invokeable by voice.
 
-This form should must occur inside a `declare' form to take effect.
+This form must occur inside a `declare' form to take effect.
 
 ELEMENTS is a sequence of elements declaring when this rule gets
 matched.  An element may have one of the following forms:
