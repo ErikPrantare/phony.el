@@ -30,6 +30,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'subr-x)
 
 (defgroup phony nil
   "Functionality for defining speech bindings."
@@ -41,9 +42,14 @@
   :group 'phony)
 
 (defun phony--to-python-identifier (symbol)
+  "Generate a fitting python identifier for SYMBOL.
+
+This function is used to automatically generate external names for
+rules."
   (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
 
-(cl-defstruct phony--rule-provisional-super
+(cl-defstruct (phony--rule
+               (:constructor nil))
   "A rule for matching an utterance.
 
 NAME is the name of the rule.
@@ -53,17 +59,22 @@ engine, and should be a string."
   (name nil :type symbol)
   (external-name nil :type string))
 
-(cl-defstruct (phony--rule
-               (:include phony--rule-provisional-super))
-  (modes '(global)) (export nil))
-
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
-  function
-  elements
-  arglist
-  anchor-beginning-p
-  anchor-end-p)
+  (function '() :type function)
+  (elements '() :type (repeat
+                       (choice phony--element-literal
+                               phony--element-optional
+                               phony--element-one-or-more
+                               phony--element-zero-or-more
+                               phony--element-argument
+                               phony--element-external-rule
+                               phony--element-rule)))
+  (arglist '() :type (repeat symbol))
+  (export t :type boolean)
+  (modes '(global) :type (repeat symbol))
+  (anchor-beginning-p nil :type boolean)
+  (anchor-end-p nil :type boolean))
 
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
@@ -71,7 +82,7 @@ engine, and should be a string."
   (transformation nil :type function))
 
 (cl-defstruct (phony--dictionary
-               (:include phony--rule-provisional-super)
+               (:include phony--procedure-rule)
                (:constructor nil)
                (:constructor phony--make-dictionary
                              (name
@@ -92,28 +103,43 @@ strings."
   (funcall (phony--dictionary-name dictionary)))
 
 (defun phony--normalize-rule (rule-or-name)
+  "Return rule specified by RULE-OR-NAME.
+RULE-OR-NAME must be a `phony--rule' or a symbol naming a rule."
   (if (symbolp rule-or-name)
       (phony--get-rule rule-or-name)
     rule-or-name))
 
 (defun phony--external-name (rule-or-name)
-  (phony--rule-provisional-super-external-name
+  "Return the external name for RULE-OR-NAME.
+
+The external name of a rule is a string, representing how the function
+is identified when exported to the speech engine."
+  (phony--rule-external-name
    (phony--normalize-rule rule-or-name)))
 
-(defvar phony--rules (make-hash-table))
+(defvar phony--rules (make-hash-table)
+  "Hash table of all defined rules, indxed by name.")
 
 (defun phony--get-rules ()
+  "Return a list containing all defined rules."
   (hash-table-values phony--rules))
 
 (defun phony--get-rule (name)
-  (gethash name phony--rules))
+  "Get the rule named NAME.
+Error if no such rule exist."
+  (or (gethash name phony--rules)
+      (error "No rule named %S" name)))
 
 (defun phony--add-rule (rule)
-  (puthash (phony--rule-provisional-super-name rule)
+  "Add a new rule RULE.
+
+This function must be invoked every time a rule is defined."
+  (puthash (phony--rule-name rule)
            rule
            phony--rules))
 
 (defun phony-remove-rule (rule-name)
+  "Remove rule named RULE-NAME."
   (interactive (list (intern (completing-read "Remove rule: "
                                               (hash-table-keys
                                                phony--rules)))))
@@ -151,10 +177,10 @@ recognition engine."
                `(phony-dictionary-put ,utterance ,dictionary ,value)))))
 
 (defun phony--create-lookup-representation (entry dictionary)
-  "Create lookup string for UTTERANCE in DICTIONARY.
+  "Create lookup string for ENTRY in DICTIONARY.
 
-When evaluating the returned value from emacsclient, this
-performs the lookup."
+When evaluating the returned string from emacsclient, this performs
+the lookup."
   (if (phony--dictionary-format-raw-p dictionary)
       (cdr entry)
     (format "(%s \"%s\")"
@@ -180,7 +206,8 @@ to its dictionary."
 (defun phony--send-dictionaries ()
   "Send dictionaries to `phony-dictionaries-output-file'.
 
-Talon can read this file to register the dictionaries."
+The speech recognition backend can read this file to register the
+dictionaries."
   (with-temp-file phony-dictionaries-output-file
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
@@ -192,10 +219,14 @@ Talon can read this file to register the dictionaries."
   (cancel-function-timers #'phony--send-dictionaries)
   (run-with-idle-timer 0.0 nil #'phony--send-dictionaries))
 
-(defun phony--dictionary-variable-watcher (symbol new-value operation buffer)
+(defun phony--dictionary-variable-watcher (_symbol _new-value _operation _buffer)
   (phony--request-sync-dictionaries))
 
-(cl-defun phony--define-dictionary (name mapping &key (external-name nil) (format-raw nil))
+(cl-defun phony--define-dictionary (name
+                                    mapping
+                                    &key
+                                    (external-name nil)
+                                    (format-raw nil))
   (setq external-name (or external-name
                           (phony--to-python-identifier name)))
 
