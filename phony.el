@@ -329,8 +329,7 @@ admits this argument as well."
        :name ',name
        :external-name ,(or external-name (phony--to-python-identifier name))
        :transformation ,transformation
-       :alternatives ,alternatives
-       :export nil))
+       :alternatives ,alternatives))
 
      (seq-doseq (to (ensure-list ',contributes-to))
        (phony--add-alternative ',name to))

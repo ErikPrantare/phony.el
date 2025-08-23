@@ -204,21 +204,27 @@
       (insert (format "user.emacs_mode: /:%s:/\n" mode)))
     (insert "-\n")
     (seq-doseq (rule entries)
-      (when (phony--rule-export rule)
+      (when (and
+             (phony--procedure-rule-p rule)
+             (phony--procedure-rule-export rule))
         (phony--speech-insert-rule rule)))))
 
 (defun phony-talon-export (dependency-data)
   (let* (;; Handle dictionaries here as well?
          (rules (seq-remove #'phony--dictionary-p (phony--get-rules)))
          (modes (seq-uniq
-                 (seq-mapcat #'phony--rule-modes
+                 (seq-mapcat (lambda (rule)
+                               (when (phony--procedure-rule-p rule)
+                                 (phony--procedure-rule-modes rule)))
                              rules))))
     (seq-doseq (mode modes)
       (phony-talon--export-mode
        mode
-       (seq-filter (lambda (rule)
-                     (seq-contains-p (phony--rule-modes rule) mode))
-                   rules)))
+       (seq-filter
+        (lambda (rule)
+          (and (phony--procedure-rule-p rule)
+               (seq-contains-p (phony--procedure-rule-modes rule) mode)))
+        rules)))
 
     (with-temp-file "~/.talon/user/emacs-gen/rules.py"
       (insert "import talon\n\n"
