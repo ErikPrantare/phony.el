@@ -543,12 +543,14 @@ RULE."
 (defvar phony-export-function nil)
 
 (defun phony--export-all ()
+  "Export all rules to the speech recognition engine."
   (let ((dependency-data (phony--analyze-grammar)))
     (if (phony--dependency-data-contains-errors dependency-data)
         (warn "Grammar contains errors, not exporting")
       (funcall phony-export-function dependency-data))))
 
 (defun phony-request-export ()
+  "Export all rules when next idle."
   (interactive)
   (cancel-function-timers #'phony--export-all)
   (run-with-idle-timer 0 nil #'phony--export-all))
