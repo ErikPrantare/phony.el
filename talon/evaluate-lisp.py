@@ -7,7 +7,7 @@ def evaluate_lisp_async(expression: str):
     return subprocess.Popen(
         ["emacsclient",
          "--eval",
-         f"(with-current-buffer (window-buffer) {expression})"])
+         f"(emacslisten-evaluate {expression})"])
 
 def evaluate_lisp(expression: str):
     evaluate_lisp_async(expression).wait()

@@ -25,8 +25,6 @@
 
 ;;; Code:
 
-(require 'phony)
-
 (cl-defgeneric phony-dragonfly--serialize-pattern (pattern)
   `((type . "undefined")))
 
@@ -108,9 +106,11 @@
      . ,(seq-map #'phony-dragonfly--serialize-rule
                  (phony--get-rules)))))
 
+(defvar phony-dragonfly--rule-output-file nil)
+
 (defun phony-dragonfly-export (dependency-data)
   (interactive (list (phony--analyze-grammar)))
-  (with-temp-file "~/temp/rules.json"
+  (with-temp-file phony-dragonfly--rule-output-file
     (json-insert (phony-dragonfly--serialize-rules dependency-data))
     (json-pretty-print-buffer)))
 

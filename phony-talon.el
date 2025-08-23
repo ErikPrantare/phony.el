@@ -25,8 +25,6 @@
 
 ;;; Code:
 
-(require 'phony)
-
 (defvar phony-talon-rule-directory nil)
 
 (cl-defgeneric phony-talon--element-name (element)

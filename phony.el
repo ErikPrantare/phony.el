@@ -612,5 +612,8 @@ of alternating KEY and VALUE.  Optional arguments are:
 \(fn [KEY VALUE]... ELEMENTS...)"
   `(message "Stray `phony-rule' form: %S" '(phony-rule . ,args)))
 
+(require 'phony-talon)
+(require 'phony-dragonfly)
+
 (provide 'phony)
 ;;; phony.el ends here

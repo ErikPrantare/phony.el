@@ -1,25 +1,80 @@
-* phony.el
-Elisp bindings for defining talon rules.
+#+title: phony.el
+Bindings for defining voice commands in Emacs.
 
-** Setup
-Clone this repo and add the following to your Emacs configuration:
+* Illustrative example
+After having set up this package, you will be able to define voice
+commands like this:
 
 #+begin_src elisp
-  (add-to-list 'load-path "path/to/phony/directory")
-  (require 'phony)
-  (setopt phony-dictionaries-output-file "~/.talon/emacs-lists.json")
-  (require 'phony-talon)
+  (defun rule/say-hello ()
+    (declare (phony-rule "hello emacs"))
+    (message "Hello!"))
+#+end_src
+
+With such a function defined, uttering "hello emacs" will display
+"Hello!" in the message area.  Commands may, of course, perform much
+more complex actions than this.
+
+* Setup
+Add the following to your Emacs configuration:
+
+#+begin_src elisp
+  (use-package phony
+    :vc (:url "https://github.com/ErikPrantare/phony.el"
+              :branch "master"
+              :rev :newest)
+    :config
+    (setopt phony-dictionaries-output-file "my/dictionary/output-file.json"))
+#+end_src
+
+, where ~"my/dictionary/output-file.json"~ is replaced with path to
+the of the file where dictionary data should be written.
+
+** Command evaluator
+Install the command evaluator from the EmacsListen repository.
+
+** Speech recognition backend
+Phony currently supports the following speech recognition backends:
+
+- Dragonfly
+- Talon
+
+Dragonfly is recommended over Talon, as Dragonfly is Free Software
+while Talon is proprietary.  However, phony works better for Talon
+on a purely technical level.
+
+*** Dragonfly
+First, install dragonfly with the Kaldi engine.  Instructions here
+(no need to try out the demos in the Kaldi installation instructions).
+
+Then, add the following to your Emacs configuration, substituting the
+values with paths of your choice:
+
+#+begin_src elisp
+  (setopt phony-dragonfly--rule-output-file "path/to/rule/output.json")
+  (setopt phony-dragonfly--model-path "path/to/model")
+  (setopt phony-dragonfly--config-output-file "path/to/config/output.json")
+  (setopt phony-export-function #'phony-dragonfly-export)
+#+end_src
+
+Finally, invoke the script provided in [[file:dragonfly/read_rules.py]] to
+start the engine:
+
+#+begin_src sh
+  python dragonfly/read_rules.py --config "path/to/config/output.json"
+#+end_src
+
+*** Talon
+Install talon and add the following to your Emacs configuration:
+#+begin_src elisp
   (setopt phony-talon-rule-directory "~/.talon/user/emacs-gen")
   (setopt phony-export-function #'phony-talon-export)
 #+end_src
 
-Then, add [[file:talon/read_lists.py]] to =~/.talon/user/=.
+Then, add [[file:talon/read_lists.py]] and [[file:talon/evaluate-lisp.py]] to
+=~/.talon/user/=.
 
-Using this package requires the ability to evaluate arbitrary lisp
-expressions from talon.  If you don't already have this set up, add
-[[file:talon/evaluate-lisp.py]] to =~/.talon/user/= and make sure to run
-emacs as a server (see [[info:emacs#Emacs Server][Using Emacs as a Server]] in the Emacs manual).
-
+* Usage
 You can now define talon lists using the ~phony-define-dictionary~
 macro.  It takes two mandatory arguments: An emacs identifier for
 storing the list and an alist mapping utterances to values.
@@ -33,8 +88,8 @@ for usage in talon files.
 You can also define more complex rules.  See the documentation for
 ~phony-rule~ for more information.
 
-** Example usage
-*** Create list mapping spoken form of colors to hexcode
+* Example usage
+** Create list mapping spoken form of colors to hexcode
 In emacs:
 
 #+begin_src emacs-lisp
@@ -52,7 +107,7 @@ In talon:
       user.emacs_lisp("(insert {color})")
 #+end_src
 
-*** Create list of commands
+** Create list of commands
 In emacs:
 
 #+begin_src emacs-lisp
@@ -69,7 +124,7 @@ In talon:
       user.emacs_lisp("(funcall {command})")
 #+end_src
 
-** Accessing and modifying defined lists
+* Accessing and modifying defined lists
 To access the value corresponding to an utterance, use the function
 ~phony-dictionary-get~.  This is a generalized variable, meaning you
 can use ~setf~ to modify elements of it:
@@ -82,6 +137,6 @@ This form allows you to add, remove and change values in the list.
 Removing an element is done by setting it to nil.  After modifying a
 list, the changes will automatically sync with talon.
 
-** Versioning system
+* Versioning system
 This project uses [[https://semver.org/][semantic versioning]].  While still on 0.y.z, an
 increment of y signals breaking changes.
