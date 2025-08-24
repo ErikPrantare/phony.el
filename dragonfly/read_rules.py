@@ -28,7 +28,7 @@ def load_lists(path):
         for list_name in message:
             lists[list_name] = dragonfly.DictList(list_name, message[list_name])
 
-list_path = os.path.expanduser("~/.talon/emacs-lists.json")
+list_path = os.path.expanduser("~/.talon/emacs-gen/dictionaries.json")
 load_lists(list_path)
 
 # Eventually watch for file changes

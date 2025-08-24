@@ -199,7 +199,8 @@
 
 (cl-defun phony-talon--export-mode (mode entries)
   (mkdir "~/.talon/user/emacs-gen" t)
-  (with-temp-file (file-name-concat phony-talon-rule-directory (format "%s.talon" mode))
+  (with-temp-file (file-name-concat phony-output-directory
+                                    (format "%s.talon" mode))
     (unless (eq mode 'global)
       (insert (format "user.emacs_mode: /:%s:/\n" mode)))
     (insert "-\n")
@@ -226,7 +227,32 @@
                (seq-contains-p (phony--procedure-rule-modes rule) mode)))
         rules)))
 
-    (with-temp-file "~/.talon/user/emacs-gen/rules.py"
+    (with-temp-file (file-name-concat phony-output-directory
+                                      "read_dictionaries.py")
+      (insert (format
+               "from talon import Context, Module
+import talon, json, os.path
+
+module = Module()
+context = Context()
+
+def load_lists(path, dummy_argument):
+    with open(path, 'r') as inn:
+        message = json.load(inn)
+        for list_name in message:
+            module.list(list_name, '')
+            context.lists['user.' + list_name] = message[list_name]
+            print('Loaded list ' + list_name)
+
+path = os.path.expanduser('%s')
+load_lists(path, None)
+talon.fs.watch(path, load_lists)
+"
+               (file-name-concat phony-output-directory
+                                 "dictionaries.json"))))
+
+    (with-temp-file (file-name-concat phony-output-directory
+                                      "rules.py")
       (insert "import talon\n\n"
               "module = talon.Module()\n"
               "context = talon.Context()\n\n"
@@ -236,11 +262,16 @@
               "\n\n"
               "def from_talon_capture(capture):\n"
               "    formatted = None\n"
-              "    if isinstance(capture,str):\n        formatted = quote_string(capture)\n"
-              "    elif isinstance(capture,int):\n        formatted = str(capture)\n"
-              "    elif isinstance(capture,talon.grammar.vm.Phrase):\n        formatted = quote_string(' '.join(capture))\n"
-              "    elif isinstance(capture,list):\n        formatted = '(list ' + ' '.join([from_talon_capture(x) for x in capture]) + ')'\n"
-              "    else:\n        raise TypeError(f\"Talon capture must have type str, int, list or talon.grammar.vm.Phrase, had type {type(capture)}\")\n"
+              "    if isinstance(capture,str):\n"
+              "        formatted = quote_string(capture)\n"
+              "    elif isinstance(capture,int):\n"
+              "        formatted = str(capture)\n"
+              "    elif isinstance(capture,talon.grammar.vm.Phrase):\n"
+              "        formatted = quote_string(' '.join(capture))\n"
+              "    elif isinstance(capture,list):\n"
+              "        formatted = '(list ' + ' '.join([from_talon_capture(x) for x in capture]) + ')'\n"
+              "    else:\n"
+              "        raise TypeError(f\"Talon capture must have type str, int, list or talon.grammar.vm.Phrase, had type {type(capture)}\")\n"
               "    return formatted\n\n")
       (seq-doseq (command rules)
         (insert "\n")

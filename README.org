@@ -24,11 +24,12 @@ Add the following to your Emacs configuration:
               :branch "master"
               :rev :newest)
     :config
-    (setopt phony-dictionaries-output-file "my/dictionary/output-file.json"))
+    (setopt phony-output-directory "my/directory/of/choice"))
 #+end_src
 
-, where ~"my/dictionary/output-file.json"~ is replaced with path to
-the of the file where dictionary data should be written.
+, where ~"my/directory/of/choice"~ is replaced with the path to the
+directory where you want phony to write the rules for the speech
+engine.
 
 ** Command evaluator
 Install the command evaluator from the EmacsListen repository.
@@ -66,13 +67,15 @@ start the engine:
 
 *** Talon
 Install talon and add the following to your Emacs configuration:
+
 #+begin_src elisp
-  (setopt phony-talon-rule-directory "~/.talon/user/emacs-gen")
   (setopt phony-export-function #'phony-talon-export)
 #+end_src
 
-Then, add [[file:talon/read_lists.py]] and [[file:talon/evaluate-lisp.py]] to
-=~/.talon/user/=.
+~phony-output-directory~ has to be set to a subdirectory of the talon
+user directory.  Phony will generate files in this subdirectory, so
+set it to a directory that does not contain any other user
+configuration.
 
 * Usage
 You can now define talon lists using the ~phony-define-dictionary~

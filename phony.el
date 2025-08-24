@@ -36,9 +36,9 @@
   "Functionality for defining speech bindings."
   :group 'files)
 
-(defcustom phony-dictionaries-output-file nil
-  "Output file for defined lists."
-  :type 'file
+(defcustom phony-output-directory nil
+  "Directory for exported rules."
+  :type 'directory
   :group 'phony)
 
 (defun phony--to-python-identifier (symbol)
@@ -126,9 +126,8 @@ is identified when exported to the speech engine."
 
 (defun phony--get-rule (name)
   "Get the rule named NAME.
-Error if no such rule exist."
-  (or (gethash name phony--rules)
-      (error "No rule named %S" name)))
+Return nil if no such rule exists."
+  (gethash name phony--rules))
 
 (defun phony--add-rule (rule)
   "Add a new rule RULE.
@@ -204,11 +203,14 @@ to its dictionary."
 
 ;; TODO: Handle IO errors
 (defun phony--send-dictionaries ()
-  "Send dictionaries to `phony-dictionaries-output-file'.
+  "Write dictionaries to dictionaries.json.
+
+The file is relative to `phony-output-directory'
 
 The speech recognition backend can read this file to register the
 dictionaries."
-  (with-temp-file phony-dictionaries-output-file
+  (with-temp-file (file-name-concat phony-output-directory
+                                    "dictionaries.json")
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
              (seq-filter #'phony--dictionary-p (phony--get-rules))))))
@@ -280,7 +282,6 @@ arguments."
 
 (defmacro phony-define-dictionary (name &rest arguments)
   "Define a dictionary with NAME and containing ALIST.
-Update `phony-dictionaries-output-file' to contain the definition.
 
 ALIST is an alist mapping utterances to values.  An utterance
 is a string containing the spoken form for referencing the value.
@@ -540,7 +541,16 @@ RULE."
    (phony--normalize-rule rule-or-name)
    (phony--dependency-data-backward phony--last-analysis)))
 
-(defvar phony-export-function nil)
+(defcustom phony-export-function #'phony-dragonfly-export
+  "Function to be used for exporting spoken rules."
+  ;; Using radio instead of choice did not display :tag
+  :type '(choice (function-item :tag "Dragonfly exporter"
+                                phony-dragonfly-export)
+                 (function-item :tag "Talon exporter"
+                                phony-talon-export))
+  :tag "Phony Rule Exporter"
+  :risky t
+  :group 'phony)
 
 (defun phony--export-all ()
   "Export all rules to the speech recognition engine."
