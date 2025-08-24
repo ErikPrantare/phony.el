@@ -106,13 +106,47 @@
      . ,(seq-map #'phony-dragonfly--serialize-rule
                  (phony--get-rules)))))
 
-(defvar phony-dragonfly--rule-output-file nil)
-
 (defun phony-dragonfly-export (dependency-data)
   (interactive (list (phony--analyze-grammar)))
-  (with-temp-file phony-dragonfly--rule-output-file
+  (with-temp-file (file-name-concat phony-output-directory "rules.json")
     (json-insert (phony-dragonfly--serialize-rules dependency-data))
     (json-pretty-print-buffer)))
+
+(defun phony-dragonfly--backend-directory (&optional name)
+  (expand-file-name
+   (locate-user-emacs-file
+    (if name
+        (file-name-concat "phony" name)
+      "phony"))))
+
+(defun phony-dragonfly-install-backend ()
+  (interactive)
+  (when (or (not (interactive-p))
+            (y-or-n-p "Install dragonfly+kaldi backend? (This might take a while) "))
+    (mkdir (phony-dragonfly--backend-directory) t)
+    (let ((default-directory (phony-dragonfly--backend-directory)))
+      (mkdir "model" t)
+      ;; (url-copy-file "https://github.com/daanzu/kaldi-active-grammar/releases/download/v3.1.0/kaldi_model_daanzu_20211030-biglm.zip"
+      ;;                "model/kaldi-active-grammar.zip")
+      ;; (dired-compress-file "model/kaldi-active-grammar.zip")
+      (mkdir "dragonfly" t)
+      (call-process python-interpreter nil nil nil "-m" "venv" "dragonfly/venv")
+      (call-process "env" nil nil nil
+                    "VIRTUAL_ENV=dragonfly/venv" "python" "-m" "pip"
+                    "install" "dragonfly2" "dragonfly2[kaldi]"))))
+
+(defun phony-dragonfly-start-backend ()
+  (interactive)
+  (let ((default-directory (phony-dragonfly--backend-directory)))
+    (mkdir "dragonfly" t)
+    (start-process "Dragonfly" "*Dragonfly*" "env"
+                   "VIRTUAL_ENV=dragonfly/venv"
+                   "python"
+                   (file-name-concat
+                    (file-name-directory (locate-library "phony"))
+                    "dragonfly/run_dragonfly.py")
+                   phony-output-directory)
+    (display-buffer "*Dragonfly*")))
 
 (provide 'phony-dragonfly)
 ;;; phony-dragonfly.el ends here

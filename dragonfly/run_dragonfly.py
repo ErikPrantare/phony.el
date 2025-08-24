@@ -1,6 +1,5 @@
 from __future__ import print_function
-import logging, os
-import subprocess, json
+import logging, os, subprocess, json, sys
 
 import dragonfly
 import dragonfly as df
@@ -10,6 +9,12 @@ import kaldi_active_grammar
 setup_log()
 
 kaldi_active_grammar.disable_donation_message()
+
+if len(sys.argv) != 2:
+    print("Usage: python run_dragonfly.py <data-dir>")
+    sys.exit(2)
+
+data_directory = sys.argv[1]
 
 def evaluate_lisp_async(expression: str):
     return subprocess.Popen(
@@ -28,7 +33,8 @@ def load_lists(path):
         for list_name in message:
             lists[list_name] = dragonfly.DictList(list_name, message[list_name])
 
-list_path = os.path.expanduser("~/.talon/emacs-gen/dictionaries.json")
+list_path = os.path.abspath(
+    os.path.expanduser(f"{data_directory}/dictionaries.json"))
 load_lists(list_path)
 
 # Eventually watch for file changes
@@ -147,7 +153,7 @@ def load_rules(path):
 logging.getLogger('kaldi.compiler').setLevel(15)
 
 engine = dragonfly.get_engine("kaldi",
-    model_dir='kaldi_model',
+    model_dir="../model/kaldi-active-grammar/kaldi_model"
 )
 engine.connect()
 grammar = dragonfly.Grammar(name="mygrammar")

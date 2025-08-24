@@ -12,8 +12,7 @@ commands like this:
 #+end_src
 
 With such a function defined, uttering "hello emacs" will display
-"Hello!" in the message area.  Commands may, of course, perform much
-more complex actions than this.
+"Hello!" in the message area.
 
 * Setup
 Add the following to your Emacs configuration:
@@ -40,12 +39,12 @@ Phony currently supports the following speech recognition backends:
 - Dragonfly
 - Talon
 
-Dragonfly is recommended over Talon, as Dragonfly is Free Software
-while Talon is proprietary.  However, phony works better for Talon
-on a purely technical level.
+Dragonfly is recommended over Talon, as Dragonfly is [[https://www.gnu.org/philosophy/free-sw.html][Free Software]]
+while Talon is proprietary.  However, phony works better for Talon on
+a purely technical level.
 
 *** Dragonfly
-First, install dragonfly with the Kaldi engine.  Instructions here
+First, install dragonfly with the Kaldi engine.  Instructions [[https://dragonfly.readthedocs.io/en/latest/installation.html][here]]
 (no need to try out the demos in the Kaldi installation instructions).
 
 Then, add the following to your Emacs configuration, substituting the
