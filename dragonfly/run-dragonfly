@@ -1,5 +1,5 @@
-from __future__ import print_function
-import logging, os, subprocess, json, sys
+#!/usr/bin/env python
+import logging, os, subprocess, json, sys, argparse
 
 import dragonfly
 import dragonfly as df
@@ -10,11 +10,15 @@ setup_log()
 
 kaldi_active_grammar.disable_donation_message()
 
-if len(sys.argv) != 2:
-    print("Usage: python run_dragonfly.py <data-dir>")
-    sys.exit(2)
+argument_parser = argparse.ArgumentParser()
+argument_parser.add_argument('--model', required=True)
+argument_parser.add_argument('--datadir', required=True)
+arguments = argument_parser.parse_args()
 
-data_directory = sys.argv[1]
+data_directory = os.path.abspath(
+    os.path.expanduser(arguments.datadir))
+model_directory = os.path.abspath(
+    os.path.expanduser(arguments.model))
 
 def evaluate_lisp_async(expression: str):
     return subprocess.Popen(
@@ -33,9 +37,7 @@ def load_lists(path):
         for list_name in message:
             lists[list_name] = dragonfly.DictList(list_name, message[list_name])
 
-list_path = os.path.abspath(
-    os.path.expanduser(f"{data_directory}/dictionaries.json"))
-load_lists(list_path)
+load_lists(f"{data_directory}/dictionaries.json")
 
 # Eventually watch for file changes
 
@@ -153,8 +155,8 @@ def load_rules(path):
 logging.getLogger('kaldi.compiler').setLevel(15)
 
 engine = dragonfly.get_engine("kaldi",
-    model_dir="../model/kaldi-active-grammar/kaldi_model"
-)
+                              model_dir=model_directory
+                              )
 engine.connect()
 grammar = dragonfly.Grammar(name="mygrammar")
 
@@ -164,7 +166,7 @@ class MasterRule(dragonfly.BasicRule):
         for expr in self.value(extras["_node"]):
             evaluate_lisp(expr)
 
-load_rules("/home/erik/temp/rules.json")
+load_rules(f"{data_directory}/rules.json")
 grammar.add_rule(
     MasterRule(
         name = "Master CCR rule",

@@ -126,26 +126,38 @@
     (mkdir (phony-dragonfly--backend-directory) t)
     (let ((default-directory (phony-dragonfly--backend-directory)))
       (mkdir "model" t)
-      ;; (url-copy-file "https://github.com/daanzu/kaldi-active-grammar/releases/download/v3.1.0/kaldi_model_daanzu_20211030-biglm.zip"
-      ;;                "model/kaldi-active-grammar.zip")
-      ;; (dired-compress-file "model/kaldi-active-grammar.zip")
-      (mkdir "dragonfly" t)
-      (call-process python-interpreter nil nil nil "-m" "venv" "dragonfly/venv")
-      (call-process "env" nil nil nil
-                    "VIRTUAL_ENV=dragonfly/venv" "python" "-m" "pip"
-                    "install" "dragonfly2" "dragonfly2[kaldi]"))))
+      (when (or (not (file-exists-p "model/kaldi-active-grammar"))
+                (y-or-n-p "Model already downloaded.  Redownload? "))
+        (delete-file "model/kaldi-active-grammar.zip")
+        (delete-directory "model/kaldi-active-grammar" t)
+        (url-copy-file "https://github.com/daanzu/kaldi-active-grammar/releases/download/v3.1.0/kaldi_model_daanzu_20211030-biglm.zip"
+                       "model/kaldi-active-grammar.zip")
+        (dired-compress-file "model/kaldi-active-grammar.zip"))
+      (call-process python-interpreter nil nil t "-m" "venv" "python-venv")
+      (call-process (expand-file-name "python-venv/bin/python") nil nil t
+                    "-m" "pip"
+                    "install" "dragonfly2" "dragonfly2[kaldi]" "kaldi-active-grammar[g2p_en]" "g2p_en"))))
 
 (defun phony-dragonfly-start-backend ()
   (interactive)
   (let ((default-directory (phony-dragonfly--backend-directory)))
     (mkdir "dragonfly" t)
-    (start-process "Dragonfly" "*Dragonfly*" "env"
-                   "VIRTUAL_ENV=dragonfly/venv"
-                   "python"
-                   (file-name-concat
-                    (file-name-directory (locate-library "phony"))
-                    "dragonfly/run_dragonfly.py")
-                   phony-output-directory)
+    (if (executable-find "guix")
+        (start-process "Dragonfly" "*Dragonfly*" "env"
+                       "guix" "shell" "portaudio" "gcc-toolchain"
+                       "--" (file-name-concat
+                             (file-name-directory (locate-library "phony"))
+                             "dragonfly/run-dragonfly-guix")
+                       "python-venv/bin/activate"
+                       "--datadir" phony-output-directory
+                       "--model" "model/kaldi-active-grammar/kaldi_model")
+      (start-process "Dragonfly" "*Dragonfly*"
+                     "python-venv/bin/python"
+                     (file-name-concat
+                      (file-name-directory (locate-library "phony"))
+                      "dragonfly/run-dragonfly")
+                     "--datadir" phony-output-directory
+                     "--model" "model/kaldi-active-grammar/kaldi_model"))
     (display-buffer "*Dragonfly*")))
 
 (provide 'phony-dragonfly)
