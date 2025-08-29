@@ -6,7 +6,7 @@
 ;; Keywords: files
 ;; Version: 0.1.0
 ;; Homepage: https://github.com/ErikPrantare/phony.el
-;; Package-Requires: ((emacs "27.1"))
+;; Package-Requires: ((emacs "28.1"))
 ;; Created: 13 Jul 2024
 
 ;; This program is free software; you can redistribute it and/or
@@ -246,13 +246,20 @@ dictionaries."
            name (car non-string-key)))
 
   (defalias name
-    (lambda (&optional utterance)
-      (:documentation (concat "Return the alist of dictionary "
-                              (symbol-name name)
-                              ".\nIf UTTERANCE is given, return instead the corresponding value of the alist."))
+    (lambda (&optional utterance new-value)
+      (:documentation (concat "Return the alist of dictionary `"
+                                 (symbol-name name)
+                                 "'.\nIf UTTERANCE is given, return instead the corresponding value of the
+alist.  If NEW-VALUE is provided as well, associate instead UTTERANCE
+to NEW-VALUE in this dictionary."))
       (if utterance
-          (alist-get utterance (symbol-value name) nil nil #'equal)
+          (if new-value
+              (setf (alist-get utterance (symbol-value name) nil nil #'equal)
+                    new-value)
+            (alist-get utterance (symbol-value name) nil nil #'equal))
         (symbol-value name))))
+
+  (eval `(gv-define-simple-setter ,name ,name))
 
   (phony--add-rule
    (phony--make-dictionary
