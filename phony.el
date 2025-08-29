@@ -379,7 +379,11 @@ admits this argument as well."
    ((eq (car element) 'external-rule) (make-phony--element-external-rule
                                        :name (car (last (cdr element)))
                                        :namespace (butlast (cdr element))))
-   (t (error (format "No parse for %S" element)))))
+   ((symbolp (car element))
+    (error "Not an argument nor element type: `%S' in form `%S'"
+           (car element)
+           element))
+   (t (error "No parse for %S" element))))
 
 (defun phony--parse-speech-element (element arglist)
   (cond
