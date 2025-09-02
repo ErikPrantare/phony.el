@@ -163,8 +163,7 @@
            (phony--find-variable-element
             argument
             (phony--procedure-rule-elements rule))))
-      (insert "    " (phony--to-python-identifier
-                      (phony--element-argument-name variable))
+      (insert "    " (phony--to-python-identifier argument)
               " = ")
       (if (not variable)
           (insert "'nil'")
