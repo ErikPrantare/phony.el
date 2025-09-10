@@ -470,7 +470,7 @@ RULE."
   (seq-map #'phony--get-rule
            (phony--open-rule-alternatives rule)))
 
-(cl-defmethod phony--dependencies-implementation ((rule phony--dictionary))
+(cl-defmethod phony--dependencies-implementation ((_rule phony--dictionary))
   '())
 
 (cl-defstruct (phony--dependency-data
