@@ -345,9 +345,13 @@ admits this argument as well."
      ',name))
 
 (cl-defstruct phony--element-literal
-  string)
+  "Element matching a literal utterance."
+  (string nil
+          :type string
+          :documentation "Utterance that matches this element."))
 
 (cl-defstruct phony--element-compound
+  "Element matching a sequence of sub-forms."
   forms)
 
 (cl-defstruct (phony--element-optional
@@ -363,13 +367,20 @@ admits this argument as well."
                (:include phony--element-repeat)))
 
 (cl-defstruct phony--element-argument
-  name form)
+  (name nil
+        :type symbol
+        :documentation "Symbol naming the argument that captures the value of the match.")
+  (form nil
+        :type sexp
+        :documentation "Form whose match will bind to the argument."))
 
 (cl-defstruct phony--element-external-rule
   name namespace)
 
 (cl-defstruct phony--element-rule
-  name)
+  (name nil
+        :type symbol
+        :documentation "Symbol naming the phony rule that this element matches."))
 
 (defun phony--element-children (element)
   (cond
