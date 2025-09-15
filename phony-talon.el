@@ -171,11 +171,11 @@
                 (phony--variable-context
                  variable
                  (phony--procedure-rule-elements rule)))
-               (form (phony--element-argument-form variable))
-               (attribute-name (phony-talon--element-name form)))
+               (match-form (phony--element-argument-form variable))
+               (attribute-name (phony-talon--element-name match-form)))
           (when (eq variable-context 'repeat)
             (setq attribute-name (concat attribute-name "_list")))
-          (if (phony--element-external-rule-p form)
+          (if (phony--element-external-rule-p match-form)
               (insert (format "from_talon_capture(m.%1$s) if hasattr(m,'%1$s') else 'nil'"
                               attribute-name))
             (pcase variable-context
