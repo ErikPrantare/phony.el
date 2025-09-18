@@ -463,23 +463,22 @@ admits this argument as well."
   (phony--dependencies-implementation
    (phony--normalize-rule rule-or-name)))
 
-(cl-defgeneric phony--dependencies-implementation (rule))
+(cl-defgeneric phony--dependencies-implementation (rule)
+  "Return name of rules that RULE depends on.")
 
 (cl-defmethod phony--dependencies-implementation ((rule phony--procedure-rule))
-  "Return list of RULES rule depends on.
+  "Return list of rule RULE depends on.
 
 Rules in the list occur the same amount of times they are referenced in
 RULE."
   (seq-map (lambda (element)
-             (phony--get-rule
-              (phony--element-rule-name element)))
+             (phony--element-rule-name element))
            (phony--collect
             #'phony--element-rule-p
             (phony--procedure-rule-elements rule))))
 
 (cl-defmethod phony--dependencies-implementation ((rule phony--open-rule))
-  (seq-map #'phony--get-rule
-           (phony--open-rule-alternatives rule)))
+  (phony--open-rule-alternatives rule))
 
 (cl-defmethod phony--dependencies-implementation ((_rule phony--dictionary))
   '())
@@ -504,8 +503,14 @@ RULE."
       (puthash rule '() dependents))
     (seq-doseq (rule (phony--get-rules))
       (seq-doseq (dependency (phony--dependencies rule))
-        (push dependency (gethash rule dependencies))
-        (push rule (gethash dependency dependents))))
+        (if (not (phony--get-rule dependency))
+            (progn
+              (display-warning 'phony
+                               (format "Rule %S (referenced in %S) is not defined"
+                                       dependency (phony--rule-name rule)))
+              (setf (phony--dependency-data-contains-errors dependency-data) t))
+          (push (phony--get-rule dependency) (gethash rule dependencies))
+          (push rule (gethash dependency dependents)))))
     (setf (phony--dependency-data-forward dependency-data)
           dependencies)
     (setf (phony--dependency-data-backward dependency-data)
@@ -553,7 +558,10 @@ RULE."
           (reverse
            (phony--dependency-data-linear-extension dependency-data)))
     (when-let (cycle (phony--dependency-data-cycle dependency-data))
-      (warn "Cycle found: %s" cycle)
+      (display-warning 'phony (concat "Cycle found: "
+                                      (string-join
+                                       (seq-map #'symbol-name cycle)
+                                       " -> ")))
       (setf (phony--dependency-data-contains-errors dependency-data) t))
     (setq phony--last-analysis dependency-data)
     dependency-data))
@@ -578,7 +586,7 @@ RULE."
   "Export all rules to the speech recognition engine."
   (let ((dependency-data (phony--analyze-grammar)))
     (if (phony--dependency-data-contains-errors dependency-data)
-        (warn "Grammar contains errors, not exporting")
+        (display-warning 'phony "Grammar contains errors, not exporting")
       (funcall phony-export-function dependency-data))))
 
 (defun phony-request-export ()

@@ -43,14 +43,11 @@
   (phony--element-literal-string element))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-rule))
-  (format (if (phony--dictionary-p
-               (phony--get-rule
-                (phony--element-rule-name element)))
-              "{user.%s}"
-            "<user.%s>")
-          (phony--external-name
-           (phony--get-rule
-            (phony--element-rule-name element)))))
+  (let ((rule (phony--get-rule (phony--element-rule-name element))))
+    (format (if (phony--dictionary-p rule) "{user.%s}" "<user.%s>")
+            (phony--external-name
+             (phony--get-rule
+              (phony--element-rule-name element))))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-optional))
   (format "[%s]" (phony--ast-match-string
