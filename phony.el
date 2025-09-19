@@ -293,7 +293,17 @@ arguments."
 ALIST is an alist mapping utterances to values.  An utterance
 is a string containing the spoken form for referencing the value.
 
-ALIST will be stored in a variable named NAME."
+ALIST will be stored in a variable named NAME.
+
+Optional arguments are given as named arguments before ALIST.  They can
+be one of the following:
+
+  :external-name    Name to expose to the external engine.
+  :format-raw       Export values in a form usable by the engine,
+                    not Emacs.  This only works when the values are
+                    strings.
+
+\(fn NAME [KEY VALUE]... ALIST)"
   (declare (indent defun))
   (let ((split-arguments (phony--split-keywords-rest arguments)))
     ;; We need to expand to defvar, or else xref will not find the
@@ -304,6 +314,7 @@ ALIST will be stored in a variable named NAME."
       (phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments)))))
 
 (defun phony--add-alternative (alternative open-rule-name)
+  "Add rule ALTERNATIVE as an alternative for open rule OPEN-RULE-NAME."
   (let ((rule (phony--get-rule open-rule-name)))
     (unless rule
       (error "No rule %s defined" open-rule-name))
@@ -322,7 +333,15 @@ Open rules match any of the rules specified in ALTERNATIVES.  Other
 rules can contribute to the list of alternatives through the
 CONTRIBUTES-TO argument CONTRIBUTES-TO is an open rule or list of open
 rules that this rule contributes to.  See also `phony-rule', which
-admits this argument as well."
+admits this argument as well.
+
+If a function TRANSFORMATION is given, the value of the matched
+alternative is first passed through TRANSFORMATION to create the value
+of matching this rule.  Otherwise, the value is passed through without
+modification.
+
+If EXTERNAL-NAME is given, it will be used for the name generated for
+this rule in the external speech engine."
   (declare (indent defun))
   `(progn
      (cl-assert (symbolp ,transformation) nil
