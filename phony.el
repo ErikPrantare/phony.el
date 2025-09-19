@@ -221,9 +221,6 @@ dictionaries."
   (cancel-function-timers #'phony--send-dictionaries)
   (run-with-idle-timer 0.0 nil #'phony--send-dictionaries))
 
-(defun phony--dictionary-variable-watcher (_symbol _new-value _operation _buffer)
-  (phony--request-sync-dictionaries))
-
 (cl-defun phony--define-dictionary (name
                                     mapping
                                     &key
@@ -268,10 +265,6 @@ to NEW-VALUE in this dictionary."))
     :format-raw-p format-raw))
   (phony--request-sync-dictionaries)
 
-  ;; TODO: Do the above sanity check on updates as well
-  (unless (memq #'phony--dictionary-variable-watcher (get-variable-watchers name))
-    (add-variable-watcher name #'phony--dictionary-variable-watcher))
-
   ;; Needs to return the actual mapping, see `phony-define-dictionary'
   mapping)
 
@@ -309,6 +302,7 @@ be one of the following:
     ;; We need to expand to defvar, or else xref will not find the
     ;; definition.  defvar only modifies the variable when it is void,
     ;; so if it is not we revert to setq.
+    ;; TODO: Remove the variable definition
     `(,(if (boundp name) 'setq 'defvar)
       ,name
       (phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments)))))
