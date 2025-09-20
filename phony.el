@@ -226,6 +226,13 @@ dictionaries."
                                     &key
                                     (external-name nil)
                                     (format-raw nil))
+  "Define dictionary rule NAME containing MAPPING.
+
+If provided, EXTERNAL-NAME specifies the name that the rule will go
+under for the external speech engine.  If FORMAT-RAW is t, the
+dictionary will be formated for use on the side of the speech
+recognition engine.  This only works if the values of the dictionary are
+strings."
   (setq external-name (or external-name
                           (phony--to-python-identifier name)))
 
@@ -283,10 +290,10 @@ arguments."
 (defmacro phony-define-dictionary (name &rest arguments)
   "Define a dictionary with NAME and containing ALIST.
 
-ALIST is an alist mapping utterances to values.  An utterance
-is a string containing the spoken form for referencing the value.
-
-ALIST will be stored in a variable named NAME.
+ALIST is an alist mapping utterances to values.  An utterance is a
+string containing the spoken form for referencing the value.  The
+defined rule matches on any of the keys and evaluates to the
+corresponding value.
 
 Optional arguments are given as named arguments before ALIST.  They can
 be one of the following:
@@ -364,22 +371,27 @@ this rule in the external speech engine."
           :documentation "Utterance that matches this element."))
 
 (cl-defstruct phony--element-compound
-  "Element matching a sequence of sub-forms."
+  "Element matching a sequence of sub-elements."
   forms)
 
 (cl-defstruct (phony--element-optional
-               (:include phony--element-compound)))
+               (:include phony--element-compound))
+  "Element matching sub-elements zero or one times.")
 
 (cl-defstruct (phony--element-repeat
-               (:include phony--element-compound)))
+               (:include phony--element-compound))
+  "Element matching sub-elements potentially multiple times.")
 
 (cl-defstruct (phony--element-one-or-more
-               (:include phony--element-repeat)))
+               (:include phony--element-repeat))
+  "Element matching sub-elements one or more times.")
 
 (cl-defstruct (phony--element-zero-or-more
-               (:include phony--element-repeat)))
+               (:include phony--element-repeat))
+  "Element matching sub-elements zero or more times.")
 
 (cl-defstruct phony--element-argument
+  "Element matching FORM and binding it to function argument NAME."
   (name nil
         :type symbol
         :documentation "Symbol naming the argument that captures the value of the match.")
@@ -388,14 +400,18 @@ this rule in the external speech engine."
         :documentation "Form whose match will bind to the argument."))
 
 (cl-defstruct phony--element-external-rule
+  "Element matching some external rule.
+Currently only relevant for the talon exporter."
   name namespace)
 
 (cl-defstruct phony--element-rule
+  "Element matching another rule."
   (name nil
         :type symbol
         :documentation "Symbol naming the phony rule that this element matches."))
 
 (defun phony--element-children (element)
+  "Return all direct sub-elements of ELEMENT."
   (cond
    ((phony--element-compound-p element)
     (phony--element-compound-forms element))
