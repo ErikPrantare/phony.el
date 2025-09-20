@@ -62,14 +62,7 @@ engine, and should be a string."
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
   (function '() :type function)
-  (elements '() :type (repeat
-                       (choice phony--element-literal
-                               phony--element-optional
-                               phony--element-one-or-more
-                               phony--element-zero-or-more
-                               phony--element-argument
-                               phony--element-external-rule
-                               phony--element-rule)))
+  (element nil :type phony--element-sequence)
   (arglist '() :type (repeat symbol))
   (export t :type boolean)
   (modes '(global) :type (repeat symbol))
@@ -169,7 +162,7 @@ recognition engine."
 (gv-define-expander phony-dictionary-get
   ;; We need to use `gv-define-expander', because the simpler versions
   ;; expand to a let-expression binding the dictionary to a local
-  ;; variable.  That meant removing elements became impossible.
+  ;; variable.  That meant removing  became impossible.
   (lambda (do utterance dictionary)
     (funcall do `(phony-dictionary-get ,utterance ,dictionary)
              (lambda (value)
@@ -370,25 +363,25 @@ this rule in the external speech engine."
           :type string
           :documentation "Utterance that matches this element."))
 
-(cl-defstruct phony--element-compound
+(cl-defstruct phony--element-sequence
   "Element matching a sequence of sub-elements."
-  forms)
+  elements)
 
-(cl-defstruct (phony--element-optional
-               (:include phony--element-compound))
-  "Element matching sub-elements zero or one times.")
+(cl-defstruct phony--element-optional
+  "Element matching ELEMENT zero or one times."
+  element)
 
-(cl-defstruct (phony--element-repeat
-               (:include phony--element-compound))
-  "Element matching sub-elements potentially multiple times.")
+(cl-defstruct phony--element-repeat
+  "Element that may match ELEMENT multiple times."
+  element)
 
 (cl-defstruct (phony--element-one-or-more
                (:include phony--element-repeat))
-  "Element matching sub-elements one or more times.")
+  "Element matching ELEMENT one or more times.")
 
 (cl-defstruct (phony--element-zero-or-more
                (:include phony--element-repeat))
-  "Element matching sub-elements zero or more times.")
+  "Element matching ELEMENT zero or more times.")
 
 (cl-defstruct phony--element-argument
   "Element matching FORM and binding it to function argument NAME."
@@ -412,10 +405,16 @@ Currently only relevant for the talon exporter."
 
 (defun phony--element-children (element)
   "Return all direct sub-elements of ELEMENT."
-  (cond
-   ((phony--element-compound-p element)
-    (phony--element-compound-forms element))
-   ((phony--element-argument-p element)
+  (cl-typecase element
+    (phony--element-sequence
+     (phony--element-sequence-elements element))
+    (phony--element-optional
+     (list (phony--element-optional-element element)))
+    (phony--element-zero-or-more
+     (list (phony--element-zero-or-more-element element)))
+    (phony--element-one-or-more
+     (list (phony--element-one-or-more-element element)))
+   (phony--element-argument
     (list (phony--element-argument-form element)))
    (t nil)))
 
@@ -445,23 +444,29 @@ Currently only relevant for the talon exporter."
    ;; match on the character after that, which we require to be
    ;; space.
    ((eq (car-safe element) ?\s) (make-phony--element-optional
-                                 :forms (mapcar
-                                         (lambda (subelement)
-                                           (phony--parse-speech-element
-                                            subelement arglist))
-                                         (cdr element))))
+                                 :element
+                                 (make-phony--element-sequence
+                                  :elements (mapcar
+                                             (lambda (subelement)
+                                               (phony--parse-speech-element
+                                                subelement arglist))
+                                             (cdr element)))))
    ((eq (car-safe element) '+) (make-phony--element-one-or-more
-                                :forms (mapcar
-                                        (lambda (subelement)
-                                          (phony--parse-speech-element
-                                           subelement arglist))
-                                        (cdr element))))
+                                :element
+                                (make-phony--element-sequence
+                                 :elements (mapcar
+                                            (lambda (subelement)
+                                              (phony--parse-speech-element
+                                               subelement arglist))
+                                            (cdr element)))))
    ((eq (car-safe element) '*) (make-phony--element-zero-or-more
-                                :forms (mapcar
-                                        (lambda (subelement)
-                                          (phony--parse-speech-element
-                                           subelement arglist))
-                                        (cdr element))))
+                                :element
+                                (make-phony--element-sequence
+                                 :elements (mapcar
+                                            (lambda (subelement)
+                                              (phony--parse-speech-element
+                                               subelement arglist))
+                                            (cdr element)))))
    (t (phony--parse-speech-value-element element))))
 
 (cl-defgeneric phony--collect (predicate element)
@@ -504,7 +509,7 @@ RULE."
              (phony--element-rule-name element))
            (phony--collect
             #'phony--element-rule-p
-            (phony--procedure-rule-elements rule))))
+            (phony--procedure-rule-element rule))))
 
 (cl-defmethod phony--dependencies-implementation ((rule phony--open-rule))
   (phony--open-rule-alternatives rule))
@@ -647,7 +652,8 @@ RULE."
       :name function
       :external-name external-name
       :function function
-      :elements elements
+      :element (make-phony--element-sequence
+                :elements elements)
       :arglist arglist
       :modes mode
       :export export

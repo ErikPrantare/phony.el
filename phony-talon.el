@@ -49,17 +49,22 @@
              (phony--get-rule
               (phony--element-rule-name element))))))
 
+(cl-defmethod phony--ast-match-string ((element phony--element-sequence))
+  (string-join (seq-map #'phony--ast-match-string
+                        (phony--element-sequence-elements element))
+               " "))
+
 (cl-defmethod phony--ast-match-string ((element phony--element-optional))
   (format "[%s]" (phony--ast-match-string
-                  (phony--element-children element))))
+                  (phony--element-optional-element element))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-one-or-more))
   (format "(%s)+" (phony--ast-match-string
-                   (phony--element-children element))))
+                   (phony--element-one-or-more-element element))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-zero-or-more))
   (format "(%s)*" (phony--ast-match-string
-                   (phony--element-children element))))
+                   (phony--element-zero-or-more-element element))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-external-rule))
   (format "<%s>" (string-join
@@ -73,16 +78,12 @@
   (phony--ast-match-string
    (phony--element-argument-form element)))
 
-(cl-defmethod phony--ast-match-string ((element-list list))
-  (string-join (seq-map #'phony--ast-match-string
-                        element-list)
-               " "))
-
 (cl-defgeneric phony--rule-talon-pattern (rule))
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--procedure-rule))
   (let* ((elements
-          (phony--procedure-rule-elements rule))
+          (phony--element-sequence-elements
+           (phony--procedure-rule-element rule)))
          (spoken-elements
           (seq-map #'phony--ast-match-string elements)))
     (string-join spoken-elements " ")))
@@ -99,9 +100,9 @@
 (cl-defgeneric phony--variable-context (variable elements)
   nil)
 
-(cl-defmethod phony--variable-context (variable (elements list))
+(cl-defmethod phony--variable-context (variable (element phony--element-sequence))
   (thread-last
-    elements
+    (phony--element-sequence-elements element)
     (seq-map (lambda (element) (phony--variable-context variable element)))
     (seq-find #'identity)))
 
@@ -111,7 +112,7 @@
 (cl-defmethod phony--variable-context (variable (element phony--element-optional))
   (let ((downstream-context (phony--variable-context
                              variable
-                             (phony--element-children element))))
+                             (phony--element-optional-element element))))
     (if (eq downstream-context 'none)
         'optional
       downstream-context)))
@@ -119,7 +120,7 @@
 (cl-defmethod phony--variable-context (variable (element phony--element-repeat))
   (if-let ((downstream-context (phony--variable-context
                                 variable
-                                (phony--element-children element))))
+                                (phony--element-repeat-element element))))
       'repeat))
 
 (defun phony--speech-insert-rule (rule)
@@ -159,7 +160,7 @@
     (let ((variable
            (phony--find-variable-element
             argument
-            (phony--procedure-rule-elements rule))))
+            (phony--procedure-rule-element rule))))
       (insert "    " (phony--to-python-identifier argument)
               " = ")
       (if (not variable)
@@ -167,7 +168,7 @@
         (let* ((variable-context
                 (phony--variable-context
                  variable
-                 (phony--procedure-rule-elements rule)))
+                 (phony--procedure-rule-element rule)))
                (match-form (phony--element-argument-form variable))
                (attribute-name (phony-talon--element-name match-form)))
           (when (eq variable-context 'repeat)
@@ -182,7 +183,10 @@
                (insert (format "getattr(m,'%s','nil')" attribute-name)))
               ('repeat
                (insert (format "'(list ' + ' '.join(getattr(m,'%s',[])) + ')'" attribute-name)))
-              (_ (error "Internal error: Unrecognized context %s" variable-context))))))
+              (_ (error "Internal error: Unrecognized context %S (argument %S in rule %S)"
+                        variable-context
+                        variable
+                        (phony--rule-name rule)))))))
       (insert "\n")))
   (insert
    (format "    return f\"(%s %s)\"\n"

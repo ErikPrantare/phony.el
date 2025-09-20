@@ -47,17 +47,17 @@
 (cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-one-or-more))
   `((type . "one-or-more")
     (element . ,(phony-dragonfly--serialize-pattern
-                 (phony--element-compound-forms literal)))))
+                 (phony--element-one-or-more-element literal))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-zero-or-more))
-  `((type . "zero-or-more")
-    (element . ,(phony-dragonfly--serialize-pattern
-                 (phony--element-compound-forms literal)))))
+  (cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-zero-or-more))
+    `((type . "zero-or-more")
+      (element . ,(phony-dragonfly--serialize-pattern
+                   (phony--element-zero-or-more-element literal))))))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-optional))
   `((type . "optional")
     (element . ,(phony-dragonfly--serialize-pattern
-                 (phony--element-compound-forms literal)))))
+                 (phony--element-optional-element literal)))))
 
 (cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-external-rule))
   `((type . "impossible")))
@@ -74,7 +74,7 @@
     (name . ,(phony--external-name rule))
     (function . ,(symbol-name (phony--procedure-rule-function rule)))
     (pattern . ,(phony-dragonfly--serialize-pattern
-                 (phony--procedure-rule-elements rule)))
+                 (phony--procedure-rule-element rule)))
     (argument-list . ,(seq-into
                        (seq-map #'symbol-name
                                 (phony--procedure-rule-arglist rule))
