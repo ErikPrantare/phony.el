@@ -245,8 +245,8 @@ strings."
   (defalias name
     (lambda (&optional utterance new-value)
       (:documentation (concat "Return the alist of dictionary `"
-                                 (symbol-name name)
-                                 "'.\nIf UTTERANCE is given, return instead the corresponding value of the
+                              (symbol-name name)
+                              "'.\nIf UTTERANCE is given, return instead the corresponding value of the
 alist.  If NEW-VALUE is provided as well, associate instead UTTERANCE
 to NEW-VALUE in this dictionary."))
       (if utterance
@@ -403,6 +403,65 @@ Currently only relevant for the talon exporter."
         :type symbol
         :documentation "Symbol naming the phony rule that this element matches."))
 
+(defun phony--parse-speech-value-element (element-form)
+  "Parse ELEMENT-FORM into a valued element.
+
+Valued elements are those that get associated to a value when matched.
+Only these elements may be bound to arguments."
+  (cond
+   ((symbolp element-form) (make-phony--element-rule
+                            :name element-form))
+   ((eq (car element-form) 'external-rule) (make-phony--element-external-rule
+                                            :name (car (last (cdr element-form)))
+                                            :namespace (butlast (cdr element-form))))
+   ((symbolp (car element-form))
+    (error "Not an argument nor element type: `%S' in form `%S'"
+           (car element-form)
+           element-form))
+   (t (error "No parse for %S" element-form))))
+
+(defun phony--parse-speech-element (element-form arglist)
+  "Parse ELEMENT-FORM into an element.
+
+ARGLIST is the list of argument names for the function being defined.
+This is required for recognizing if a form should bind turn argument."
+  (cond
+   ((stringp element-form) (make-phony--element-literal
+                            :string element-form))
+   ((member (car-safe element-form) arglist) (make-phony--element-argument
+                                              :name (car element-form)
+                                              :form (phony--parse-speech-value-element
+                                                     (cadr element-form))))
+   ;; NOTE: The reader interprets ? as a character escape, so to use
+   ;; it in the specification of the pattern we actually need to
+   ;; match on the character after that, which we require to be
+   ;; space.
+   ((eq (car-safe element-form) ?\s) (make-phony--element-optional
+                                      :element
+                                      (make-phony--element-sequence
+                                       :elements (mapcar
+                                                  (lambda (subelement)
+                                                    (phony--parse-speech-element
+                                                     subelement arglist))
+                                                  (cdr element-form)))))
+   ((eq (car-safe element-form) '+) (make-phony--element-one-or-more
+                                     :element
+                                     (make-phony--element-sequence
+                                      :elements (mapcar
+                                                 (lambda (subelement)
+                                                   (phony--parse-speech-element
+                                                    subelement arglist))
+                                                 (cdr element-form)))))
+   ((eq (car-safe element-form) '*) (make-phony--element-zero-or-more
+                                     :element
+                                     (make-phony--element-sequence
+                                      :elements (mapcar
+                                                 (lambda (subelement)
+                                                   (phony--parse-speech-element
+                                                    subelement arglist))
+                                                 (cdr element-form)))))
+   (t (phony--parse-speech-value-element element-form))))
+
 (defun phony--element-children (element)
   "Return all direct sub-elements of ELEMENT."
   (cl-typecase element
@@ -414,112 +473,51 @@ Currently only relevant for the talon exporter."
      (list (phony--element-zero-or-more-element element)))
     (phony--element-one-or-more
      (list (phony--element-one-or-more-element element)))
-   (phony--element-argument
-    (list (phony--element-argument-form element)))
-   (t nil)))
+    (phony--element-argument
+     (list (phony--element-argument-form element)))
+    (t nil)))
 
-(defun phony--parse-speech-value-element (element)
-  (cond
-   ((symbolp element) (make-phony--element-rule
-                       :name element))
-   ((eq (car element) 'external-rule) (make-phony--element-external-rule
-                                       :name (car (last (cdr element)))
-                                       :namespace (butlast (cdr element))))
-   ((symbolp (car element))
-    (error "Not an argument nor element type: `%S' in form `%S'"
-           (car element)
-           element))
-   (t (error "No parse for %S" element))))
-
-(defun phony--parse-speech-element (element arglist)
-  (cond
-   ((stringp element) (make-phony--element-literal
-                       :string element))
-   ((member (car-safe element) arglist) (make-phony--element-argument
-                                    :name (car element)
-                                    :form (phony--parse-speech-value-element
-                                           (cadr element))))
-   ;; NOTE: The reader interprets ? as a character escape, so to use
-   ;; it in the specification of the pattern we actually need to
-   ;; match on the character after that, which we require to be
-   ;; space.
-   ((eq (car-safe element) ?\s) (make-phony--element-optional
-                                 :element
-                                 (make-phony--element-sequence
-                                  :elements (mapcar
-                                             (lambda (subelement)
-                                               (phony--parse-speech-element
-                                                subelement arglist))
-                                             (cdr element)))))
-   ((eq (car-safe element) '+) (make-phony--element-one-or-more
-                                :element
-                                (make-phony--element-sequence
-                                 :elements (mapcar
-                                            (lambda (subelement)
-                                              (phony--parse-speech-element
-                                               subelement arglist))
-                                            (cdr element)))))
-   ((eq (car-safe element) '*) (make-phony--element-zero-or-more
-                                :element
-                                (make-phony--element-sequence
-                                 :elements (mapcar
-                                            (lambda (subelement)
-                                              (phony--parse-speech-element
-                                               subelement arglist))
-                                            (cdr element)))))
-   (t (phony--parse-speech-value-element element))))
-
-(cl-defgeneric phony--collect (predicate element)
+(defun phony--collect (predicate element)
+  "Return list of descendants of ELEMENT matching PREDICATE.
+If ELEMENT matches PREDICATE, it will be part of the list."
   (let ((collected-children
-         (phony--collect
-          predicate
+         (seq-mapcat
+          (apply-partially #'phony--collect predicate)
           (phony--element-children element))))
     (if (funcall predicate element)
         (cons element collected-children)
       collected-children)))
 
-(cl-defmethod phony--collect (predicate (element-list list))
-  (apply #'append
-         (seq-map
-          (lambda (element) (phony--collect predicate element))
-          element-list)))
-
-(defun phony--find-variable-element (argument elements)
-  (seq-find (lambda (variable)
-              (eq
-               (phony--element-argument-name variable)
-               argument))
-            (phony--collect
-             #'phony--element-argument-p
-             elements)))
-
 (defun phony--dependencies (rule-or-name)
+  "Return list of names of the rules RULE-OR-NAME depends on."
   (phony--dependencies-implementation
    (phony--normalize-rule rule-or-name)))
 
 (cl-defgeneric phony--dependencies-implementation (rule)
-  "Return name of rules that RULE depends on.")
+  "Return list of rule names RULE depends on.")
 
 (cl-defmethod phony--dependencies-implementation ((rule phony--procedure-rule))
-  "Return list of rule RULE depends on.
+  "Return list of rule names RULE depends on.
 
 Rules in the list occur the same amount of times they are referenced in
 RULE."
-  (seq-map (lambda (element)
-             (phony--element-rule-name element))
+  (seq-map #'phony--element-rule-name
            (phony--collect
             #'phony--element-rule-p
             (phony--procedure-rule-element rule))))
 
 (cl-defmethod phony--dependencies-implementation ((rule phony--open-rule))
+  "Return names of the alternatives of RULE."
   (phony--open-rule-alternatives rule))
 
 (cl-defmethod phony--dependencies-implementation ((_rule phony--dictionary))
+  "Return nil."
   '())
 
-(cl-defstruct (phony--dependency-data
+(cl-defstruct (phony--analysis-data
                (:constructor nil)
-               (:constructor phony--make-dependency-data))
+               (:constructor phony--make-analysis-data))
+  "Storage struct for results of statically analyzing the grammar."
   ;; DEPENDENCIES and DEPENDENTS should contain multiple occurrences
   ;; of a dependency if the rule refers to the dependancy multiple
   ;; times.
@@ -529,7 +527,11 @@ RULE."
   (contains-errors nil)
   (linear-extension nil))
 
-(defun phony--populate-dependency-graph (dependency-data)
+(defun phony--populate-dependency-graph (analysis-data)
+  "Populate the dependency graph of ANALYSIS-DATA.
+
+If an undefined rule is referenced in some element, a warning will be
+emitted and `phony--analysis-data-contains-errors' will be set to nil."
   (let ((dependencies (make-hash-table))
         (dependents (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
@@ -542,17 +544,17 @@ RULE."
               (display-warning 'phony
                                (format "Rule %S (referenced in %S) is not defined"
                                        dependency (phony--rule-name rule)))
-              (setf (phony--dependency-data-contains-errors dependency-data) t))
+              (setf (phony--analysis-data-contains-errors analysis-data) t))
           (push (phony--get-rule dependency) (gethash rule dependencies))
           (push rule (gethash dependency dependents)))))
-    (setf (phony--dependency-data-forward dependency-data)
+    (setf (phony--analysis-data-forward analysis-data)
           dependencies)
-    (setf (phony--dependency-data-backward dependency-data)
+    (setf (phony--analysis-data-backward analysis-data)
           dependents)))
 
-(defun phony--dfs-analysis (rule visited finished dependency-data)
-  "Perform depth-first-search to collect data into dependency-data."
-  (let ((successors (phony--dependency-data-forward dependency-data)))
+(defun phony--dfs-analysis (rule visited finished analysis-data)
+  "Perform depth-first-search to collect data into analysis-data."
+  (let ((successors (phony--analysis-data-forward analysis-data)))
     (cl-block nil
       (when (gethash rule finished)
         (cl-return nil))
@@ -561,49 +563,49 @@ RULE."
 
       (puthash rule t visited)
       (seq-doseq (successor (gethash rule successors))
-        (when-let ((path (phony--dfs-analysis successor visited finished dependency-data)))
+        (when-let ((path (phony--dfs-analysis successor visited finished analysis-data)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
               (cl-return path)
             (cl-return (cons rule path)))))
 
       (puthash rule t finished)
-      (push rule (phony--dependency-data-linear-extension dependency-data))
+      (push rule (phony--analysis-data-linear-extension analysis-data))
       (cl-return nil))))
 
-(cl-defun phony--try-finding-dependency-cycle (dependency-data)
+(cl-defun phony--try-finding-dependency-cycle (analysis-data)
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
       (when-let ((cycle (phony--dfs-analysis
                          rule visited finished
-                         dependency-data)))
-        (setf (phony--dependency-data-cycle dependency-data)
+                         analysis-data)))
+        (setf (phony--analysis-data-cycle analysis-data)
               (seq-map #'phony--rule-name cycle))
         (cl-return-from phony--try-finding-dependency-cycle)))))
 
 (defvar phony--last-analysis nil)
 
 (defun phony--analyze-grammar ()
-  (let ((dependency-data (phony--make-dependency-data)))
-    (phony--populate-dependency-graph dependency-data)
-    (phony--try-finding-dependency-cycle dependency-data)
-    (setf (phony--dependency-data-linear-extension dependency-data)
+  (let ((analysis-data (phony--make-analysis-data)))
+    (phony--populate-dependency-graph analysis-data)
+    (phony--try-finding-dependency-cycle analysis-data)
+    (setf (phony--analysis-data-linear-extension analysis-data)
           (reverse
-           (phony--dependency-data-linear-extension dependency-data)))
-    (when-let (cycle (phony--dependency-data-cycle dependency-data))
+           (phony--analysis-data-linear-extension analysis-data)))
+    (when-let (cycle (phony--analysis-data-cycle analysis-data))
       (display-warning 'phony (concat "Cycle found: "
                                       (string-join
                                        (seq-map #'symbol-name cycle)
                                        " -> ")))
-      (setf (phony--dependency-data-contains-errors dependency-data) t))
-    (setq phony--last-analysis dependency-data)
-    dependency-data))
+      (setf (phony--analysis-data-contains-errors analysis-data) t))
+    (setq phony--last-analysis analysis-data)
+    analysis-data))
 
 (defun phony--dependents (rule-or-name)
   (gethash
    (phony--normalize-rule rule-or-name)
-   (phony--dependency-data-backward phony--last-analysis)))
+   (phony--analysis-data-backward phony--last-analysis)))
 
 (defcustom phony-export-function #'phony-dragonfly-export
   "Function to be used for exporting spoken rules."
@@ -618,10 +620,10 @@ RULE."
 
 (defun phony--export-all ()
   "Export all rules to the speech recognition engine."
-  (let ((dependency-data (phony--analyze-grammar)))
-    (if (phony--dependency-data-contains-errors dependency-data)
+  (let ((analysis-data (phony--analyze-grammar)))
+    (if (phony--analysis-data-contains-errors analysis-data)
         (display-warning 'phony "Grammar contains errors, not exporting")
-      (funcall phony-export-function dependency-data))))
+      (funcall phony-export-function analysis-data))))
 
 (defun phony-request-export ()
   "Export all rules when next idle."

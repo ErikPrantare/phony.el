@@ -96,20 +96,20 @@
   `(,(make-symbol (phony--external-name rule))
     . ,(phony-dragonfly--serialize-rule-concrete rule)))
 
-(defun phony-dragonfly--serialize-rules (dependency-data)
+(defun phony-dragonfly--serialize-rules (analysis-data)
   `((dependency-linear-extension
      . ,(apply #'vector
                 (seq-map
                  (lambda (rule) (phony--external-name rule))
-                 (phony--dependency-data-linear-extension dependency-data))))
+                 (phony--analysis-data-linear-extension analysis-data))))
     (rules
      . ,(seq-map #'phony-dragonfly--serialize-rule
                  (phony--get-rules)))))
 
-(defun phony-dragonfly-export (dependency-data)
+(defun phony-dragonfly-export (analysis-data)
   (interactive (list (phony--analyze-grammar)))
   (with-temp-file (file-name-concat phony-output-directory "rules.json")
-    (json-insert (phony-dragonfly--serialize-rules dependency-data))
+    (json-insert (phony-dragonfly--serialize-rules analysis-data))
     (json-pretty-print-buffer)))
 
 (defun phony-dragonfly--backend-directory (&optional name)

@@ -158,9 +158,12 @@
           "def " (phony--rule-external-name rule) "(m) -> str:\n")
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
     (let ((variable
-           (phony--find-variable-element
-            argument
-            (phony--procedure-rule-element rule))))
+           (car-safe (phony--collect
+                      (lambda (element)
+                        (and (phony--element-argument-p element)
+                             (eq (phony--element-argument-name element)
+                                 argument)))
+                      (phony--procedure-rule-element rule)))))
       (insert "    " (phony--to-python-identifier argument)
               " = ")
       (if (not variable)
@@ -210,7 +213,7 @@
              (phony--procedure-rule-export rule))
         (phony--speech-insert-rule rule)))))
 
-(defun phony-talon-export (dependency-data)
+(defun phony-talon-export (analysis-data)
   (let* (;; Handle dictionaries here as well?
          (rules (seq-remove #'phony--dictionary-p (phony--get-rules)))
          (modes (seq-uniq
