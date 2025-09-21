@@ -67,32 +67,32 @@ def join_argument_maps_repition(maps):
                                     for m in maps]) + ')'
             for k in keys}
 
-def create_element(pattern):
-    match pattern["type"]:
+def create_element(element_spec):
+    match element_spec["type"]:
         case "sequence":
-            return df.Modifier(df.Sequence(list(map(create_element, pattern["elements"]))),
+            return df.Modifier(df.Sequence(list(map(create_element, element_spec["elements"]))),
                                modifier=join_argument_maps)
         case "literal":
-            return df.Literal(pattern["utterance"], value={})
+            return df.Literal(element_spec["utterance"], value={})
         case "dictionary":
-            return df.DictListRef(None,lists[pattern["name"]])
+            return df.DictListRef(None,lists[element_spec["name"]])
         case "argument":
-            return df.Modifier(create_element(pattern["rule"]),
-                               modifier=lambda x: {pattern["name"]: x})
+            return df.Modifier(create_element(element_spec["rule"]),
+                               modifier=lambda x: {element_spec["name"]: x})
         case "rule":
-            return df.RuleRef(rules[pattern["name"]])
+            return df.RuleRef(rules[element_spec["name"]])
         case "optional":
             return df.Modifier(
-                df.Optional(create_element(pattern["element"])),
+                df.Optional(create_element(element_spec["element"])),
                 modifier=lambda v: {} if v == None else v)
         case "one-or-more":
             return df.Modifier(
-                df.Repetition(create_element(pattern["element"]),
+                df.Repetition(create_element(element_spec["element"]),
                               min=1,max=3,optimize=True),
                 modifier=lambda vs: join_argument_maps_repition(vs))
         case "zero-or-more":
             return df.Modifier(
-                df.Repetition(create_element(pattern["element"]),
+                df.Repetition(create_element(element_spec["element"]),
                               min=0,max=3,optimize=True),
                 modifier=lambda vs: join_argument_maps_repition(vs))
         case "impossible":
@@ -101,8 +101,8 @@ def create_element(pattern):
             raise PhonyException()
 
 def create_rule_procedure(spec):
-    pattern = spec["pattern"]
-    element = create_element(pattern)
+    element_spec = spec["element"]
+    element = create_element(elements_spec)
     rules[spec["name"]] = PhonyRule(
         name = spec["name"],
         element = df.Modifier(
