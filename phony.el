@@ -521,11 +521,28 @@ RULE."
   ;; DEPENDENCIES and DEPENDENTS should contain multiple occurrences
   ;; of a dependency if the rule refers to the dependancy multiple
   ;; times.
-  (forward (make-hash-table))
-  (backward (make-hash-table))
-  (cycle nil)
-  (contains-errors nil)
-  (linear-extension nil))
+  (forward
+   (make-hash-table)
+   :type hash-table
+   :documentation "Hash table mapping a rule to a list of its dependencies.")
+  (backward
+   (make-hash-table)
+   :type hash-table
+   :documentation "Hash table mapping a rule to a list of its dependents.")
+  (cycle
+   nil
+   :type (repeat symbol)
+   :documentation "If non-nil, a sequence of rule names forming a dependency cycle.")
+  (contains-errors
+   nil
+   :type boolean
+   :documentation "Whether the analysis detected errors in the grammar.")
+  (linear-extension
+   nil
+   :type (repeat symbol)
+   :documentation "Linear extension of the dependency graph.
+Also commonly known as topological order.  Rules occurring in this list
+are guaranteed to only depend on preceding rules."))
 
 (defun phony--populate-dependency-graph (analysis-data)
   "Populate the dependency graph of ANALYSIS-DATA.
@@ -552,8 +569,22 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
     (setf (phony--analysis-data-backward analysis-data)
           dependents)))
 
-(defun phony--dfs-analysis (rule visited finished analysis-data)
-  "Perform depth-first-search to collect data into analysis-data."
+(defun phony--try-linear-extension-impl (rule visited finished analysis-data)
+  "Find linear extension of dependency graph in ANALYSIS-DATA.
+
+This function assumes that `phony--analysis-data-forward' has been
+populated in ANALYSIS-DATA.
+
+This function populates `phony--analysis-data-linear-extension' in
+ANALYSIS-DATA.  If a cycle is detected
+`phony--analysis-data-contains-errors' is set to t and the cycle is
+returned without visiting any more rules.  Otherwise, this function
+returns nil.
+
+RULE is the currently visited rule.  VISITED is a hash table of the
+already visited rules.  FINISHED is a hash table of rules that have been
+fully processed.  This function adds RULE to VISITED before recusing to
+its children, and to FINISHED afterwards."
   (let ((successors (phony--analysis-data-forward analysis-data)))
     (cl-block nil
       (when (gethash rule finished)
@@ -563,7 +594,8 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
 
       (puthash rule t visited)
       (seq-doseq (successor (gethash rule successors))
-        (when-let ((path (phony--dfs-analysis successor visited finished analysis-data)))
+        (when-let ((path (phony--try-linear-extension-impl
+                          successor visited finished analysis-data)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
               (cl-return path)
@@ -573,23 +605,38 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
       (push rule (phony--analysis-data-linear-extension analysis-data))
       (cl-return nil))))
 
-(cl-defun phony--try-finding-dependency-cycle (analysis-data)
+(cl-defun phony--try-linear-extension (analysis-data)
+  "Try to construct the linear extension of dependency graph.
+
+This function assumes that `phony--analysis-data-forward' has been
+populated in ANALYSIS-DATA.
+
+If it is not possible to create a linear extension because of a cycle,
+`phony--analysis-data-cycle' of ANALYSIS-DATA is set to that cycle and
+`phony--analysis-data-contains-errors' is set to t.  Otherwise,
+`phony--analysis-data-linear-extension' is populated with a valid linear
+extension."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
-      (when-let ((cycle (phony--dfs-analysis
+      (when-let ((cycle (phony--try-linear-extension-impl
                          rule visited finished
                          analysis-data)))
         (setf (phony--analysis-data-cycle analysis-data)
               (seq-map #'phony--rule-name cycle))
-        (cl-return-from phony--try-finding-dependency-cycle)))))
+        (cl-return-from phony--try-linear-extension)))))
 
-(defvar phony--last-analysis nil)
+(defvar phony--last-analysis nil
+  "Results of the last performed analysis.")
 
 (defun phony--analyze-grammar ()
+  "Analyze the grammar.
+
+This returns a `phony--analysis-data' structure populated with the
+results of the analysis."
   (let ((analysis-data (phony--make-analysis-data)))
     (phony--populate-dependency-graph analysis-data)
-    (phony--try-finding-dependency-cycle analysis-data)
+    (phony--try-linear-extension analysis-data)
     (setf (phony--analysis-data-linear-extension analysis-data)
           (reverse
            (phony--analysis-data-linear-extension analysis-data)))
@@ -603,6 +650,10 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
     analysis-data))
 
 (defun phony--dependents (rule-or-name)
+  "Return dependents of RULE-OR-NAME.
+
+This function depends on `phony--last-analysis'.  If an analysis has not
+been performed, the returned value may be out of date."
   (gethash
    (phony--normalize-rule rule-or-name)
    (phony--analysis-data-backward phony--last-analysis)))
@@ -619,7 +670,9 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
   :group 'phony)
 
 (defun phony--export-all ()
-  "Export all rules to the speech recognition engine."
+  "Export all rules to the speech recognition engine.
+
+If any errors are detected in the grammar, the rules are not exported."
   (let ((analysis-data (phony--analyze-grammar)))
     (if (phony--analysis-data-contains-errors analysis-data)
         (display-warning 'phony "Grammar contains errors, not exporting")
@@ -633,7 +686,7 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
 
 (cl-defun phony--export-rule (function
                               arglist
-                              speech-pattern
+                              element-forms
                               &key
                               (mode 'global)
                               (contributes-to nil)
@@ -641,6 +694,13 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
                               (export t)
                               (anchor-beginning nil)
                               (anchor-end nil))
+  "Declare FUNCTION to be a rule invokeable by voice.
+
+ARGLIST is the argument list of the function.  ELEMENT-FORMS is a list of
+element forms specifying how to match this rule.
+
+For the named arguments and the specification of element forms, see the
+documentation for `phony-rule'."
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
   (setq external-name (or external-name (phony--to-python-identifier function)))
@@ -648,7 +708,7 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
   (let* ((elements
           (seq-map (lambda (element)
                      (phony--parse-speech-element element (byte-compile-arglist-vars arglist)))
-                   speech-pattern)))
+                   element-forms)))
     (phony--add-rule
      (make-phony--procedure-rule
       :name function
@@ -667,12 +727,11 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
 
     (phony-request-export)))
 
-(defun phony--export-rule-declare (function arglist &rest speech-pattern)
-  `(phony--export-rule #',function
-                       ',arglist
-                       ',speech-pattern))
-
 (cl-defun phony--speech-declaration (function arglist &rest declaration-args)
+  "Declare FUNCTION to be a rule in vocables by voice.
+
+This function should not be called directly, but through a `phony-rule'
+form."
   (let* ((split-args (phony--split-keywords-rest declaration-args))
          (keyword-arguments (car split-args))
          (pattern (cdr split-args)))
