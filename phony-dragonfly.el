@@ -25,46 +25,46 @@
 
 ;;; Code:
 
-(cl-defgeneric phony-dragonfly--serialize-pattern (pattern)
+(cl-defgeneric phony-dragonfly--serialize-element (element)
   `((type . "undefined")))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-literal))
+(cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-literal))
   `((type . "literal")
     (utterance . ,(phony--element-literal-string literal))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((variable phony--element-argument))
+(cl-defmethod phony-dragonfly--serialize-element ((variable phony--element-argument))
   `((type . "argument")
     (name . ,(symbol-name
               (phony--element-argument-name variable)))
-    (rule . ,(phony-dragonfly--serialize-pattern
+    (rule . ,(phony-dragonfly--serialize-element
               (phony--element-argument-form variable)))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--element-rule))
+(cl-defmethod phony-dragonfly--serialize-element ((dictionary phony--element-rule))
   `((type . "rule")
     (name . ,(phony--external-name
               (phony--element-rule-name dictionary)))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-one-or-more))
+(cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-one-or-more))
   `((type . "one-or-more")
-    (element . ,(phony-dragonfly--serialize-pattern
+    (element . ,(phony-dragonfly--serialize-element
                  (phony--element-one-or-more-element literal))))
 
-  (cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-zero-or-more))
+  (cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-zero-or-more))
     `((type . "zero-or-more")
-      (element . ,(phony-dragonfly--serialize-pattern
+      (element . ,(phony-dragonfly--serialize-element
                    (phony--element-zero-or-more-element literal))))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-optional))
+(cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-optional))
   `((type . "optional")
-    (element . ,(phony-dragonfly--serialize-pattern
+    (element . ,(phony-dragonfly--serialize-element
                  (phony--element-optional-element literal)))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--element-external-rule))
+(cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-external-rule))
   `((type . "impossible")))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((pattern list))
+(cl-defmethod phony-dragonfly--serialize-element ((sequence phony--element-sequence))
   `((type . "sequence")
-    (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-pattern pattern)
+    (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-element sequence)
                            'vector))))
 
 (cl-defgeneric phony-dragonfly--serialize-rule-concrete (rule))
@@ -73,7 +73,7 @@
   `((type . "procedure-definition")
     (name . ,(phony--external-name rule))
     (function . ,(symbol-name (phony--procedure-rule-function rule)))
-    (pattern . ,(phony-dragonfly--serialize-pattern
+    (element . ,(phony-dragonfly--serialize-element
                  (phony--procedure-rule-element rule)))
     (argument-list . ,(seq-into
                        (seq-map #'symbol-name
@@ -133,31 +133,34 @@
         (url-copy-file "https://github.com/daanzu/kaldi-active-grammar/releases/download/v3.1.0/kaldi_model_daanzu_20211030-biglm.zip"
                        "model/kaldi-active-grammar.zip")
         (dired-compress-file "model/kaldi-active-grammar.zip"))
+      (require 'python)
+      (message "Creating python virtual environment...")
       (call-process python-interpreter nil nil t "-m" "venv" "python-venv")
       (call-process (expand-file-name "python-venv/bin/python") nil nil t
                     "-m" "pip"
-                    "install" "dragonfly2" "dragonfly2[kaldi]" "kaldi-active-grammar[g2p_en]" "g2p_en"))))
+                    "install" "dragonfly2" "dragonfly2[kaldi]" "kaldi-active-grammar[g2p_en]" "g2p_en")
+      (message "Creating python virtual environment...done"))))
 
 (defun phony-dragonfly-start-backend ()
   (interactive)
   (let ((default-directory (phony-dragonfly--backend-directory)))
     (mkdir "dragonfly" t)
     (if (executable-find "guix")
-        (start-process "Dragonfly" "*Dragonfly*" "env"
+        (start-process "Dragonfly" "*Dragonfly*"
                        "guix" "shell" "portaudio" "gcc-toolchain"
                        "--" (file-name-concat
                              (file-name-directory (locate-library "phony"))
-                             "dragonfly/run-dragonfly-guix")
+                             "dragonfly/run-phony-dragonfly-guix")
                        "python-venv/bin/activate"
                        "--datadir" phony-output-directory
                        "--model" "model/kaldi-active-grammar/kaldi_model")
       (start-process "Dragonfly" "*Dragonfly*"
-                     "python-venv/bin/python"
                      (file-name-concat
                       (file-name-directory (locate-library "phony"))
-                      "dragonfly/run-dragonfly")
-                     "--datadir" phony-output-directory
-                     "--model" "model/kaldi-active-grammar/kaldi_model"))
+                      "dragonfly/run-phony-dragonfly")
+                       "python-venv/bin/activate"
+                       "--datadir" phony-output-directory
+                       "--model" "model/kaldi-active-grammar/kaldi_model"))
     (display-buffer "*Dragonfly*")))
 
 (provide 'phony-dragonfly)

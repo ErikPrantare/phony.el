@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+this_script=$0
+source $1
+shift
+LD_LIBRARY_PATH=$GUIX_ENVIRONMENT/lib $(dirname $this_script)/phony-dragonfly $@

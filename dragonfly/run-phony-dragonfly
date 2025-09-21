@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+this_script=$0
+source $1
+shift
+$(dirname $this_script)/phony-dragonfly $@
