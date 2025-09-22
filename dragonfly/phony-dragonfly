@@ -102,7 +102,7 @@ def create_element(element_spec):
 
 def create_rule_procedure(spec):
     element_spec = spec["element"]
-    element = create_element(elements_spec)
+    element = create_element(element_spec)
     rules[spec["name"]] = PhonyRule(
         name = spec["name"],
         element = df.Modifier(
