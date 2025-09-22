@@ -125,21 +125,41 @@
             (y-or-n-p "Install dragonfly+kaldi backend? (This might take a while) "))
     (mkdir (phony-dragonfly--backend-directory) t)
     (let ((default-directory (phony-dragonfly--backend-directory)))
-      (mkdir "model" t)
-      (when (or (not (file-exists-p "model/kaldi-active-grammar"))
-                (y-or-n-p "Model already downloaded.  Redownload? "))
-        (delete-file "model/kaldi-active-grammar.zip")
-        (delete-directory "model/kaldi-active-grammar" t)
-        (url-copy-file "https://github.com/daanzu/kaldi-active-grammar/releases/download/v3.1.0/kaldi_model_daanzu_20211030-biglm.zip"
-                       "model/kaldi-active-grammar.zip")
-        (dired-compress-file "model/kaldi-active-grammar.zip"))
       (require 'python)
       (message "Creating python virtual environment...")
       (call-process python-interpreter nil nil t "-m" "venv" "python-venv")
       (call-process (expand-file-name "python-venv/bin/python") nil nil t
                     "-m" "pip"
                     "install" "dragonfly2" "dragonfly2[kaldi]" "kaldi-active-grammar[g2p_en]" "g2p_en")
-      (message "Creating python virtual environment...done"))))
+      (message "Creating python virtual environment...done")
+
+      (mkdir "model" t)
+      (when (or (not (file-exists-p "model/kaldi-active-grammar"))
+                (y-or-n-p "Model already downloaded.  Redownload? "))
+        (delete-file "model/kaldi-active-grammar.zip")
+        (delete-directory "model/kaldi-active-grammar" t)
+        (message "Downloading model..." )
+        (switch-to-buffer "*Phony Dragonfly model download*")
+        (make-process
+         :name "curl-kaldi-model"
+         :buffer "*Phony Dragonfly model download*"
+         :command (list "curl"
+                        "-L" "-o" "model/kaldi-active-grammar.zip"
+                        "https://github.com/daanzu/kaldi-active-grammar/releases/download/v3.1.0/kaldi_model_daanzu_20211030-biglm.zip")
+         :filter (lambda (process output)
+                   (with-current-buffer (process-buffer process)
+                     (save-excursion
+                       (goto-char (process-mark process))
+                       (insert (string-replace "" "\n" output))
+                       (move-marker (process-mark process) (point)))))
+         :sentinel (lambda (process sentinel)
+                     (when (equal sentinel "finished\n")
+                       (message "Downloading model...done")
+                       (message "Decompressing model...")
+                       (with-current-buffer (process-buffer process)
+                         (dired-compress-file "model/kaldi-active-grammar.zip"))
+                       (message "Decompressing model...done")
+                       (kill-buffer "*Phony Dragonfly model download*"))))))))
 
 (defun phony-dragonfly-start-backend ()
   (interactive)
