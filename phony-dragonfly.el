@@ -47,12 +47,12 @@
 (cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-one-or-more))
   `((type . "one-or-more")
     (element . ,(phony-dragonfly--serialize-element
-                 (phony--element-one-or-more-element literal))))
+                 (phony--element-one-or-more-element literal)))))
 
-  (cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-zero-or-more))
-    `((type . "zero-or-more")
-      (element . ,(phony-dragonfly--serialize-element
-                   (phony--element-zero-or-more-element literal))))))
+(cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-zero-or-more))
+  `((type . "zero-or-more")
+    (element . ,(phony-dragonfly--serialize-element
+                 (phony--element-zero-or-more-element literal)))))
 
 (cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-optional))
   `((type . "optional")
@@ -64,9 +64,11 @@
 
 (cl-defmethod phony-dragonfly--serialize-element ((sequence phony--element-sequence))
   `((type . "sequence")
-    (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-element
-                                    (phony--element-sequence-elements sequence))
-                           'vector))))
+    (elements . ,(seq-into
+                  (seq-map
+                   #'phony-dragonfly--serialize-element
+                   (phony--element-sequence-elements sequence))
+                  'vector))))
 
 (cl-defgeneric phony-dragonfly--serialize-rule-concrete (rule))
 
