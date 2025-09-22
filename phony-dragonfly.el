@@ -64,7 +64,8 @@
 
 (cl-defmethod phony-dragonfly--serialize-element ((sequence phony--element-sequence))
   `((type . "sequence")
-    (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-element sequence)
+    (elements . ,(seq-into (seq-map #'phony-dragonfly--serialize-element
+                                    (phony--element-sequence-elements sequence))
                            'vector))))
 
 (cl-defgeneric phony-dragonfly--serialize-rule-concrete (rule))
