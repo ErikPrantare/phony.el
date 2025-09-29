@@ -111,16 +111,12 @@
 
 (defun phony-dragonfly-export (analysis-data)
   (interactive (list (phony--analyze-grammar)))
-  (with-temp-file (file-name-concat phony-output-directory "rules.json")
+  (with-temp-file (phony-dragonfly--backend-directory "rules.json")
     (json-insert (phony-dragonfly--serialize-rules analysis-data))
     (json-pretty-print-buffer)))
 
 (defun phony-dragonfly--backend-directory (&optional name)
-  (expand-file-name
-   (locate-user-emacs-file
-    (if name
-        (file-name-concat "phony" name)
-      "phony"))))
+  (file-name-concat (phony--output-directory "kaldi") name))
 
 (defun phony-dragonfly-install-backend ()
   (interactive)
@@ -175,14 +171,14 @@
                              (file-name-directory (locate-library "phony"))
                              "dragonfly/run-phony-dragonfly-guix")
                        "python-venv/bin/activate"
-                       "--datadir" phony-output-directory
+                       "--datadir" (phony-dragonfly--backend-directory)
                        "--model" "model/kaldi-active-grammar/kaldi_model")
       (start-process "Dragonfly" "*Dragonfly*"
                      (file-name-concat
                       (file-name-directory (locate-library "phony"))
                       "dragonfly/run-phony-dragonfly")
                        "python-venv/bin/activate"
-                       "--datadir" phony-output-directory
+                       "--datadir" (phony-dragonfly--backend-directory)
                        "--model" "model/kaldi-active-grammar/kaldi_model"))
     (display-buffer "*Dragonfly*")))
 

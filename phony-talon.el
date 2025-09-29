@@ -25,8 +25,6 @@
 
 ;;; Code:
 
-(defvar phony-talon-rule-directory nil)
-
 (cl-defgeneric phony-talon--element-name (element)
   (error "No talon name for element %S" element))
 
@@ -202,8 +200,8 @@
 
 (cl-defun phony-talon--export-mode (mode entries)
   (mkdir "~/.talon/user/emacs-gen" t)
-  (with-temp-file (file-name-concat phony-output-directory
-                                    (format "%s.talon" mode))
+  (with-temp-file (phony--output-directory "talon"
+                                           (format "%s.talon" mode))
     (unless (eq mode 'global)
       (insert (format "user.emacs_mode: /:%s:/\n" mode)))
     (insert "-\n")
@@ -214,6 +212,7 @@
         (phony--speech-insert-rule rule)))))
 
 (defun phony-talon-export (analysis-data)
+  (mkdir (phony--output-directory "talon") t)
   (let* (;; Handle dictionaries here as well?
          (rules (seq-remove #'phony--dictionary-p (phony--get-rules)))
          (modes (seq-uniq
@@ -230,8 +229,9 @@
                (seq-contains-p (phony--procedure-rule-modes rule) mode)))
         rules)))
 
-    (with-temp-file (file-name-concat phony-output-directory
-                                      "read_dictionaries.py")
+    (with-temp-file (phony--output-directory
+                     "talon"
+                     "read_dictionaries.py")
       (insert (format
                "from talon import Context, Module
 import talon, json, os.path
@@ -247,15 +247,14 @@ def load_lists(path, dummy_argument):
             context.lists['user.' + list_name] = message[list_name]
             print('Loaded list ' + list_name)
 
-path = os.path.expanduser('%s')
-load_lists(path, None)
+path = '%s'
+if os.path.isfile(path):
+    load_lists(path, None)
 talon.fs.watch(path, load_lists)
 "
-               (file-name-concat phony-output-directory
-                                 "dictionaries.json"))))
+               (phony--output-directory "dictionaries.json"))))
 
-    (with-temp-file (file-name-concat phony-output-directory
-                                      "rules.py")
+    (with-temp-file (phony--output-directory "talon" "rules.py")
       (insert "import talon\n\n"
               "module = talon.Module()\n"
               "context = talon.Context()\n\n"
@@ -278,7 +277,14 @@ talon.fs.watch(path, load_lists)
               "    return formatted\n\n")
       (seq-doseq (command rules)
         (insert "\n")
-        (phony--speech-insert-python command)))))
+        (phony--speech-insert-python command)))
+
+    (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
+      (if (or (not (file-exists-p link-path))
+              (file-symlink-p link-path))
+          (make-symbolic-link (phony--output-directory "talon")
+                              link-path t)
+        (warn "Path already exists and is not preexistent symlink: %S" link-path)))))
 
 (provide 'phony-talon)
 ;;; phony-talon.el ends here

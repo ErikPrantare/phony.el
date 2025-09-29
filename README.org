@@ -21,14 +21,8 @@ Add the following to your Emacs configuration:
   (use-package phony
     :vc (:url "https://github.com/ErikPrantare/phony.el"
               :branch "master"
-              :rev :newest)
-    :config
-    (setopt phony-output-directory "my/directory/of/choice"))
+              :rev :newest))
 #+end_src
-
-, where ~"my/directory/of/choice"~ is replaced with the path to the
-directory where you want phony to write the rules for the speech
-engine.
 
 ** Command evaluator
 Install the command evaluator from the EmacsListen repository.
