@@ -42,6 +42,9 @@
   :group 'phony)
 
 (defun phony--output-directory (&rest components)
+  "Get path to output directory.
+
+If provided, COMPONENTS are appended as components in the returned path."
   (apply
    #'file-name-concat
    (expand-file-name phony-output-directory)
@@ -284,6 +287,7 @@ arguments."
     (cons (apply #'append arguments) declaration-args)))
 
 (defmacro phony-define-dictionary (name &rest arguments)
+  ;; checkdoc-params: (arguments)
   "Define a dictionary with NAME and containing ALIST.
 
 ALIST is an alist mapping utterances to values.  An utterance is a
@@ -697,6 +701,7 @@ If any errors are detected in the grammar, the rules are not exported."
                               (export t)
                               (anchor-beginning nil)
                               (anchor-end nil))
+  ;; checkdoc-params: (mode contributes-to external-name export anchor-beginning anchor-end)
   "Declare FUNCTION to be a rule invokeable by voice.
 
 ARGLIST is the argument list of the function.  ELEMENT-FORMS is a list of
@@ -731,7 +736,8 @@ documentation for `phony-rule'."
     (phony-request-export)))
 
 (cl-defun phony--speech-declaration (function arglist &rest declaration-args)
-  "Declare FUNCTION to be a rule in vocables by voice.
+  ;; checkdoc-params: (arglist declaration-args)
+  "Declare FUNCTION to be a rule invokeable by voice.
 
 This function should not be called directly, but through a `phony-rule'
 form."
@@ -748,6 +754,7 @@ form."
       (list #'phony--speech-declaration))
 
 (defmacro phony-rule (args)
+  ;; checkdoc-params: (args)
   "Declare function to be a rule invokeable by voice.
 
 This form must occur inside a `declare' form to take effect.
