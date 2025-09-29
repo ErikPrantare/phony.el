@@ -14,8 +14,18 @@ commands like this:
 With such a function defined, uttering "hello emacs" will display
 "Hello!" in the message area.
 
+* Supported speech recognition backends
+Phony currently only supports Talon.  If you want to help with adding
+support for Dragonfly with kaldi-active-grammar to allow this to be
+used with [[https://www.gnu.org/philosophy/free-sw.html][Free Software]], you can get in contact by opening an issue or
+sending a message in the dragonfly matrix room or the emacs channel on
+the talon slack.
+
 * Setup
-Add the following to your Emacs configuration:
+First, install EmacsListen.  This is required for phony to be able to
+execute the commands.
+
+Next, add the following to your Emacs configuration:
 
 #+begin_src elisp
   (use-package phony
@@ -23,52 +33,6 @@ Add the following to your Emacs configuration:
               :branch "master"
               :rev :newest))
 #+end_src
-
-** Command evaluator
-Install the command evaluator from the EmacsListen repository.
-
-** Speech recognition backend
-Phony currently supports the following speech recognition backends:
-
-- Dragonfly
-- Talon
-
-Dragonfly is recommended over Talon, as Dragonfly is [[https://www.gnu.org/philosophy/free-sw.html][Free Software]]
-while Talon is proprietary.  However, phony works better for Talon on
-a purely technical level.
-
-*** Dragonfly
-First, install dragonfly with the Kaldi engine.  Instructions [[https://dragonfly.readthedocs.io/en/latest/installation.html][here]]
-(no need to try out the demos in the Kaldi installation instructions).
-
-Then, add the following to your Emacs configuration, substituting the
-values with paths of your choice:
-
-#+begin_src elisp
-  (setopt phony-dragonfly--rule-output-file "path/to/rule/output.json")
-  (setopt phony-dragonfly--model-path "path/to/model")
-  (setopt phony-dragonfly--config-output-file "path/to/config/output.json")
-  (setopt phony-export-function #'phony-dragonfly-export)
-#+end_src
-
-Finally, invoke the script provided in [[file:dragonfly/read_rules.py]] to
-start the engine:
-
-#+begin_src sh
-  python dragonfly/read_rules.py --config "path/to/config/output.json"
-#+end_src
-
-*** Talon
-Install talon and add the following to your Emacs configuration:
-
-#+begin_src elisp
-  (setopt phony-export-function #'phony-talon-export)
-#+end_src
-
-~phony-output-directory~ has to be set to a subdirectory of the talon
-user directory.  Phony will generate files in this subdirectory, so
-set it to a directory that does not contain any other user
-configuration.
 
 * Usage
 You can now define talon lists using the ~phony-define-dictionary~
