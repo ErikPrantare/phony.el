@@ -661,7 +661,7 @@ been performed, the returned value may be out of date."
    (phony--normalize-rule rule-or-name)
    (phony--analysis-data-backward phony--last-analysis)))
 
-(defcustom phony-export-function #'phony-dragonfly-export
+(defcustom phony-export-function #'phony-talon-export
   "Function to be used for exporting spoken rules."
   ;; Using radio instead of choice did not display :tag
   :type '(choice (function-item :tag "Dragonfly exporter"
