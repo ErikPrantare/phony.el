@@ -166,7 +166,7 @@ recognition engine."
   (declare (indent defun))
   `(prog1
        (setf (alist-get ,utterance ,dictionary nil t #'equal) ,value)
-     (phony--request-sync-dictionaries)))
+     (phony--request-export-dictionaries)))
 
 (gv-define-expander phony-dictionary-get
   ;; We need to use `gv-define-expander', because the simpler versions
@@ -204,7 +204,7 @@ to its dictionary."
                 (phony--dictionary-alist dictionary))))
 
 ;; TODO: Handle IO errors
-(defun phony--send-dictionaries ()
+(defun phony--export-dictionaries ()
   "Write dictionaries to dictionaries.json.
 
 The speech recognition backend can read this file to register the
@@ -214,11 +214,11 @@ dictionaries."
      (mapcar #'phony--prepare-dictionary-for-serialization
              (seq-filter #'phony--dictionary-p (phony--get-rules))))))
 
-(defun phony--request-sync-dictionaries ()
+(defun phony--request-export-dictionaries ()
   "Sync DICTIONARY-NAMES when next idle."
   (interactive)
-  (cancel-function-timers #'phony--send-dictionaries)
-  (run-with-idle-timer 0.0 nil #'phony--send-dictionaries))
+  (cancel-function-timers #'phony--export-dictionaries)
+  (run-with-idle-timer 0.0 nil #'phony--export-dictionaries))
 
 (cl-defun phony--define-dictionary (name
                                     mapping
@@ -269,7 +269,7 @@ to NEW-VALUE in this dictionary."))
     name
     :external-name external-name
     :format-raw-p format-raw))
-  (phony--request-sync-dictionaries)
+  (phony--request-export-dictionaries)
 
   ;; Needs to return the actual mapping, see `phony-define-dictionary'
   mapping)
@@ -683,6 +683,7 @@ If any errors are detected in the grammar, the rules are not exported."
   (let ((analysis-data (phony--analyze-grammar)))
     (if (phony--analysis-data-contains-errors analysis-data)
         (display-warning 'phony "Grammar contains errors, not exporting")
+      (phony--export-dictionaries)
       (funcall phony-export-function analysis-data))))
 
 (defun phony-request-export ()
