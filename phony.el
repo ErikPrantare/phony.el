@@ -331,10 +331,12 @@ be one of the following:
   "Define NAME as an open rule.
 
 Open rules match any of the rules specified in ALTERNATIVES.  Other
-rules can contribute to the list of alternatives through the
-CONTRIBUTES-TO argument CONTRIBUTES-TO is an open rule or list of open
-rules that this rule contributes to.  See also `phony-rule', which
-admits this argument as well.
+rules can contribute to the list of alternatives through their
+CONTRIBUTES-TO argument.
+
+CONTRIBUTES-TO is an open rule or list of open rules that this rule
+contributes to.  See also `phony-rule', which admits this argument as
+well.
 
 If a function TRANSFORMATION is given, the value of the matched
 alternative is first passed through TRANSFORMATION to create the value
