@@ -38,7 +38,7 @@
 (cl-defgeneric phony--ast-match-string (element))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-literal))
-  (phony--element-literal-string element))
+  (string-replace "'" "\\'" (phony--element-literal-string element)))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-rule))
   (let ((rule (phony--get-rule (phony--element-rule-name element))))
