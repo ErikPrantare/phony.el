@@ -334,7 +334,7 @@ Open rules match any of the rules specified in ALTERNATIVES.  Other
 rules can contribute to the list of alternatives through their
 CONTRIBUTES-TO argument.
 
-CONTRIBUTES-TO is an open rule or list of open rules that this rule
+CONTRIBUTES-TO is an open rule or a list of open rules that this rule
 contributes to.  See also `phony-rule', which admits this argument as
 well.
 
@@ -361,7 +361,7 @@ this rule in the external speech engine."
        :transformation ,transformation
        :alternatives ,alternatives))
 
-     (seq-doseq (to (ensure-list ',contributes-to))
+     (seq-doseq (to (ensure-list ,contributes-to))
        (phony--add-alternative ',name to))
 
      ',name))
