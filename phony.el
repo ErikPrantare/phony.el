@@ -488,7 +488,9 @@ This is required for recognizing if a form should bind turn argument."
 
 (defun phony--collect (predicate element)
   "Return list of descendants of ELEMENT matching PREDICATE.
-If ELEMENT matches PREDICATE, it will be part of the list."
+
+If ELEMENT matches PREDICATE, it will be part of the list.  Matches are
+returned in the same order that they occur in ELEMENT."
   (let ((collected-children
          (seq-mapcat
           (apply-partially #'phony--collect predicate)
@@ -527,17 +529,16 @@ RULE."
                (:constructor nil)
                (:constructor phony--make-analysis-data))
   "Storage struct for results of statically analyzing the grammar."
-  ;; DEPENDENCIES and DEPENDENTS should contain multiple occurrences
-  ;; of a dependency if the rule refers to the dependancy multiple
-  ;; times.
   (forward
    (make-hash-table)
    :type hash-table
-   :documentation "Hash table mapping a rule to a list of its dependencies.")
+   :documentation "Hash table mapping a rule to a list of its dependencies.
+If a dependency is referred to multiple times, it is duplicated.")
   (backward
    (make-hash-table)
    :type hash-table
-   :documentation "Hash table mapping a rule to a list of its dependents.")
+   :documentation "Hash table mapping a rule to a list of its dependents.
+If a dependent refers to a rule multiple times, it is duplicated.")
   (cycle
    nil
    :type (repeat symbol)
@@ -553,6 +554,37 @@ RULE."
 Also commonly known as topological order.  Rules occurring in this list
 are guaranteed to only depend on preceding rules."))
 
+(defun phony--backward-references (analysis-data rule-or-name)
+  ;; checkdoc-params: (analysis-data)
+  "Get list of rules referring to RULE-OR-NAME.
+
+If a rule refers to RULE-OR-NAME. multiple times, it will also occur as
+many times in the returned list."
+  (gethash (phony--normalize-rule rule-or-name)
+           (phony--analysis-data-backward analysis-data)))
+
+(defun phony--forward-references (analysis-data rule-or-name)
+  ;; checkdoc-params: (analysis-data)
+  "Get list of rules referred to by RULE-OR-NAME.
+
+If a rule is referred to by RULE-OR-NAME. multiple times, it will also
+occur as many times in the returned list."
+  (gethash (phony--normalize-rule rule-or-name)
+           (phony--analysis-data-forward analysis-data)))
+
+(defun phony--maximum-backward-multiplicity (analysis-data rule)
+  ;; checkdoc-params: (analysis-data)
+  "Return maximum amount of times RULE is referred to by a single rule."
+  (thread-last
+    (phony--backward-references analysis-data rule)
+    (seq-map #'phony--rule-name)
+    (seq-map #'symbol-name)
+    (seq-sort #'string<)
+    (seq-group-by #'identity)
+    (seq-map #'cdr)
+    (seq-map #'length)
+    (apply #'max 0)))
+
 (defun phony--populate-dependency-graph (analysis-data)
   "Populate the dependency graph of ANALYSIS-DATA.
 
@@ -565,7 +597,8 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
       (puthash rule '() dependents))
     (seq-doseq (rule (phony--get-rules))
       (seq-doseq (dependency (phony--dependencies rule))
-        (if (not (phony--get-rule dependency))
+        (setq dependency (phony--get-rule dependency))
+        (if (not dependency)
             (progn
               (display-warning 'phony
                                (format "Rule %S (referenced in %S) is not defined"

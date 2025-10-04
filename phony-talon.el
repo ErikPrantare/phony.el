@@ -35,36 +35,51 @@
 (cl-defmethod phony-talon--element-name ((element phony--element-external-rule))
   (phony--element-external-rule-name element))
 
-(cl-defgeneric phony--ast-match-string (element))
+(cl-defgeneric phony--ast-match-string (element) rule)
 
-(cl-defmethod phony--ast-match-string ((element phony--element-literal))
+(cl-defmethod phony--ast-match-string ((element phony--element-literal) rule)
   (string-replace "'" "\\'" (phony--element-literal-string element)))
 
-(cl-defmethod phony--ast-match-string ((element phony--element-rule))
-  (let ((rule (phony--get-rule (phony--element-rule-name element))))
-    (format (if (phony--dictionary-p rule) "{user.%s}" "<user.%s>")
-            (phony--external-name
-             (phony--get-rule
-              (phony--element-rule-name element))))))
+(cl-defmethod phony--ast-match-string ((element phony--element-rule) rule)
+  (let* ((occurrence-number (phony-talon--occurrence-number element rule))
+         (match-rule (phony--get-rule (phony--element-rule-name element))))
+    (cond
+     ((not (phony--dictionary-p match-rule))
+      (format "<user.%s%s>"
+              (phony--external-name
+               (phony--get-rule
+                (phony--element-rule-name element)))
+              (if (>= occurrence-number 1)
+                  (format "_phony_clone%s"
+                          (1- occurrence-number))
+                "")))
+     ;; TODO: Also handle multiple occurences of dictionaries
+     (t (format "{user.%s}"
+                (phony--external-name
+                 (phony--get-rule
+                  (phony--element-rule-name element))))))))
 
-(cl-defmethod phony--ast-match-string ((element phony--element-sequence))
-  (string-join (seq-map #'phony--ast-match-string
+(cl-defmethod phony--ast-match-string ((element phony--element-sequence) rule)
+  (string-join (seq-map (lambda (element) (phony--ast-match-string element rule))
                         (phony--element-sequence-elements element))
                " "))
 
-(cl-defmethod phony--ast-match-string ((element phony--element-optional))
+(cl-defmethod phony--ast-match-string ((element phony--element-optional) rule)
   (format "[%s]" (phony--ast-match-string
-                  (phony--element-optional-element element))))
+                  (phony--element-optional-element element)
+                  rule)))
 
-(cl-defmethod phony--ast-match-string ((element phony--element-one-or-more))
+(cl-defmethod phony--ast-match-string ((element phony--element-one-or-more) rule)
   (format "(%s)+" (phony--ast-match-string
-                   (phony--element-one-or-more-element element))))
+                   (phony--element-one-or-more-element element)
+                   rule)))
 
-(cl-defmethod phony--ast-match-string ((element phony--element-zero-or-more))
+(cl-defmethod phony--ast-match-string ((element phony--element-zero-or-more) rule)
   (format "(%s)*" (phony--ast-match-string
-                   (phony--element-zero-or-more-element element))))
+                   (phony--element-zero-or-more-element element)
+                   rule)))
 
-(cl-defmethod phony--ast-match-string ((element phony--element-external-rule))
+(cl-defmethod phony--ast-match-string ((element phony--element-external-rule) rule)
   (format "<%s>" (string-join
                   (seq-map #'symbol-name
                            (append
@@ -72,19 +87,16 @@
                             (list (phony--element-external-rule-name element))))
                   ".")))
 
-(cl-defmethod phony--ast-match-string ((element phony--element-argument))
+(cl-defmethod phony--ast-match-string ((element phony--element-argument) rule)
   (phony--ast-match-string
-   (phony--element-argument-form element)))
+   (phony--element-argument-form element)
+   rule))
 
 (cl-defgeneric phony--rule-talon-pattern (rule))
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--procedure-rule))
-  (let* ((elements
-          (phony--element-sequence-elements
-           (phony--procedure-rule-element rule)))
-         (spoken-elements
-          (seq-map #'phony--ast-match-string elements)))
-    (string-join spoken-elements " ")))
+  (let* ((element (phony--procedure-rule-element rule)))
+    (phony--ast-match-string element rule)))
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--open-rule))
   (string-join (seq-map
@@ -95,29 +107,29 @@
                 (phony--open-rule-alternatives rule))
                " | "))
 
-(cl-defgeneric phony--variable-context (variable elements)
+(cl-defgeneric phony--argument-context (argument elements)
   nil)
 
-(cl-defmethod phony--variable-context (variable (element phony--element-sequence))
+(cl-defmethod phony--argument-context (argument (element phony--element-sequence))
   (thread-last
     (phony--element-sequence-elements element)
-    (seq-map (lambda (element) (phony--variable-context variable element)))
+    (seq-map (apply-partially #'phony--argument-context argument))
     (seq-find #'identity)))
 
-(cl-defmethod phony--variable-context (variable (element phony--element-argument))
-  (when (eq variable element) 'none))
+(cl-defmethod phony--argument-context (argument (element phony--element-argument))
+  (when (eq argument element) 'none))
 
-(cl-defmethod phony--variable-context (variable (element phony--element-optional))
-  (let ((downstream-context (phony--variable-context
-                             variable
+(cl-defmethod phony--argument-context (argument (element phony--element-optional))
+  (let ((downstream-context (phony--argument-context
+                             argument
                              (phony--element-optional-element element))))
     (if (eq downstream-context 'none)
         'optional
       downstream-context)))
 
-(cl-defmethod phony--variable-context (variable (element phony--element-repeat))
-  (if-let ((downstream-context (phony--variable-context
-                                variable
+(cl-defmethod phony--argument-context (argument (element phony--element-repeat))
+  (if-let ((downstream-context (phony--argument-context
+                                argument
                                 (phony--element-repeat-element element))))
       'repeat))
 
@@ -130,10 +142,19 @@
   (insert (format ":\n    user.emacs_lisp(%s)\n\n"
                   (phony--rule-external-name rule))))
 
-(cl-defgeneric phony--speech-insert-python (rule))
+(cl-defgeneric phony--speech-insert-python (rule clone-amount))
 
-(cl-defmethod phony--speech-insert-python ((rule phony--open-rule))
-  ;; Do not insert rule if there are no alternatives
+(defun phony-talon--clone-rule (rule times)
+  (dotimes (i times)
+    (insert (format "\n@module.capture(rule='<user.%s>')\n"
+                    (phony--rule-external-name rule)))
+    (insert
+     (format "def %s_phony_clone%s(m) -> str:\n    return m[0]\n"
+             (phony--rule-external-name rule) i))))
+
+(cl-defmethod phony--speech-insert-python ((rule phony--open-rule) clone-amount)
+  ;; Do not insert rule if there are no alternatives.  This filtering
+  ;; should probably be done during analysis, not here.
   (when (phony--open-rule-alternatives rule)
     (insert "@module.capture(rule=\n        '  "
             (string-join (seq-map
@@ -149,35 +170,61 @@
              (if (phony--open-rule-transformation rule)
                  (format "f\"(%s {m[0]})\""
                          (phony--open-rule-transformation rule))
-                 "m[0]")))))
+               "m[0]")))
 
-(cl-defmethod phony--speech-insert-python ((rule phony--procedure-rule))
+    (phony-talon--clone-rule rule clone-amount)))
+
+(defun phony-talon--find-argument-element (argument rule)
+  "Find element matching ARGUMENT in RULE.
+Return nil if no such element exists."
+  (car-safe
+   (phony--collect
+    (lambda (element)
+      (and (phony--element-argument-p element)
+           (eq (phony--element-argument-name element)
+               argument)))
+    (phony--procedure-rule-element rule))))
+
+(defun phony-talon--occurrence-number (match-element rule)
+  "Get index of occurence of MATCH-ELEMENT in procedure rule RULE.
+
+This goes through all match elements of RULE and returns the index of
+MATCH-ELEMENT among all of those `equal' to it."
+  (seq-position
+   (phony--collect
+    (apply-partially #'equal match-element)
+    (phony--procedure-rule-element rule))
+   match-element
+   #'eq))
+
+(cl-defmethod phony--speech-insert-python ((rule phony--procedure-rule) clone-amount)
   (insert "@module.capture(rule='" (phony--rule-talon-pattern rule) "')\n"
           "def " (phony--rule-external-name rule) "(m) -> str:\n")
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
-    (let ((variable
-           (car-safe (phony--collect
-                      (lambda (element)
-                        (and (phony--element-argument-p element)
-                             (eq (phony--element-argument-name element)
-                                 argument)))
-                      (phony--procedure-rule-element rule)))))
+    (let* ((argument-element
+            (phony-talon--find-argument-element argument rule)))
       (insert "    " (phony--to-python-identifier argument)
               " = ")
-      (if (not variable)
+      (if (not argument-element)
           (insert "'nil'")
-        (let* ((variable-context
-                (phony--variable-context
-                 variable
+        (let* ((match-form (phony--element-argument-form argument-element))
+               (rule-occurrence-number
+                (phony-talon--occurrence-number match-form rule))
+               (argument-context
+                (phony--argument-context
+                 argument-element
                  (phony--procedure-rule-element rule)))
-               (match-form (phony--element-argument-form variable))
                (attribute-name (phony-talon--element-name match-form)))
-          (when (eq variable-context 'repeat)
+          (when (>= rule-occurrence-number 1)
+            (setq attribute-name (concat attribute-name
+                                         (format "_phony_clone%s"
+                                                 (1- rule-occurrence-number)))))
+          (when (eq argument-context 'repeat)
             (setq attribute-name (concat attribute-name "_list")))
           (if (phony--element-external-rule-p match-form)
               (insert (format "from_talon_capture(m.%1$s) if hasattr(m,'%1$s') else 'nil'"
                               attribute-name))
-            (pcase variable-context
+            (pcase argument-context
               ('none
                (insert (format "m.%s" attribute-name)))
               ('optional
@@ -185,8 +232,8 @@
               ('repeat
                (insert (format "'(list ' + ' '.join(getattr(m,'%s',[])) + ')'" attribute-name)))
               (_ (error "Internal error: Unrecognized context %S (argument %S in rule %S)"
-                        variable-context
-                        variable
+                        argument-context
+                        argument-element
                         (phony--rule-name rule)))))))
       (insert "\n")))
   (insert
@@ -196,7 +243,9 @@
             (seq-map (lambda (argument)
                        (format "{%s}" (phony--to-python-identifier argument)))
                      (phony--procedure-rule-arglist rule))
-            " "))))
+            " ")))
+
+  (phony-talon--clone-rule rule clone-amount))
 
 (cl-defun phony-talon--export-mode (mode entries)
   (with-temp-file (phony--output-directory "talon"
@@ -274,9 +323,11 @@ talon.fs.watch(path, load_lists)
               "    else:\n"
               "        raise TypeError(f\"Talon capture must have type str, int, list or talon.grammar.vm.Phrase, had type {type(capture)}\")\n"
               "    return formatted\n\n")
-      (seq-doseq (command rules)
+      (seq-doseq (rule rules)
         (insert "\n")
-        (phony--speech-insert-python command)))
+        (phony--speech-insert-python
+         rule
+         (max 0 (1- (phony--maximum-backward-multiplicity analysis-data rule))))))
 
     (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
       (if (or (not (file-exists-p link-path))
