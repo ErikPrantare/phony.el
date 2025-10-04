@@ -199,7 +199,6 @@
             " "))))
 
 (cl-defun phony-talon--export-mode (mode entries)
-  (mkdir "~/.talon/user/emacs-gen" t)
   (with-temp-file (phony--output-directory "talon"
                                            (format "%s.talon" mode))
     (unless (eq mode 'global)
