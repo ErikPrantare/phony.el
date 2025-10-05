@@ -596,18 +596,17 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
       (puthash rule '() dependencies)
       (puthash rule '() dependents))
     (seq-doseq (rule (phony--get-rules))
-      (seq-doseq (dependency (phony--dependencies rule))
-        (setq dependency (phony--get-rule dependency))
-        (if (not dependency)
+      (seq-doseq (dependency-name (phony--dependencies rule))
+        (if-let ((dependency (phony--get-rule dependency-name)))
             (progn
-              (display-warning 'phony
-                               (format "Rule %S (referenced in %S) is not defined"
-                                       dependency (phony--rule-name rule)))
-              (setf (phony--analysis-data-contains-errors analysis-data) t))
-          (push (phony--get-rule dependency) (gethash rule dependencies))
-          (push rule (gethash dependency dependents)))))
-    (setf (phony--analysis-data-forward analysis-data)
-          dependencies)
+              (push (phony--get-rule dependency) (gethash rule dependencies))
+              (push rule (gethash dependency dependents)))
+          (display-warning 'phony
+                           (format "Rule %S (referenced in %S) is not defined"
+                                   dependency-name (phony--rule-name rule)))
+          (setf (phony--analysis-data-contains-errors analysis-data) t))
+        (setf (phony--analysis-data-forward analysis-data)
+              dependencies)))
     (setf (phony--analysis-data-backward analysis-data)
           dependents)))
 
