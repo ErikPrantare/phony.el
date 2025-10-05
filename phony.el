@@ -323,25 +323,23 @@ be one of the following:
       (error "No open rule %s defined" open-rule-name))
     (cl-pushnew alternative (phony--open-rule-alternatives rule))))
 
-(cl-defmacro phony-define-open-rule (name &key
-                                          (alternatives nil)
-                                          (contributes-to nil)
-                                          (transformation nil)
-                                          (external-name nil))
+(cl-defmacro phony-define-open-rule (name
+                                     &key
+                                     alternatives
+                                     contributes-to
+                                     transformation
+                                     external-name)
   "Define NAME as an open rule.
 
 Open rules match any of the rules specified in ALTERNATIVES.  Other
-rules can contribute to the list of alternatives through their
-CONTRIBUTES-TO argument.
+rules may add themselves to the list of alternatives by specifying
+this rule in their CONTRIBUTES-TO argument.  CONTRIBUTES-TO should be
+the name of an open rule, or a list of names.
 
-CONTRIBUTES-TO is an open rule or a list of open rules that this rule
-contributes to.  See also `phony-rule', which admits this argument as
-well.
-
-If a function TRANSFORMATION is given, the value of the matched
-alternative is first passed through TRANSFORMATION to create the value
-of matching this rule.  Otherwise, the value is passed through without
-modification.
+The value of matching this rule is the value of matching the
+corresponding alternative.  If a function TRANSFORMATION is given, the
+value is first passed through TRANSFORMATION.  Otherwise, the value is
+passed through without modification.
 
 If EXTERNAL-NAME is given, it will be used for the name generated for
 this rule in the external speech engine."

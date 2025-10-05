@@ -35,67 +35,157 @@ Next, add the following to your Emacs configuration:
 #+end_src
 
 * Usage
-You can now define talon lists using the ~phony-define-dictionary~
-macro.  It takes two mandatory arguments: An emacs identifier for
-storing the list and an alist mapping utterances to values.
+There are three types of rules: procedure rules, open rules, and
+dictionaries.  They are different ways of specifying how utterances
+should produce values and side effects.
 
-The macro will define the variable given as its first argument and
-store the alist in it, making it available for use in Elisp.  It will
-also notify talon that the lists have been updated, causing talon to
-read the defined lists.  After this, the lists will become available
-for usage in talon files.
-
-You can also define more complex rules.  See the documentation for
-~phony-rule~ for more information.
-
-* Example usage
-** Create list mapping spoken form of colors to hexcode
-In emacs:
-
-#+begin_src emacs-lisp
-  (phony-define-dictionary rule/color
-    :external-name "color"
-    '(("white" . "#fffff")
-      ("black" . "#000000")
-      ("red" . "#ff0000")))
-#+end_src
-
-In talon:
-
-#+begin_src talon
-  insert color {user.color}:
-      user.emacs_lisp("(insert {color})")
-#+end_src
-
-** Create list of commands
-In emacs:
-
-#+begin_src emacs-lisp
-  (phony-define-dictionary my/commands
-    :external-name "command"
-    `(("save" . ,#'save-buffer)
-      ("hello" . ,(lambda () (message "Hello %s!" (user-full-name))))))
-#+end_src
-
-In talon:
-
-#+begin_src talon
-  {user.command}:
-      user.emacs_lisp("(funcall {command})")
-#+end_src
-
-* Accessing and modifying defined lists
-To access the value corresponding to an utterance, use the function
-~phony-dictionary-get~.  This is a generalized variable, meaning you
-can use ~setf~ to modify elements of it:
+** Procedure rules
+Procedure rules map your spoken utterances to code.  Procedure rules
+are declared in the ~declare~ form of a ~defun~.  With the following
+example, uttering "hello emacs" will display "Hello!" in the message
+area:
 
 #+begin_src elisp
-  (setf (phony-dictionary-get "squash" rule/color) 'yellow)
+  (defun rule/say-hello ()
+    (declare (phony-rule "hello emacs"))
+    (message "Hello!"))
 #+end_src
 
-This form allows you to add, remove and change values in the list.
-Removing an element is done by setting it to nil.  After modifying a
-list, the changes will automatically sync with talon.
+Procedure rules can produce values.  Other rules can refer to
+value-producing rules and bind their values to the arguments of the
+function.  In the following code example, ~rule/current-line~ defines
+a rule matching "line" and returning the region of the current line.
+It declares ~:export nil~ to avoid "line" by itself to be matched,
+making it only possible to match when referred to by another rule.
+
+The two rules ~rule/delete-current-line~ and
+~rule/beginning-of-current-line~ make use of ~rule/current-line~ to
+bind their argument to its return value.  Thus, saying "delete line"
+will delete the current line and saying "beginning of line" will move
+point to the beginning of the current line.
+
+#+begin_src elisp
+  (defun rule/current-line ()
+    (declare (phony-rule
+              :export nil
+              "line"))
+    (bounds-of-thing-at-point 'line))
+
+  (defun rule/delete-current-line (bounds)
+    (declare (phony-rule
+              "delete"
+              (bounds rule/current-line)))
+    (delete-region (car bounds) (cdr bounds)))
+
+  (defun rule/beginning-of-current-line (bounds)
+    (declare (phony-rule
+              "beginning of"
+              (bounds rule/current-line)))
+    (goto-char (car bounds)))
+#+end_src
+
+For more documentation on procedure rules, see the function
+documentation of ~phony-rule~.
+
+** Dictionaries
+Dictionaries are utterance -> value maps.  The following code defines
+a dictionary for the first five numbers:
+
+#+begin_src elisp
+  (phony-define-dictionary rule/number
+    '(("one" . 1)
+      ("two" . 2)
+      ("three" . 3)
+      ("four" . 4)
+      ("five" . 5)))
+#+end_src
+
+These are usefully referred to by procedure rules.  With the following
+procedure rule, uttering "delete three lines" will delete three lines,
+and correspondingly for any other number between one and five.
+
+#+begin_src elisp
+  (defun rule/delete-lines (n)
+    (declare (phony-rule
+              "delete"
+              (n rule/number)
+              "lines"))
+    (dotimes (i n)
+      (delete-line)))
+#+end_src
+
+For more information on dictionaries, see the function documentation
+for ~phony-define-dictionary~.
+
+** Open rule
+An open rule is a way to match on any one of multiple rules.  In the
+following code example, one may utter "delete line" to delete the
+current line, or "delete sentence" to delete the current sentence:
+
+#+begin_src elisp
+  (defun rule/current-line ()
+    (declare (phony-rule
+              :export nil
+              "line"))
+    (bounds-of-thing-at-point 'line))
+
+  (defun rule/current-sentence ()
+    (declare (phony-rule
+              :export nil
+              "sentence"))
+    (bounds-of-thing-at-point 'sentence))
+
+  (phony-define-open-rule rule/region
+    :alternatives '(rule/current-line rule/current-sentence))
+
+  (defun rule/delete-current-line (bounds)
+    (declare (phony-rule
+              "delete"
+              (bounds rule/region)))
+    (delete-region (car bounds) (cdr bounds)))
+#+end_src
+
+Instead of explicitly listing all alternatives, other rules can add
+themselves to an open rule.  This is a good way of providing
+extensibility for your grammars.  The next code example is identical
+in effect to the previous one:
+
+#+begin_src elisp
+  (phony-define-open-rule rule/region)
+
+  (defun rule/current-line ()
+    (declare (phony-rule
+              :contributes-to 'rule/region
+              :export nil
+              "line"))
+    (bounds-of-thing-at-point 'line))
+
+  (defun rule/current-sentence ()
+    (declare (phony-rule
+              :contributes-to 'rule/region
+              :export nil
+              "sentence"))
+    (bounds-of-thing-at-point 'sentence))
+
+  (defun rule/delete-current-line (bounds)
+    (declare (phony-rule
+              "delete"
+              (bounds rule/region)))
+    (delete-region (car bounds) (cdr bounds)))
+#+end_src
+
+For more information on open rules, read the function documentation
+for ~phony-define-open-rule~.
+
+* Bindings for talon community rules
+If you're using talon community, some basic bindings are given in
+~phony-talon-community-bindings.el~.  Add
+
+#+begin_src elisp
+  (require 'phony-talon-community-bindings)
+#+end_src
+
+to your configuration to import them.
 
 * Versioning system
 This project uses [[https://semver.org/][semantic versioning]].  While still on 0.y.z, an
