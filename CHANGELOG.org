@@ -1,0 +1,8 @@
+* 0.2.0 [2025-10-06 Mon]
+- Renamed project from talon-list to phony.
+- Added procedure rules, see ~phony-rule~.
+- Added open rules, see ~phony-define-open-rule~.
+- Removed ~phony-define-list~, use ~phony-define-dictionary~ instead.
+
+* 0.1.0 [2024-09-07 Sat]
+Initial release.

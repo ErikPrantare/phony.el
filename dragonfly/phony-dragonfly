@@ -1,0 +1,182 @@
+#!/usr/bin/env python
+import logging, os, subprocess, json, sys, argparse
+
+import dragonfly
+import dragonfly as df
+from dragonfly.log import setup_log
+import kaldi_active_grammar
+
+setup_log()
+
+kaldi_active_grammar.disable_donation_message()
+
+argument_parser = argparse.ArgumentParser()
+argument_parser.add_argument('--model', required=True)
+argument_parser.add_argument('--datadir', required=True)
+arguments = argument_parser.parse_args()
+
+data_directory = os.path.abspath(
+    os.path.expanduser(arguments.datadir))
+model_directory = os.path.abspath(
+    os.path.expanduser(arguments.model))
+
+def evaluate_lisp_async(expression: str):
+    return subprocess.Popen(
+        ["emacsclient",
+         "--eval",
+         f"(emacslisten-evaluate {expression})"])
+
+def evaluate_lisp(expression: str):
+    evaluate_lisp_async(expression).wait()
+
+lists = {}
+
+def load_lists(path):
+    with open(path, 'r') as inn:
+        message = json.load(inn)
+        for list_name in message:
+            lists[list_name] = dragonfly.DictList(list_name, message[list_name])
+
+load_lists(f"{data_directory}/dictionaries.json")
+
+# Eventually watch for file changes
+
+
+class PhonyRule(dragonfly.BasicRule):
+    pass
+
+class PhonyException(Exception):
+    pass
+
+def escape(string):
+    return string.replace("\\", "\\\\").replace("\"", "\\\"")
+
+def build_form(function, argument_list, argument_map):
+    arguments = " ".join([argument_map.get(x, 'nil') for x in argument_list])
+    return "(" + function + " " + arguments + ")"
+
+def join_argument_maps(maps):
+    result = {}
+    for m in maps:
+        result.update(m)
+    return result
+
+def join_argument_maps_repition(maps):
+    keys = set().union(*maps)
+    return {k: '(list ' + ' '.join([m.get(k, 'nil')
+                                    for m in maps]) + ')'
+            for k in keys}
+
+def create_element(element_spec):
+    match element_spec["type"]:
+        case "sequence":
+            return df.Modifier(df.Sequence(list(map(create_element, element_spec["elements"]))),
+                               modifier=join_argument_maps)
+        case "literal":
+            return df.Literal(element_spec["utterance"], value={})
+        case "dictionary":
+            return df.DictListRef(None,lists[element_spec["name"]])
+        case "argument":
+            return df.Modifier(create_element(element_spec["rule"]),
+                               modifier=lambda x: {element_spec["name"]: x})
+        case "rule":
+            return df.RuleRef(rules[element_spec["name"]])
+        case "optional":
+            return df.Modifier(
+                df.Optional(create_element(element_spec["element"])),
+                modifier=lambda v: {} if v == None else v)
+        case "one-or-more":
+            return df.Modifier(
+                df.Repetition(create_element(element_spec["element"]),
+                              min=1,max=3,optimize=True),
+                modifier=lambda vs: join_argument_maps_repition(vs))
+        case "zero-or-more":
+            return df.Modifier(
+                df.Repetition(create_element(element_spec["element"]),
+                              min=0,max=3,optimize=True),
+                modifier=lambda vs: join_argument_maps_repition(vs))
+        case "impossible":
+            return df.Impossible()
+        case _:
+            raise PhonyException()
+
+def create_rule_procedure(spec):
+    element_spec = spec["element"]
+    element = create_element(element_spec)
+    rules[spec["name"]] = PhonyRule(
+        name = spec["name"],
+        element = df.Modifier(
+            element,
+            modifier = lambda x: build_form(
+                spec["function"],spec["argument-list"],x)),
+        exported = spec["export"])
+    if spec["export"]:
+        exported_rules.append(rules[spec["name"]])
+
+def create_rule_dictionary(spec):
+    rules[spec["name"]] = PhonyRule(
+        name = spec["name"],
+        element = df.DictListRef(None, lists[spec["name"]]),
+        exported = False)
+
+def create_rule_open(spec):
+    rules[spec["name"]] = PhonyRule(
+        name = spec["name"],
+        element = df.Alternative(
+            [df.RuleRef(rules[name]) for name in spec["alternatives"]]),
+        exported = False)
+
+def create_rule(spec):
+    try:
+        print("Constructing " + spec["name"])
+        match spec["type"]:
+            case "procedure-definition":
+                create_rule_procedure(spec)
+            case "dictionary":
+                create_rule_dictionary(spec)
+            case "open":
+                create_rule_open(spec)
+            case _:
+                raise PhonyException()
+        print("Finished constructing " + spec["name"])
+
+    except PhonyException:
+        print("Discarding " + spec["name"])
+
+rules = {}
+exported_rules = []
+
+def load_rules(path):
+    with open(path, 'r') as inn:
+        message = json.load(inn)
+        for rule_name in message["dependency-linear-extension"]:
+            create_rule(message["rules"][rule_name])
+
+logging.getLogger('kaldi.compiler').setLevel(15)
+
+engine = dragonfly.get_engine("kaldi",
+                              model_dir=model_directory
+                              )
+engine.connect()
+grammar = dragonfly.Grammar(name="mygrammar")
+
+class MasterRule(dragonfly.BasicRule):
+    def _process_recognition(self, name, extras):
+        print(extras)
+        for expr in self.value(extras["_node"]):
+            evaluate_lisp(expr)
+
+load_rules(f"{data_directory}/rules.json")
+grammar.add_rule(
+    MasterRule(
+        name = "Master CCR rule",
+        element = df.Repetition(
+            df.Alternative(
+                [df.RuleRef(rule) for rule in exported_rules]),
+            min=1,max=3),
+        exported = True))
+
+grammar.load()
+
+print("Listening...")
+engine.do_recognition()
