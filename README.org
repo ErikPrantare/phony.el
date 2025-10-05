@@ -53,7 +53,7 @@ You can also define more complex rules.  See the documentation for
 In emacs:
 
 #+begin_src emacs-lisp
-  (phony-define-dictionary my/colors
+  (phony-define-dictionary rule/color
     :external-name "color"
     '(("white" . "#fffff")
       ("black" . "#000000")
@@ -90,7 +90,7 @@ To access the value corresponding to an utterance, use the function
 can use ~setf~ to modify elements of it:
 
 #+begin_src elisp
-  (setf (phony-dictionary-get "squash" my/colors) 'yellow)
+  (setf (phony-dictionary-get "squash" rule/color) 'yellow)
 #+end_src
 
 This form allows you to add, remove and change values in the list.
