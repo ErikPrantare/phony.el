@@ -1,9 +1,7 @@
 * NEXT
 - Renamed project from talon-list to phony.
-- Added rule definitions.
-- Added ~phony-dictionary-get~ and ~phony-dictionary-put~ for working
-  with defined lists.  The former is also a generalized variable of
-  the latter.
+- Added procedure rules, see ~phony-rule~.
+- Added open rules, see ~phony-define-open-rule~.
 - Removed ~phony-define-list~, use ~phony-define-dictionary~ instead.
 
 * 0.1.0 [2024-09-07 Sat]
