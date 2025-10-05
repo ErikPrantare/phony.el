@@ -22,7 +22,7 @@ sending a message in the dragonfly matrix room or the emacs channel on
 the talon slack.
 
 * Setup
-First, install EmacsListen.  This is required for phony to be able to
+First, install [[https://github.com/ErikPrantare/EmacsListen][EmacsListen]].  This is required for phony to be able to
 execute the commands.
 
 Next, add the following to your Emacs configuration:
