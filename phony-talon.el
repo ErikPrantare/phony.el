@@ -247,11 +247,18 @@ MATCH-ELEMENT among all of those `equal' to it."
 
   (phony-talon--clone-rule rule clone-amount))
 
+(defvar phony-talon--always-listen nil
+  "Whether to always listen for utterances, even if Emacs is not focused.
+
+If you are using EXWM, you probably want this to be t.")
+
 (cl-defun phony-talon--export-mode (mode entries)
   (with-temp-file (phony--output-directory "talon"
                                            (format "%s.talon" mode))
     (unless (eq mode 'global)
       (insert (format "user.emacs_mode: /:%s:/\n" mode)))
+    (unless phony-talon--always-listen
+      (insert "app: emacs\n"))
     (insert "-\n")
     (seq-doseq (rule entries)
       (when (and
