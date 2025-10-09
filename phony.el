@@ -725,6 +725,9 @@ If any errors are detected in the grammar, the rules are not exported."
     (if (phony--analysis-data-contains-errors analysis-data)
         (display-warning 'phony "Grammar contains errors, not exporting")
       (phony--export-dictionaries)
+      (when (and (not (server-running-p))
+                 (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
+        (server-start))
       (funcall phony-export-function analysis-data))))
 
 (defun phony-request-export ()
