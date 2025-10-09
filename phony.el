@@ -4,7 +4,7 @@
 
 ;; Author: Erik Präntare
 ;; Keywords: files
-;; Version: 0.2.0
+;; Version: 0.2.1
 ;; Homepage: https://github.com/ErikPrantare/phony.el
 ;; Package-Requires: ((emacs "28.1"))
 ;; Created: 13 Jul 2024
