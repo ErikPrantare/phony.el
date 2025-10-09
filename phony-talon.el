@@ -139,7 +139,7 @@
   (insert (format "<user.%s>" (phony--rule-external-name rule)))
   (when (phony--procedure-rule-anchor-end-p rule)
     (insert "$"))
-  (insert (format ":\n    user.emacs_lisp(%s)\n\n"
+  (insert (format ":\n    user.phony_evaluate_emacs_lisp(%s)\n\n"
                   (phony--rule-external-name rule))))
 
 (cl-defgeneric phony--speech-insert-python (rule clone-amount))
@@ -287,27 +287,47 @@ If you are using EXWM, you probably want this to be t.")
     (with-temp-file (phony--output-directory
                      "talon"
                      "read_dictionaries.py")
-      (insert (format
-               "from talon import Context, Module
-import talon, json, os.path
+      (insert "from talon import Context, Module\n"
+              "import talon, json, os.path\n"
+              "\n"
+              "module = Module()\n"
+              "context = Context()\n"
+              "\n"
+              "def load_lists(path, dummy_argument):\n"
+              "    with open(path, 'r') as inn:\n"
+              "        message = json.load(inn)\n"
+              "        for list_name in message:\n"
+              "            module.list(list_name, '')\n"
+              "            context.lists['user.' + list_name] = message[list_name]\n"
+              "            print('Loaded list ' + list_name)\n"
+              "\n"
+              "path = '" (phony--output-directory "dictionaries.json") "'\n"
+              "if os.path.isfile(path):\n"
+              "    load_lists(path, None)\n"
+              "talon.fs.watch(path, load_lists)\n"))
 
-module = Module()
-context = Context()
-
-def load_lists(path, dummy_argument):
-    with open(path, 'r') as inn:
-        message = json.load(inn)
-        for list_name in message:
-            module.list(list_name, '')
-            context.lists['user.' + list_name] = message[list_name]
-            print('Loaded list ' + list_name)
-
-path = '%s'
-if os.path.isfile(path):
-    load_lists(path, None)
-talon.fs.watch(path, load_lists)
-"
-               (phony--output-directory "dictionaries.json"))))
+    (with-temp-file (phony--output-directory
+                     "talon"
+                     "evaluate_elisp.py")
+      (insert "from talon import Module\n"
+              "import subprocess\n"
+              "\n"
+              "module = Module()\n"
+              "\n"
+              "def evaluate_lisp_async(expression: str):\n"
+              "    return subprocess.Popen(\n"
+              "        ['emacsclient',\n"
+              "         '--eval',\n"
+              "         f\"(emacslisten-evaluate '{expression})\"])\n"
+              "\n"
+              "def evaluate_lisp(expression: str):\n"
+              "    evaluate_lisp_async(expression).wait()\n"
+              "\n"
+              "@module.action_class\n"
+              "class Actions:\n"
+              "    def phony_evaluate_emacs_lisp(expression: str):\n"
+              "        'Evaluate an elisp expression'\n"
+              "        evaluate_lisp(expression)\n"))
 
     (with-temp-file (phony--output-directory "talon" "rules.py")
       (insert "import talon\n\n"
