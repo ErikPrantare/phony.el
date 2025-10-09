@@ -217,6 +217,7 @@ to its dictionary."
 
 The speech recognition backend can read this file to register the
 dictionaries."
+  (mkdir (phony--output-directory) t)
   (with-temp-file (phony--output-directory "dictionaries.json")
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
