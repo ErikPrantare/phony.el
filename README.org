@@ -22,6 +22,9 @@ sending a message in the dragonfly matrix room or the emacs channel on
 the talon slack.
 
 * Setup
+This package assumes that you have Talon up and running.  See [[https://talon.wiki/Resource%20Hub/Talon%20Installation/installation_guide/][steps
+1-3 on their wiki]] for instructions.
+
 Add the following to your Emacs configuration:
 
 #+begin_src elisp
