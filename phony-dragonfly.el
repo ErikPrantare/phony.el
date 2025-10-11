@@ -133,6 +133,8 @@
       (message "Creating python virtual environment...done")
 
       (mkdir "model" t)
+      (make-symbolic-link (phony--output-directory "dictionaries.json")
+                          "dictionaries.json" t)
       (when (or (not (file-exists-p "model/kaldi-active-grammar"))
                 (y-or-n-p "Model already downloaded.  Redownload? "))
         (delete-file "model/kaldi-active-grammar.zip")
