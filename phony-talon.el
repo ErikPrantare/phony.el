@@ -318,10 +318,7 @@ If you are using EXWM, you probably want this to be t.")
               "    return subprocess.Popen(\n"
               "        ['emacsclient',\n"
               "         '--eval',\n"
-              "         " (format "f\"(%s '{expression})\"])\n"
-                                  (if (symbolp phony-form-evaluation-function)
-                                      phony-form-evaluation-function
-                                    (concat "funcall phony-form-evaluation-function")))
+              "         f\"(phony--evaluate-form '{expression})\"])\n"
               "\n"
               "def evaluate_lisp(expression: str):\n"
               "    evaluate_lisp_async(expression).wait()\n"
