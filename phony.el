@@ -315,7 +315,7 @@ arguments."
 
 (defmacro phony-define-dictionary (name &rest arguments)
   ;; checkdoc-params: (arguments)
-  "Define a dictionary with NAME and containing ALIST.
+  "Define a dictionary with NAME containing ALIST.
 
 ALIST is an alist mapping utterances to values.  An utterance is a
 string containing the spoken form for referencing the value.  The
