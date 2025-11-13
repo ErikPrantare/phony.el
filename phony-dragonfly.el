@@ -73,7 +73,7 @@
 (cl-defgeneric phony-dragonfly--serialize-rule-concrete (rule))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--procedure-rule))
-  `((type . "procedure-definition")
+  `((type . "procedure")
     (name . ,(phony--external-name rule))
     (function . ,(symbol-name (phony--procedure-rule-function rule)))
     (element . ,(phony-dragonfly--serialize-element
