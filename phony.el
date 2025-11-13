@@ -566,7 +566,7 @@ If a dependency is referred to multiple times, it is duplicated.")
 If a dependent refers to a rule multiple times, it is duplicated.")
   (cycle
    nil
-   :type (repeat symbol)
+   :type list
    :documentation "If non-nil, a sequence of rule names forming a dependency cycle.")
   (contains-errors
    nil
@@ -574,7 +574,7 @@ If a dependent refers to a rule multiple times, it is duplicated.")
    :documentation "Whether the analysis detected errors in the grammar.")
   (linear-extension
    nil
-   :type (repeat symbol)
+   :type list
    :documentation "Linear extension of the dependency graph.
 Also commonly known as topological order.  Rules occurring in this list
 are guaranteed to only depend on preceding rules."))
@@ -624,16 +624,14 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
       (seq-doseq (dependency-name (phony--dependencies rule))
         (if-let ((dependency (phony--get-rule dependency-name)))
             (progn
-              (push (phony--get-rule dependency) (gethash rule dependencies))
+              (push dependency (gethash rule dependencies))
               (push rule (gethash dependency dependents)))
           (display-warning 'phony
                            (format "Rule %S (referenced in %S) is not defined"
                                    dependency-name (phony--rule-name rule)))
-          (setf (phony--analysis-data-contains-errors analysis-data) t))
-        (setf (phony--analysis-data-forward analysis-data)
-              dependencies)))
-    (setf (phony--analysis-data-backward analysis-data)
-          dependents)))
+          (oset analysis-data contains-errors t)))
+      (oset analysis-data forward dependencies)
+      (oset analysis-data backward dependents))))
 
 (defun phony--try-linear-extension-impl (rule visited finished analysis-data)
   "Find linear extension of dependency graph in ANALYSIS-DATA.
@@ -651,7 +649,7 @@ RULE is the currently visited rule.  VISITED is a hash table of the
 already visited rules.  FINISHED is a hash table of rules that have been
 fully processed.  This function adds RULE to VISITED before recusing to
 its children, and to FINISHED afterwards."
-  (let ((successors (phony--analysis-data-forward analysis-data)))
+  (let ((dependencies (oref analysis-data forward)))
     (cl-block nil
       (when (gethash rule finished)
         (cl-return nil))
@@ -659,16 +657,16 @@ its children, and to FINISHED afterwards."
         (cl-return (list rule)))
 
       (puthash rule t visited)
-      (seq-doseq (successor (gethash rule successors))
+      (seq-doseq (dependency (gethash rule dependencies))
         (when-let ((path (phony--try-linear-extension-impl
-                          successor visited finished analysis-data)))
+                          dependency visited finished analysis-data)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
               (cl-return path)
             (cl-return (cons rule path)))))
 
       (puthash rule t finished)
-      (push rule (phony--analysis-data-linear-extension analysis-data))
+      (push rule (oref analysis-data linear-extension))
       (cl-return nil))))
 
 (cl-defun phony--try-linear-extension (analysis-data)
@@ -688,8 +686,7 @@ extension."
       (when-let ((cycle (phony--try-linear-extension-impl
                          rule visited finished
                          analysis-data)))
-        (setf (phony--analysis-data-cycle analysis-data)
-              (seq-map #'phony--rule-name cycle))
+        (oset analysis-data cycle (seq-map #'phony--rule-name cycle))
         (cl-return-from phony--try-linear-extension)))))
 
 (defvar phony--last-analysis nil
