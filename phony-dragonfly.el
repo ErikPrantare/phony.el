@@ -111,6 +111,7 @@
 
 (defun phony-dragonfly-export (analysis-data)
   (interactive (list (phony--analyze-grammar)))
+  (mkdir (phony-dragonfly--backend-directory) t)
   (with-temp-file (phony-dragonfly--backend-directory "rules.json")
     (json-insert (phony-dragonfly--serialize-rules analysis-data))
     (json-pretty-print-buffer)))
