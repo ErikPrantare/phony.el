@@ -107,10 +107,11 @@ engine, and should be a string."
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
   (alternatives nil :type (repeat symbol))
+  ;; TODO: Set explicitly to #'identity
   (transformation nil :type function))
 
 (cl-defstruct (phony--dictionary
-               (:include phony--procedure-rule)
+               (:include phony--rule)
                (:constructor nil)
                (:constructor phony--make-dictionary
                              (name
