@@ -423,9 +423,9 @@ this rule in the external speech engine."
   (name nil
         :type symbol
         :documentation "Symbol naming the argument that captures the value of the match.")
-  (form nil
+  (element nil
         :type sexp
-        :documentation "Form whose match will bind to the argument."))
+        :documentation "Element whose match will bind to the argument."))
 
 (cl-defstruct phony--element-external-rule
   "Element matching some external rule.
@@ -465,8 +465,8 @@ This is required for recognizing if a form should bind turn argument."
                             :string element-form))
    ((member (car-safe element-form) arglist) (make-phony--element-argument
                                               :name (car element-form)
-                                              :form (phony--parse-speech-value-element
-                                                     (cadr element-form))))
+                                              :element (phony--parse-speech-value-element
+                                                        (cadr element-form))))
    ;; NOTE: The reader interprets ? as a character escape, so to use
    ;; it in the specification of the pattern we actually need to
    ;; match on the character after that, which we require to be
@@ -509,7 +509,7 @@ This is required for recognizing if a form should bind turn argument."
     (phony--element-one-or-more
      (list (phony--element-one-or-more-element element)))
     (phony--element-argument
-     (list (phony--element-argument-form element)))
+     (list (phony--element-argument-element element)))
     (t nil)))
 
 (defun phony--collect (predicate element)
@@ -774,6 +774,12 @@ documentation for `phony-rule'."
   (setq mode (ensure-list mode))
   (setq external-name (or external-name (phony--to-python-identifier function)))
   (phony-remove-rule function)
+  ;; TODO: Add element form checks:
+  ;; - Each argument may only occur at most once.
+  ;; - Arguments may only be bound to value creating elements.  (May
+  ;;   already be done implicitly in parsing?)
+  ;; - Rule may not be potentially empty (talon and dragonfly(?)
+  ;;   limitation)
   (let* ((elements
           (seq-map (lambda (element)
                      (phony--parse-speech-element element (byte-compile-arglist-vars arglist)))

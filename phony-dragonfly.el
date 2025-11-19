@@ -37,7 +37,7 @@
     (name . ,(symbol-name
               (phony--element-argument-name variable)))
     (rule . ,(phony-dragonfly--serialize-element
-              (phony--element-argument-form variable)))))
+              (phony--element-argument-element variable)))))
 
 (cl-defmethod phony-dragonfly--serialize-element ((dictionary phony--element-rule))
   `((type . "rule")

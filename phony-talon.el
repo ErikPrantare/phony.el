@@ -89,7 +89,7 @@
 
 (cl-defmethod phony--ast-match-string ((element phony--element-argument) rule)
   (phony--ast-match-string
-   (phony--element-argument-form element)
+   (phony--element-argument-element element)
    rule))
 
 (cl-defgeneric phony--rule-talon-pattern (rule))
@@ -207,7 +207,7 @@ MATCH-ELEMENT among all of those `equal' to it."
               " = ")
       (if (not argument-element)
           (insert "'nil'")
-        (let* ((match-form (phony--element-argument-form argument-element))
+        (let* ((match-form (phony--element-argument-element argument-element))
                (rule-occurrence-number
                 (phony-talon--occurrence-number match-form rule))
                (argument-context
