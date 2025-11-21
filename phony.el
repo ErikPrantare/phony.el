@@ -192,7 +192,7 @@ Invoking this function will resync the dictionary to the external speech
 recognition engine."
   (declare (indent defun))
   `(prog1
-       (setf (alist-get ,utterance ,dictionary nil t #'equal) ,value)
+       (,dictionary ,utterance ,value)
      (phony--request-export-dictionaries)))
 
 (gv-define-expander phony-dictionary-get
@@ -285,10 +285,10 @@ alist.  If NEW-VALUE is provided as well, associate instead UTTERANCE
 to NEW-VALUE in this dictionary."))
       (if utterance
           (if new-value
-              (setf (alist-get utterance (symbol-value name) nil nil #'equal)
+              (setf (alist-get utterance mapping nil nil #'equal)
                     new-value)
-            (alist-get utterance (symbol-value name) nil nil #'equal))
-        (symbol-value name))))
+            (alist-get utterance mapping nil nil #'equal))
+        mapping)))
 
   (eval `(gv-define-simple-setter ,name ,name))
 
@@ -297,10 +297,7 @@ to NEW-VALUE in this dictionary."))
     name
     :external-name external-name
     :format-raw-p format-raw))
-  (phony--request-export-dictionaries)
-
-  ;; Needs to return the actual mapping, see `phony-define-dictionary'
-  mapping)
+  (phony--request-export-dictionaries))
 
 (defun phony--split-keywords-rest (declaration-args)
   "Split DECLARATION-ARGS into keyword arguments and rest arguments.
@@ -334,13 +331,10 @@ be one of the following:
 \(fn NAME [KEY VALUE]... ALIST)"
   (declare (indent defun))
   (let ((split-arguments (phony--split-keywords-rest arguments)))
-    ;; We need to expand to defvar, or else xref will not find the
-    ;; definition.  defvar only modifies the variable when it is void,
-    ;; so if it is not we revert to setq.
-    ;; TODO: Remove the variable definition
-    `(,(if (boundp name) 'setq 'defvar)
-      ,name
-      (phony--define-dictionary ',name ,@(cdr split-arguments) ,@(car split-arguments)))))
+    `(phony--define-dictionary
+      ',name
+      ,@(cdr split-arguments)
+      ,@(car split-arguments))))
 
 (defun phony--add-alternative (alternative open-rule-name)
   "Add rule ALTERNATIVE as an alternative for open rule OPEN-RULE-NAME."
