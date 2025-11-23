@@ -191,9 +191,7 @@ If value is nil, remove the utterance from the list instead.
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
   (declare (indent defun))
-  `(prog1
-       (,dictionary ,utterance ,value)
-     (phony--request-export-dictionaries)))
+  `(,dictionary ,utterance ,value))
 
 (gv-define-expander phony-dictionary-get
   ;; We need to use `gv-define-expander', because the simpler versions
@@ -282,11 +280,13 @@ strings."
                               (symbol-name name)
                               "'.\nIf UTTERANCE is given, return instead the corresponding value of the
 alist.  If NEW-VALUE is provided as well, associate instead UTTERANCE
-to NEW-VALUE in this dictionary."))
+to NEW-VALUE in this dictionary and re-export dictionary definitions."))
       (if utterance
           (if new-value
-              (setf (alist-get utterance mapping nil nil #'equal)
-                    new-value)
+              (progn
+                (setf (alist-get utterance mapping nil nil #'equal)
+                      new-value)
+                (phony--request-export-dictionaries))
             (alist-get utterance mapping nil nil #'equal))
         mapping)))
 
