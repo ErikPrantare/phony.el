@@ -120,6 +120,47 @@ The group named nil is reserved for rules that have no defined group."
 (phony-define-group nil
   "Default group for rules.")
 
+(defvar phony--default-groups (make-hash-table :test #'equal)
+  "Hash table of default group for rules residing in a given file.
+If an absolute filename has an entry in this variable, that value
+should be used as the default group for any rule declared in that
+file.  Otherwise, the default group is nil.")
+
+(defun phony--current-file-name ()
+  "Return the filename of the current evaluation context.
+
+Returns `load-file-name' if non-nil, otherwise `buffer-file-name'.
+Therefore, if both are nil, this function also returns nil.
+
+The same file always returns the same path."
+  ;; NOTE: May actually return different paths for hardlinked files.
+  (and-let* ((file-name (or load-file-name buffer-file-name)))
+    (file-truename file-name)))
+
+(defun phony--set-current-file-default-group (name)
+  "Set default group for rules declared in the current file to NAME.
+
+This function should be used at the beginning of libraries that define
+rules for end user.  By doing this, there is no risk that rules
+accidentally get assigned to the nil group if the group parameter is
+omitted."
+  (if-let ((file-name (phony--current-file-name)))
+      (puthash file-name name phony--default-groups)
+    (error "No current file could be found")))
+
+(defun phony--default-group ()
+  (gethash (phony--current-file-name) phony--default-groups))
+
+(defmacro phony-module (name)
+  "Declare current file a phony module.
+
+This will define a new group named NAME.  Rules declared in the file
+that this form is evaluated in will be assigned to that group, unless
+another group is explicitly specified."
+  `(progn
+     (phony-define-group ,name)
+     (phony--set-current-file-default-group ',name)))
+
 (cl-defstruct (phony--rule
                (:constructor nil))
   "A rule for matching an utterance.
@@ -302,8 +343,8 @@ under for the external speech engine.  If FORMAT-RAW is t, the
 dictionary will be formated for use on the side of the speech
 recognition engine.  This only works if the values of the dictionary are
 strings."
-  (setq external-name (or external-name
-                          (phony--to-python-identifier name)))
+  (unless external-name (setq external-name (phony--to-python-identifier name)))
+  (unless group (setq group (phony--default-group)))
 
   (unless (proper-list-p mapping)
     (error "The mapping of %s must be a list" name))
@@ -405,6 +446,8 @@ be one of the following:
                                    group
                                    external-name)
   "See documentation for `phony-define-open-rule'."
+  (unless external-name (setq external-name (phony--to-python-identifier name)))
+  (unless group (setq group (phony--default-group)))
   (cl-assert (symbolp transformation) nil
              "Transformation argument to rule %S must be a symbol"
              name)
@@ -420,7 +463,7 @@ be one of the following:
    (make-phony--open-rule
     :name name
     :group group
-    :external-name (or external-name (phony--to-python-identifier name))
+    :external-name external-name
     :transformation transformation
     :alternatives alternatives))
 
@@ -844,7 +887,8 @@ For the named arguments and the specification of element forms, see the
 documentation for `phony-rule'."
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
-  (setq external-name (or external-name (phony--to-python-identifier function)))
+  (unless external-name (setq external-name (phony--to-python-identifier function)))
+  (unless group (setq group (phony--default-group)))
   (cl-assert (phony--group-p group) nil
              "Group argument to rule %S is not a declared group"
              function)
