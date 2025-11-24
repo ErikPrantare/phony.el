@@ -83,15 +83,55 @@ This function is used to automatically generate external names for
 rules."
   (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
 
+
+(cl-defstruct (phony--group
+               (:constructor phony--make-group)
+               (:predicate nil))
+  "Group named NAME.
+
+DOCSTRING is the documentation string given for the group."
+  name docstring)
+
+(defvar phony--groups (make-hash-table)
+  "All groups, indexed by name.")
+
+(defun phony--group-p (name)
+  "Return non-nil if NAME names a declared group."
+  (seq-contains-p (hash-table-keys phony--groups) name))
+
+(defmacro phony-define-group (name &optional docstring)
+  "Define a group NAME for rules.
+
+Groups are used to organize rules that belong together.  For example, a
+library might put all its defined rules into a single group with the
+same name as the library.
+
+The group named nil is reserved for rules that have no defined group."
+  (declare (indent defun)
+           (doc-string 2))
+  (cl-assert (or (not docstring) (stringp docstring)) nil
+             "Documentation string of phony group %S must be a string literal"
+             name)
+  `(puthash ',name (phony--make-group
+                    :name ',name
+                    :docstring ,docstring)
+            phony--groups))
+
+(phony-define-group nil
+  "Default group for rules.")
+
 (cl-defstruct (phony--rule
                (:constructor nil))
   "A rule for matching an utterance.
 
 NAME is the name of the rule.
 
+GROUP is a symbol denoting which group this rule belongs to.
+
 EXTERNAL-NAME is the name this rule will have for the speech recognition
 engine, and should be a string."
   (name nil :type symbol)
+  (group nil :type symbol)
   (external-name nil :type string))
 
 (cl-defstruct (phony--procedure-rule
@@ -116,6 +156,7 @@ engine, and should be a string."
                (:constructor phony--make-dictionary
                              (name
                               &key
+                              group
                               (external-name (phony--to-python-identifier name))
                               format-raw-p)))
   "A dictionary mapping utterances to values.
@@ -249,9 +290,12 @@ dictionaries."
 (cl-defun phony--define-dictionary (name
                                     mapping
                                     &key
+                                    (group nil)
                                     (external-name nil)
                                     (format-raw nil))
   "Define dictionary rule NAME containing MAPPING.
+
+GROUP specifies the group that this rule belongs to.
 
 If provided, EXTERNAL-NAME specifies the name that the rule will go
 under for the external speech engine.  If FORMAT-RAW is t, the
@@ -274,6 +318,10 @@ strings."
     (error "The keys of %s must be strings, but %S is not a string"
            name (car non-string-key)))
 
+  (cl-assert (phony--group-p group) nil
+             "Group arguments to rule %S is not a declared group"
+             name)
+
   (defalias name
     (lambda (&optional utterance new-value)
       (:documentation (concat "Return the alist of dictionary `"
@@ -295,6 +343,7 @@ to NEW-VALUE in this dictionary and re-export dictionary definitions."))
   (phony--add-rule
    (phony--make-dictionary
     name
+    :group group
     :external-name external-name
     :format-raw-p format-raw))
   (phony--request-export-dictionaries))
@@ -323,6 +372,9 @@ corresponding value.
 Optional arguments are given as named arguments before ALIST.  They can
 be one of the following:
 
+  :group            A symbol, the group that this rule belongs to.
+                    Groups are defined by `phony-define-group'.
+                    Default is nil.
   :external-name    Name to expose to the external engine.
   :format-raw       Export values in a form usable by the engine,
                     not Emacs.  This only works when the values are
@@ -350,6 +402,7 @@ be one of the following:
                                      alternatives
                                      contributes-to
                                      transformation
+                                     group
                                      external-name)
   "Define NAME as an open rule.
 
@@ -363,12 +416,25 @@ corresponding alternative.  If a function TRANSFORMATION is given, the
 value is first passed through TRANSFORMATION.  Otherwise, the value is
 passed through without modification.
 
+GROUP is the group that this rule belongs to.  Groups are defined by
+`phony-define-group'.  If unspecified, the rule belongs to the nil
+group.
+
 If EXTERNAL-NAME is given, it will be used for the name generated for
 this rule in the external speech engine."
   (declare (indent defun))
   `(progn
+     ;; FIXME: These checks will potentially need to double
+     ;; evaluation.  Factor out all logic into defun.
      (cl-assert (symbolp ,transformation) nil
-                "Argument transformation must be a symbol")
+                "Transformation argument to rule %S must be a symbol"
+                ',name)
+     (cl-assert (symbolp ,group) nil
+                "Group argument to rule %S must be a quoted symbol"
+                ',name)
+     (cl-assert (phony--group-p ,group) nil
+                "Group argument to rule %S is not a declared group"
+                ',name)
 
      ;; For finding the definition of this rule
      (defalias ',name #'ignore
@@ -377,6 +443,7 @@ this rule in the external speech engine."
      (phony--add-rule
       (make-phony--open-rule
        :name ',name
+       :group ,group
        :external-name ,(or external-name (phony--to-python-identifier name))
        :transformation ,transformation
        :alternatives ,alternatives))
@@ -751,12 +818,13 @@ If any errors are detected in the grammar, the rules are not exported."
                               element-forms
                               &key
                               (mode 'global)
-                              (contributes-to nil)
-                              (external-name nil)
+                              group
+                              contributes-to
+                              external-name
                               (export t)
-                              (anchor-beginning nil)
-                              (anchor-end nil))
-  ;; checkdoc-params: (mode contributes-to external-name export anchor-beginning anchor-end)
+                              anchor-beginning
+                              anchor-end)
+  ;; checkdoc-params: (mode group contributes-to external-name export anchor-beginning anchor-end)
   "Declare FUNCTION to be a rule invokeable by voice.
 
 ARGLIST is the argument list of the function.  ELEMENT-FORMS is a list of
@@ -767,6 +835,9 @@ documentation for `phony-rule'."
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
   (setq external-name (or external-name (phony--to-python-identifier function)))
+  (cl-assert (phony--group-p group) nil
+             "Group argument to rule %S is not a declared group"
+             function)
   (phony-remove-rule function)
   ;; TODO: Add element form checks:
   ;; - Each argument may only occur at most once.
@@ -787,6 +858,7 @@ documentation for `phony-rule'."
                 :elements elements)
       :arglist arglist
       :modes mode
+      :group group
       :export export
       :anchor-beginning-p anchor-beginning
       :anchor-end-p anchor-end))
@@ -839,6 +911,9 @@ of alternating KEY and VALUE.  Optional arguments are:
   :mode              A mode or list of modes for this rule should be
                      active.  Only relevant for exported rules.  Default
                      is 'global.
+  :group             A symbol, the group that this rule belongs to.
+                     Groups are defined by `phony-define-group'.
+                     Default is nil.
   :contributes-to    A symbol or list of symbols of open rules that this
                      procedure should contribute to.  See
                      `phony-define-open-rule' for open rules.  Default
