@@ -397,6 +397,38 @@ be one of the following:
       (error "No open rule %s defined" open-rule-name))
     (cl-pushnew alternative (phony--open-rule-alternatives rule))))
 
+(cl-defun phony--define-open-rule (name
+                                   &key
+                                   alternatives
+                                   contributes-to
+                                   transformation
+                                   group
+                                   external-name)
+  "See documentation for `phony-define-open-rule'."
+  (cl-assert (symbolp transformation) nil
+             "Transformation argument to rule %S must be a symbol"
+             name)
+  (cl-assert (phony--group-p group) nil
+             "Group argument to rule %S is not a declared group"
+             name)
+
+  ;; For finding the definition of this rule
+  (defalias name #'ignore
+    "Open rule for phony.")
+
+  (phony--add-rule
+   (make-phony--open-rule
+    :name name
+    :group group
+    :external-name (or external-name (phony--to-python-identifier name))
+    :transformation transformation
+    :alternatives alternatives))
+
+  (seq-doseq (to (ensure-list contributes-to))
+    (phony--add-alternative name to))
+
+  name)
+
 (cl-defmacro phony-define-open-rule (name
                                      &key
                                      alternatives
@@ -423,35 +455,13 @@ group.
 If EXTERNAL-NAME is given, it will be used for the name generated for
 this rule in the external speech engine."
   (declare (indent defun))
-  `(progn
-     ;; FIXME: These checks will potentially need to double
-     ;; evaluation.  Factor out all logic into defun.
-     (cl-assert (symbolp ,transformation) nil
-                "Transformation argument to rule %S must be a symbol"
-                ',name)
-     (cl-assert (symbolp ,group) nil
-                "Group argument to rule %S must be a quoted symbol"
-                ',name)
-     (cl-assert (phony--group-p ,group) nil
-                "Group argument to rule %S is not a declared group"
-                ',name)
-
-     ;; For finding the definition of this rule
-     (defalias ',name #'ignore
-       "Open rule for phony.")
-
-     (phony--add-rule
-      (make-phony--open-rule
-       :name ',name
-       :group ,group
-       :external-name ,(or external-name (phony--to-python-identifier name))
-       :transformation ,transformation
-       :alternatives ,alternatives))
-
-     (seq-doseq (to (ensure-list ,contributes-to))
-       (phony--add-alternative ',name to))
-
-     ',name))
+  `(phony--define-open-rule
+    ',name
+    :alternatives ,alternatives
+    :contributes-to ,contributes-to
+    :transformation ,transformation
+    :group ,group
+    :external-name ,external-name))
 
 (cl-defstruct phony--element-literal
   "Element matching a literal utterance."
