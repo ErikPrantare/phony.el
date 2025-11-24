@@ -99,7 +99,11 @@ See `phony-module' for information on how to define modules."
   ( file-name nil
     :type string
     :documentation
-    "Filename of the file defining this module."))
+    "Filename of the file defining this module.")
+  ( enabled nil
+    :type boolean
+    :documentation
+    "Whether the rules of this module should be exported."))
 
 (defvar phony--modules-by-file-name (make-hash-table :test #'equal)
   "All modules, indexed by filename.")
@@ -115,8 +119,11 @@ than one hardlink."
   (and-let* ((file-name (or load-file-name buffer-file-name)))
     (file-truename file-name)))
 
-(defun phony--declare-module-of-current-file (name utterance)
-  "Declare module named NAME for the current file."
+(defun phony--declare-module-of-current-file (name &optional utterance)
+  "Declare module named NAME for the current file.
+
+If given, UTTERANCE is a string specifying how this module is referred
+to as an utterance."
   (if-let ((file-name (phony--current-file-name)))
       (puthash file-name
                (phony--make-module
@@ -133,6 +140,10 @@ than one hardlink."
 This will define a new module named NAME.  Rules declared in the file
 that this form is evaluated in will be assigned to that module.
 
+A module can be disabled or enabled.  If it is disabled, the rules
+belonging to the module are not exported.  By default, newly defined
+modules are disabled.  To enable a module, use `phony-enable-module'.
+
 If given, UTTERANCE is a string specifying how this module is referred
 to as an utterance."
   `(phony--declare-module-of-current-file ',name ',utterance))
@@ -143,6 +154,19 @@ to as an utterance."
 If the currently loaded or visited file does not define a module with
 `phony-module', this function returns nil."
   (gethash (phony--current-file-name) phony--modules-by-file-name))
+
+(defun phony-enable-module (name)
+  "Enable module NAME.
+
+Unless a module is enabled, the rules belonging to it are not
+exported.  Rules not belonging to a module are always exported."
+  (setf (phony--module-enabled (phony--get-module name)) t))
+
+(defun phony-disable-module (name)
+  "Disable module NAME.
+
+Rules belonging to disabled modules are never exported."
+  (setf (phony--module-enabled (phony--get-module name)) nil))
 
 (cl-defstruct (phony--rule
                (:constructor nil))

@@ -1,5 +1,8 @@
 * NEXT
 - Added basic bindings for talon community.
+- Added module system.  Rules defined in libraries should be defined
+  in a module.  See documentation for ~phony-module~ for how to use
+  modules.
 
 * 0.2.1 [2025-10-09 Thu]
 - Missing directories are now created on first run.
