@@ -43,21 +43,14 @@
 (cl-defmethod phony--ast-match-string ((element phony--element-rule) rule)
   (let* ((occurrence-number (phony-talon--occurrence-number element rule))
          (match-rule (phony--get-rule (phony--element-rule-name element))))
-    (cond
-     ((not (phony--dictionary-p match-rule))
-      (format "<user.%s%s>"
-              (phony--external-name
-               (phony--get-rule
-                (phony--element-rule-name element)))
-              (if (>= occurrence-number 1)
-                  (format "_phony_clone%s"
-                          (1- occurrence-number))
-                "")))
-     ;; TODO: Also handle multiple occurences of dictionaries
-     (t (format "{user.%s}"
-                (phony--external-name
-                 (phony--get-rule
-                  (phony--element-rule-name element))))))))
+    (format "<user.%s%s>"
+            (phony--external-name
+             (phony--get-rule
+              (phony--element-rule-name element)))
+            (if (>= occurrence-number 1)
+                (format "_phony_clone%s"
+                        (1- occurrence-number))
+              ""))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-sequence) rule)
   (string-join (seq-map (lambda (element) (phony--ast-match-string element rule))
@@ -142,17 +135,9 @@
   (insert (format ":\n    user.phony_evaluate_emacs_lisp(%s)\n\n"
                   (phony--rule-external-name rule))))
 
-(cl-defgeneric phony--speech-insert-python (rule clone-amount))
+(cl-defgeneric phony--speech-insert-python (rule))
 
-(defun phony-talon--clone-rule (rule times)
-  (dotimes (i times)
-    (insert (format "\n@module.capture(rule='<user.%s>')\n"
-                    (phony--rule-external-name rule)))
-    (insert
-     (format "def %s_phony_clone%s(m) -> str:\n    return m[0]\n"
-             (phony--rule-external-name rule) i))))
-
-(cl-defmethod phony--speech-insert-python ((rule phony--open-rule) clone-amount)
+(cl-defmethod phony--speech-insert-python ((rule phony--open-rule))
   ;; Do not insert rule if there are no alternatives.  This filtering
   ;; should probably be done during analysis, not here.
   (when (phony--open-rule-alternatives rule)
@@ -170,9 +155,7 @@
              (if (phony--open-rule-transformation rule)
                  (format "f\"(%s {m[0]})\""
                          (phony--open-rule-transformation rule))
-               "m[0]")))
-
-    (phony-talon--clone-rule rule clone-amount)))
+               "m[0]")))))
 
 (defun phony-talon--find-argument-element (argument rule)
   "Find element matching ARGUMENT in RULE.
@@ -197,7 +180,7 @@ MATCH-ELEMENT among all of those `equal' to it."
    match-element
    #'eq))
 
-(cl-defmethod phony--speech-insert-python ((rule phony--procedure-rule) clone-amount)
+(cl-defmethod phony--speech-insert-python ((rule phony--procedure-rule))
   (insert "@module.capture(rule='" (phony--rule-talon-pattern rule) "')\n"
           "def " (phony--rule-external-name rule) "(m) -> str:\n")
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
@@ -243,14 +226,25 @@ MATCH-ELEMENT among all of those `equal' to it."
             (seq-map (lambda (argument)
                        (format "{%s}" (phony--to-python-identifier argument)))
                      (phony--procedure-rule-arglist rule))
-            " ")))
+            " "))))
 
-  (phony-talon--clone-rule rule clone-amount))
+(cl-defmethod phony--speech-insert-python ((rule phony--dictionary))
+  (insert "@module.capture(rule='{user." (phony--rule-external-name rule) "}')\n"
+          "def " (phony--rule-external-name rule) "(m) -> str:\n"
+          "    return m[0]"))
 
 (defvar phony-talon--always-listen nil
   "Whether to always listen for utterances, even if Emacs is not focused.
 
 If you are using EXWM, you probably want this to be t.")
+
+(defun phony-talon--clone-rule (rule times)
+  (dotimes (i times)
+    (insert (format "\n@module.capture(rule='<user.%s>')\n"
+                    (phony--rule-external-name rule)))
+    (insert
+     (format "def %s_phony_clone%s(m) -> str:\n    return m[0]\n"
+             (phony--rule-external-name rule) i))))
 
 (cl-defun phony-talon--export-mode (mode entries)
   (with-temp-file (phony--output-directory "talon"
@@ -268,8 +262,7 @@ If you are using EXWM, you probably want this to be t.")
 
 (defun phony-talon-export (analysis-data)
   (mkdir (phony--output-directory "talon") t)
-  (let* (;; Handle dictionaries here as well?
-         (rules (seq-remove #'phony--dictionary-p (phony--get-rules)))
+  (let* ((rules (phony--get-rules))
          (modes (seq-uniq
                  (seq-mapcat (lambda (rule)
                                (when (phony--procedure-rule-p rule)
@@ -352,7 +345,8 @@ If you are using EXWM, you probably want this to be t.")
               "    return formatted\n\n")
       (seq-doseq (rule rules)
         (insert "\n")
-        (phony--speech-insert-python
+        (phony--speech-insert-python rule)
+        (phony-talon--clone-rule
          rule
          (max 0 (1- (phony--maximum-backward-multiplicity analysis-data rule))))))
 
