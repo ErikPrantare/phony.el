@@ -92,6 +92,10 @@ See `phony-module' for information on how to define modules."
     :type symbol
     :documentation
     "Name of this module.")
+  ( utterance nil
+    :type string
+    :documentation
+    "Utterance for referring to this module.")
   ( file-name nil
     :type string
     :documentation
@@ -111,18 +115,27 @@ than one hardlink."
   (and-let* ((file-name (or load-file-name buffer-file-name)))
     (file-truename file-name)))
 
-(defun phony--declare-module-of-current-file (name)
+(defun phony--declare-module-of-current-file (name utterance)
   "Declare module named NAME for the current file."
   (if-let ((file-name (phony--current-file-name)))
-      (puthash file-name name phony--modules-by-file-name)
-    (error "No current file could be found")))
+      (puthash file-name
+               (phony--make-module
+                :name name
+                :utterance utterance
+                :file-name file-name)
+               phony--modules-by-file-name)
+    (error "No current file could be found"))
+  name)
 
-(defmacro phony-module (name)
+(defmacro phony-module (name &optional utterance)
   "Declare current file a phony module.
 
 This will define a new module named NAME.  Rules declared in the file
-that this form is evaluated in will be assigned to that module."
-  `(phony--declare-module-of-current-file ',name))
+that this form is evaluated in will be assigned to that module.
+
+If given, UTTERANCE is a string specifying how this module is referred
+to as an utterance."
+  `(phony--declare-module-of-current-file ',name ',utterance))
 
 (defun phony--current-module ()
   "Return the current module.
@@ -137,13 +150,13 @@ If the currently loaded or visited file does not define a module with
 
 NAME is the name of the rule.
 
-MODULE is a symbol denoting which module this rule belongs to.  Modules
-are specified with `phony-module'.
+MODULE is a the module this rule belongs to.  Modules are specified with
+`phony-module'.
 
 EXTERNAL-NAME is the name this rule will have for the speech recognition
 engine, and should be a string."
   (name nil :type symbol)
-  (module nil :type symbol)
+  (module nil :type phony--module)
   (external-name nil :type string))
 
 (cl-defstruct (phony--procedure-rule
