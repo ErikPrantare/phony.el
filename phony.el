@@ -55,7 +55,7 @@ command."
 If EmacsListen is installed and loaded, FORM is evaluated with
 `emacslisten-evaluate'.  Otherwise, it is immediately evaluated with
 `eval'."
-  (if (boundp #'emacslisten-evaluate)
+  (if (fboundp #'emacslisten-evaluate)
       (emacslisten-evaluate form)
     (eval form)))
 
