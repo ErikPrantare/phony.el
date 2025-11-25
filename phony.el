@@ -123,20 +123,21 @@ than one hardlink."
 (define-multisession-variable phony--enabled-modules '()
   "Names of modules that are enabled across sessions.")
 
-(defun phony--declare-module-of-current-file (name &optional utterance)
+(defun phony--declare-module-of-current-file (name utterance)
   "Declare module named NAME for the current file.
 
-If given, UTTERANCE is a string specifying how this module is referred
-to as an utterance."
-  (if-let ((file-name (phony--current-file-name)))
-      (puthash file-name
-               (phony--make-module
-                :name name
-                :utterance utterance
-                :file-name file-name
-                :enabled-p (memq name (multisession-value phony--enabled-modules)))
-               phony--modules-by-file-name)
-    (error "No current file could be found"))
+UTTERANCE is a string specifying how this module is referred to as an
+utterance."
+  (let ((file-name (phony--current-file-name)))
+    (cl-assert file-name nil "No current file could be found")
+    (puthash file-name
+             (phony--make-module
+              :name name
+              :utterance utterance
+              :file-name file-name
+              :enabled-p (memq name (multisession-value phony--enabled-modules)))
+             phony--modules-by-file-name)
+    (phony-dictionary-put utterance rule/phony-module name))
   name)
 
 (defmacro phony-module (name &optional utterance)
@@ -191,7 +192,7 @@ exported.  Rules not belonging to a module are always exported."
   (when persist
     (cl-pushnew name (multisession-value phony--enabled-modules)))
   (phony-request-export)
-  (message "Enabled phony module %s" name))
+  (message "Enabled %s module" name))
 
 (defun phony-disable-module (name &optional persist)
   "Disable module NAME.
@@ -213,7 +214,7 @@ Rules belonging to disabled modules are never exported."
     (setf (multisession-value phony--enabled-modules)
           (delq name (multisession-value phony--enabled-modules))))
   (phony-request-export)
-  (message "Disabled phony module %s" name))
+  (message "Disabled %s module" name))
 
 (cl-defstruct (phony--rule
                (:constructor nil))
@@ -387,11 +388,15 @@ dictionaries."
      (mapcar #'phony--prepare-dictionary-for-serialization
              (seq-filter #'phony--dictionary-p (phony--get-rules))))))
 
+(defvar phony--deny-export-requests-p nil
+  "Non-nil if requests to export should always be denied.")
+
 (defun phony--request-export-dictionaries ()
   "Sync DICTIONARY-NAMES when next idle."
   (interactive)
-  (cancel-function-timers #'phony--export-dictionaries)
-  (run-with-idle-timer 0.0 nil #'phony--export-dictionaries))
+  (unless phony--deny-export-requests-p
+    (cancel-function-timers #'phony--export-dictionaries)
+    (run-with-idle-timer 0.0 nil #'phony--export-dictionaries)))
 
 (cl-defun phony--define-dictionary (name
                                     mapping
@@ -903,10 +908,14 @@ If any errors are detected in the grammar, the rules are not exported."
       (funcall phony-export-function analysis-data))))
 
 (defun phony-request-export ()
-  "Export all rules when next idle."
+  "Export all rules when next idle.
+
+If `phony--deny-export-request-p' is non-nil, just return immediately
+instead."
   (interactive)
-  (cancel-function-timers #'phony--export-all)
-  (run-with-idle-timer 0 nil #'phony--export-all))
+  (unless phony--deny-export-requests-p
+    (cancel-function-timers #'phony--export-all)
+    (run-with-idle-timer 0 nil #'phony--export-all)))
 
 (cl-defun phony--export-rule (function
                               arglist
@@ -1012,6 +1021,27 @@ of alternating KEY and VALUE.  Optional arguments are:
 
 \(fn [KEY VALUE]... ELEMENTS...)"
   `(message "Stray `phony-rule' form: %S" '(phony-rule . ,args)))
+
+(let ((phony--deny-export-requests-p t))
+  ;; Define all builtin rules here.  We suppress export, as the user
+  ;; may not have set the correct exporter yet.
+  (phony-define-dictionary rule/phony-module '())
+
+  (defun rule/phony-enable-module (&optional name)
+    (declare (phony-rule
+              "phony enable"
+              (? (name rule/phony-module))))
+    (if name
+        (phony-enable-module name (y-or-n-p (format "Enable %s for future sessions? " name)))
+      (call-interactively #'phony-enable-module)))
+
+  (defun rule/phony-disable-module (name)
+    (declare (phony-rule
+              "phony disable"
+              (? (name rule/phony-module))))
+    (if name
+        (phony-enable-module name (y-or-n-p (format "Disable %s for future sessions? " name)))
+      (call-interactively #'phony-disable-module))))
 
 (require 'phony-talon)
 (require 'phony-dragonfly)
