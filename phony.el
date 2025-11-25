@@ -6,7 +6,7 @@
 ;; Keywords: files
 ;; Version: 0.2.1
 ;; Homepage: https://github.com/ErikPrantare/phony.el
-;; Package-Requires: ((emacs "28.1"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Created: 13 Jul 2024
 
 ;; This program is free software; you can redistribute it and/or
@@ -100,7 +100,7 @@ See `phony-module' for information on how to define modules."
     :type string
     :documentation
     "Filename of the file defining this module.")
-  ( enabled nil
+  ( enabled-p nil
     :type boolean
     :documentation
     "Whether the rules of this module should be exported."))
@@ -119,6 +119,9 @@ than one hardlink."
   (and-let* ((file-name (or load-file-name buffer-file-name)))
     (file-truename file-name)))
 
+(define-multisession-variable phony--enabled-modules '()
+  "Names of modules that are enabled across sessions.")
+
 (defun phony--declare-module-of-current-file (name &optional utterance)
   "Declare module named NAME for the current file.
 
@@ -129,7 +132,8 @@ to as an utterance."
                (phony--make-module
                 :name name
                 :utterance utterance
-                :file-name file-name)
+                :file-name file-name
+                :enabled-p (memq name (multisession-value phony--enabled-modules)))
                phony--modules-by-file-name)
     (error "No current file could be found"))
   name)
@@ -155,18 +159,60 @@ If the currently loaded or visited file does not define a module with
 `phony-module', this function returns nil."
   (gethash (phony--current-file-name) phony--modules-by-file-name))
 
-(defun phony-enable-module (name)
+(defun phony--modules ()
+  "Return list of all modules."
+  (map-values phony--modules-by-file-name))
+
+(defun phony--get-module (name)
+  "Return module with NAME.
+
+If no such module exists, this function returns nil."
+  (seq-find (lambda (module) (eq (phony--module-name module) name))
+            (phony--modules)))
+
+(defun phony-enable-module (name &optional persist)
   "Enable module NAME.
+
+If PERSIST is non-nil, the module will stay enabled across sessions.
 
 Unless a module is enabled, the rules belonging to it are not
 exported.  Rules not belonging to a module are always exported."
-  (setf (phony--module-enabled (phony--get-module name)) t))
+  (interactive (let* ((name (intern (completing-read
+                                     "Enable phony module: "
+                                     (seq-map #'phony--module-name
+                                              (seq-remove #'phony--module-enabled-p
+                                                          (phony--modules))))))
+                      (persist (y-or-n-p (format "Enable %s for future sessions? " name))))
+                 (list name persist)))
+  (cl-assert (phony--get-module name) nil
+             "No module named %s" name)
+  (setf (phony--module-enabled-p (phony--get-module name)) t)
+  (when persist
+    (cl-pushnew name (multisession-value phony--enabled-modules)))
+  (phony-request-export)
+  (message "Enabled phony module %s" name))
 
-(defun phony-disable-module (name)
+(defun phony-disable-module (name &optional persist)
   "Disable module NAME.
 
+If PERSIST is non-nil, the module will stay disabled across sessions.
+
 Rules belonging to disabled modules are never exported."
-  (setf (phony--module-enabled (phony--get-module name)) nil))
+  (interactive (let* ((name (intern (completing-read
+                                     "Disable phony module: "
+                                     (seq-map #'phony--module-name
+                                              (seq-filter #'phony--module-enabled-p
+                                                          (phony--modules))))))
+                      (persist (y-or-n-p (format "Disable %s for future sessions? " name))))
+                 (list name persist)))
+  (cl-assert (phony--get-module name) nil
+             "No module named %s" name)
+  (setf (phony--module-enabled-p (phony--get-module name)) nil)
+  (when persist
+    (setf (multisession-value phony--enabled-modules)
+          (delq name (multisession-value phony--enabled-modules))))
+  (phony-request-export)
+  (message "Disabled phony module %s" name))
 
 (cl-defstruct (phony--rule
                (:constructor nil))
