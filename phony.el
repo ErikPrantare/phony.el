@@ -31,6 +31,7 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'map)
 
 (defgroup phony nil
   "Functionality for defining speech bindings."
