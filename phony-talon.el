@@ -135,9 +135,9 @@
   (insert (format ":\n    user.phony_evaluate_emacs_lisp(%s)\n\n"
                   (phony--rule-external-name rule))))
 
-(cl-defgeneric phony--speech-insert-python (rule))
+(cl-defgeneric phony-talon--insert-python (rule))
 
-(cl-defmethod phony--speech-insert-python ((rule phony--open-rule))
+(cl-defmethod phony-talon--insert-python ((rule phony--open-rule))
   ;; Do not insert rule if there are no alternatives.  This filtering
   ;; should probably be done during analysis, not here.
   (when (phony--open-rule-alternatives rule)
@@ -180,7 +180,7 @@ MATCH-ELEMENT among all of those `equal' to it."
    match-element
    #'eq))
 
-(cl-defmethod phony--speech-insert-python ((rule phony--procedure-rule))
+(cl-defmethod phony-talon--insert-python ((rule phony--procedure-rule))
   (insert "@module.capture(rule='" (phony--rule-talon-pattern rule) "')\n"
           "def " (phony--rule-external-name rule) "(m) -> str:\n")
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
@@ -228,10 +228,16 @@ MATCH-ELEMENT among all of those `equal' to it."
                      (phony--procedure-rule-arglist rule))
             " "))))
 
-(cl-defmethod phony--speech-insert-python ((rule phony--dictionary))
+(cl-defmethod phony-talon--insert-python ((rule phony--dictionary))
   (insert "@module.capture(rule='{user." (phony--rule-external-name rule) "}')\n"
           "def " (phony--rule-external-name rule) "(m) -> str:\n"
           "    return m[0]"))
+
+(defun phony-talon--insert-python-disabled (rule)
+  (insert "# Disabled\n"
+          "@module.capture(rule='')\n"
+          "def " (phony--rule-external-name rule) "(m) -> str:\n"
+          "    return False"))
 
 (defvar phony-talon--always-listen nil
   "Whether to always listen for utterances, even if Emacs is not focused.
@@ -345,7 +351,9 @@ If you are using EXWM, you probably want this to be t.")
               "    return formatted\n\n")
       (seq-doseq (rule rules)
         (insert "\n")
-        (phony--speech-insert-python rule)
+        (if (phony--rule-enabled-p rule)
+            (phony-talon--insert-python rule)
+          (phony-talon--insert-python-disabled rule))
         (phony-talon--clone-rule
          rule
          (max 0 (1- (phony--maximum-backward-multiplicity analysis-data rule))))))

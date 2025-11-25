@@ -229,6 +229,12 @@ engine, and should be a string."
   (module nil :type phony--module)
   (external-name nil :type string))
 
+(defun phony--rule-enabled-p (rule)
+  "Return non-nil if RULE is enabled."
+  (if-let ((module (phony--rule-module rule)))
+      (phony--module-enabled-p module)
+    t))
+
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
   (function '() :type function)
