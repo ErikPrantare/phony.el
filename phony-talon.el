@@ -235,7 +235,7 @@ MATCH-ELEMENT among all of those `equal' to it."
 
 (defun phony-talon--insert-python-disabled (rule)
   (insert "# Disabled\n"
-          "@module.capture(rule='')\n"
+          "@module.capture(rule='<user.disabled_phony_rule>')\n"
           "def " (phony--rule-external-name rule) "(m) -> str:\n"
           "    return False"))
 
@@ -364,6 +364,12 @@ If you are using EXWM, you probably want this to be t.")
           (make-symbolic-link (phony--output-directory "talon")
                               link-path t)
         (warn "Path already exists and is not preexistent symlink: %S" link-path)))))
+
+(let ((phony--deny-export-requests-p t))
+  ;; Empty lists create no matches yet emit no errors.
+  (phony-define-dictionary rule/phony-talon--disabled-rule
+    :external-name "disabled_phony_rule"
+    '()))
 
 (provide 'phony-talon)
 ;;; phony-talon.el ends here
