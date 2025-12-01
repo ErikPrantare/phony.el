@@ -259,19 +259,14 @@ If you are using EXWM, you probably want this to be t.")
      (format "def %s_phony_clone%s(m) -> str:\n    return m[0]\n"
              (phony--rule-external-name rule) i))))
 
-(cl-defun phony-talon--export-mode (mode entries)
-  (with-temp-file (phony--output-directory "talon"
-                                           (format "%s.talon" mode))
-    (unless (eq mode 'global)
-      (insert (format "user.emacs_mode: /:%s:/\n" mode)))
-    (unless phony-talon--always-listen
-      (insert "app: emacs\n"))
-    (insert "-\n")
-    (seq-doseq (rule entries)
-      (when (and
-             (phony--procedure-rule-p rule)
-             (phony--procedure-rule-export rule))
-        (phony--speech-insert-rule rule)))))
+(cl-defun phony-talon--insert-exported-rules (rules)
+  (unless phony-talon--always-listen (insert "app: emacs\n"))
+  (insert "-\n")
+  (seq-doseq (rule rules)
+    (when (and
+           (phony--procedure-rule-p rule)
+           (phony--procedure-rule-export rule))
+      (phony--speech-insert-rule rule))))
 
 (defun phony-talon-export (analysis-data)
   (mkdir (phony--output-directory "talon") t)
@@ -281,14 +276,8 @@ If you are using EXWM, you probably want this to be t.")
                                (when (phony--procedure-rule-p rule)
                                  (phony--procedure-rule-modes rule)))
                              rules))))
-    (seq-doseq (mode modes)
-      (phony-talon--export-mode
-       mode
-       (seq-filter
-        (lambda (rule)
-          (and (phony--procedure-rule-p rule)
-               (seq-contains-p (phony--procedure-rule-modes rule) mode)))
-        rules)))
+    (with-temp-file (phony--output-directory "talon" "exported-rules.talon")
+      (phony-talon--insert-exported-rules rules))
 
     (with-temp-file (phony--output-directory
                      "talon"
