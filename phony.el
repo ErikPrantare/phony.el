@@ -402,16 +402,17 @@ dictionaries."
 (cl-defun phony--define-dictionary (name
                                     mapping
                                     &key
-                                    (external-name nil)
+                                    external-name
                                     (mode 'global)
-                                    (format-raw nil))
+                                    format-raw
+                                    contributes-to)
   "Define dictionary rule NAME containing MAPPING.
 
 If FORMAT-RAW is t, the dictionary will be formated for use on the side
 of the speech recognition engine.  This only works if the values of the
 dictionary are strings.
 
-EXTERNAL-NAME and MODE are the same as for `phony-rule'."
+MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-rule'."
   (unless external-name (setq external-name (phony--to-python-identifier name)))
   (setq mode (ensure-list mode))
 
@@ -452,7 +453,13 @@ to NEW-VALUE in this dictionary and re-export dictionary definitions."))
     :external-name external-name
     :format-raw-p format-raw
     :modes mode))
-  (phony--request-export-dictionaries))
+
+  (seq-doseq (to (ensure-list contributes-to))
+    (phony--add-alternative name to))
+
+  (if (or contributes-to (not (memq 'global mode)))
+      (phony-request-export)
+    (phony--request-export-dictionaries)))
 
 (defun phony--split-keywords-rest (declaration-args)
   "Split DECLARATION-ARGS into keyword arguments and rest arguments.
@@ -483,6 +490,7 @@ be one of the following:
                     strings.
   :mode             Same as for `phony-rule'.
   :external-name    Same as for `phony-rule'.
+  :contributes-to   Same as for `phony-rule'.
 
 \(fn NAME [KEY VALUE]... ALIST)"
   (declare (indent defun))
