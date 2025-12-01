@@ -225,10 +225,16 @@ NAME is the name of the rule.
 MODULE is a the module this rule belongs to.  Modules are specified with
 `phony-module'.
 
+MODES is a list of modes under which this rule is active.  If none of
+the modes are active, this rule cannot be matched.  A special case is
+the 'global symbol, which indicates that the rule should always be
+active.
+
 EXTERNAL-NAME is the name this rule will have for the speech recognition
 engine, and should be a string."
   (name nil :type symbol)
   (module nil :type phony--module)
+  (modes '(global) :type list)
   (external-name nil :type string))
 
 (defun phony--rule-enabled-p (rule)
@@ -243,7 +249,6 @@ engine, and should be a string."
   (element nil :type phony--element-sequence)
   (arglist '() :type (repeat symbol))
   (export t :type boolean)
-  (modes '(global) :type (repeat symbol))
   (anchor-beginning-p nil :type boolean)
   (anchor-end-p nil :type boolean))
 
@@ -256,11 +261,7 @@ engine, and should be a string."
 (cl-defstruct (phony--dictionary
                (:include phony--rule)
                (:constructor nil)
-               (:constructor phony--make-dictionary
-                             (name
-                              &key
-                              (external-name (phony--to-python-identifier name))
-                              format-raw-p)))
+               (:constructor phony--make-dictionary))
   "A dictionary mapping utterances to values.
 
 NAME must be the symbol containing the mapping, an alist.
@@ -402,15 +403,17 @@ dictionaries."
                                     mapping
                                     &key
                                     (external-name nil)
+                                    (mode 'global)
                                     (format-raw nil))
   "Define dictionary rule NAME containing MAPPING.
 
-If provided, EXTERNAL-NAME specifies the name that the rule will go
-under for the external speech engine.  If FORMAT-RAW is t, the
-dictionary will be formated for use on the side of the speech
-recognition engine.  This only works if the values of the dictionary are
-strings."
+If FORMAT-RAW is t, the dictionary will be formated for use on the side
+of the speech recognition engine.  This only works if the values of the
+dictionary are strings.
+
+EXTERNAL-NAME and MODE are the same as for `phony-rule'."
   (unless external-name (setq external-name (phony--to-python-identifier name)))
+  (setq mode (ensure-list mode))
 
   (unless (proper-list-p mapping)
     (error "The mapping of %s must be a list" name))
@@ -445,9 +448,10 @@ to NEW-VALUE in this dictionary and re-export dictionary definitions."))
 
   (phony--add-rule
    (phony--make-dictionary
-    name
+    :name name
     :external-name external-name
-    :format-raw-p format-raw))
+    :format-raw-p format-raw
+    :modes mode))
   (phony--request-export-dictionaries))
 
 (defun phony--split-keywords-rest (declaration-args)
@@ -474,10 +478,11 @@ corresponding value.
 Optional arguments are given as named arguments before ALIST.  They can
 be one of the following:
 
-  :external-name    Name to expose to the external engine.
   :format-raw       Export values in a form usable by the engine,
                     not Emacs.  This only works when the values are
                     strings.
+  :mode             Same as for `phony-rule'.
+  :external-name    Same as for `phony-rule'.
 
 \(fn NAME [KEY VALUE]... ALIST)"
   (declare (indent defun))
@@ -501,9 +506,11 @@ be one of the following:
                                    alternatives
                                    contributes-to
                                    transformation
-                                   external-name)
+                                   external-name
+                                   mode)
   "See documentation for `phony-define-open-rule'."
   (unless external-name (setq external-name (phony--to-python-identifier name)))
+  (setq mode (ensure-list (or mode 'global)))
 
   (cl-assert (symbolp transformation) nil
              "Transformation argument to rule %S must be a symbol"
@@ -518,7 +525,8 @@ be one of the following:
     :name name
     :external-name external-name
     :transformation transformation
-    :alternatives alternatives))
+    :alternatives alternatives
+    :modes mode))
 
   (seq-doseq (to (ensure-list contributes-to))
     (phony--add-alternative name to))
@@ -530,28 +538,29 @@ be one of the following:
                                      alternatives
                                      contributes-to
                                      transformation
+                                     mode
                                      external-name)
   "Define NAME as an open rule.
 
 Open rules match any of the rules specified in ALTERNATIVES.  Other
 rules may add themselves to the list of alternatives by specifying
-this rule in their CONTRIBUTES-TO argument.  CONTRIBUTES-TO should be
-the name of an open rule, or a list of names.
+this rule in their CONTRIBUTES-TO argument.
 
 The value of matching this rule is the value of matching the
 corresponding alternative.  If a function TRANSFORMATION is given, the
 value is first passed through TRANSFORMATION.  Otherwise, the value is
 passed through without modification.
 
-If EXTERNAL-NAME is given, it will be used for the name generated for
-this rule in the external speech engine."
+Optional keyword arguments MODE, CONTRIBUTES-TO and EXTERNAL-NAME are
+the same as for `phony-rule'."
   (declare (indent defun))
   `(phony--define-open-rule
     ',name
     :alternatives ,alternatives
     :contributes-to ,contributes-to
     :transformation ,transformation
-    :external-name ,external-name))
+    :external-name ,external-name
+    :mode ,mode))
 
 (cl-defstruct phony--element-literal
   "Element matching a literal utterance."
@@ -1008,8 +1017,9 @@ of alternating KEY and VALUE.  Optional arguments are:
   :export            If nil, this rule cannot be spoken directly but may
                      occur as part of other rules.  Default is t.
   :mode              A mode or list of modes for this rule should be
-                     active.  Only relevant for exported rules.  Default
-                     is 'global.
+                     active.  If none of the modes match, this rule
+                     never matches.  As a special case, 'global always
+                     matches.  Default is 'global.
   :contributes-to    A symbol or list of symbols of open rules that this
                      procedure should contribute to.  See
                      `phony-define-open-rule' for open rules.  Default
@@ -1018,6 +1028,9 @@ of alternating KEY and VALUE.  Optional arguments are:
                      Default is nil.
   :anchor-end        If t, this rule must occur last in an utterance.
                      Default is nil.
+  :external-name     If given, this rule will be given this name for
+                     the external speech engine.  Otherwise, it gets
+                     assigned an unspecified auto-generated name.
 
 \(fn [KEY VALUE]... ELEMENTS...)"
   `(message "Stray `phony-rule' form: %S" '(phony-rule . ,args)))

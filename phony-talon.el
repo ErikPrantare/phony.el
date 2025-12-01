@@ -89,16 +89,22 @@
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--procedure-rule))
   (let* ((element (phony--procedure-rule-element rule)))
-    (phony--ast-match-string element rule)))
+    (concat "'" (phony--ast-match-string element rule) "'")))
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--open-rule))
-  (string-join (seq-map
-                (lambda (alternative)
-                  (format "<user.%s>"
-                          (phony--rule-external-name
-                           (phony--get-rule alternative))))
-                (phony--open-rule-alternatives rule))
-               " | "))
+  (if (phony--open-rule-alternatives rule)
+      (concat
+       "\n        '  "
+       (string-join (seq-map
+                     (lambda (alternative)
+                       (format "<user.%s>'"
+                               (phony--external-name alternative)))
+                     (phony--open-rule-alternatives rule))
+                    "\n        '| "))
+    "'<user.disabled_phony_rule>'"))
+
+(cl-defmethod phony--rule-talon-pattern ((rule phony--dictionary))
+  (concat "'{user." (phony--rule-external-name rule) "}'"))
 
 (cl-defgeneric phony--argument-context (argument elements)
   nil)
@@ -135,27 +141,30 @@
   (insert (format ":\n    user.phony_evaluate_emacs_lisp(%s)\n\n"
                   (phony--rule-external-name rule))))
 
+(defun phony-talon--insert-capture-preamble (rule)
+  (if (memq 'global (phony--rule-modes rule))
+      (insert "@module.capture(rule=" (phony--rule-talon-pattern rule) ")\n")
+    (insert "# Base case for when the relevant mode is not active\n")
+    (phony-talon--insert-python-disabled rule)
+    (insert "\ncontext = talon.Context()\n")
+    (insert "context.matches = \"\"\"\n"
+            (string-join (seq-map (lambda (mode) (concat "user.emacs_mode: /:" (symbol-name mode) ":/"))
+                                  (phony--rule-modes rule))
+                         "\n")
+            "\n\"\"\"\n")
+    (insert "@context.capture('user." (phony--rule-external-name rule)
+            "', rule=" (phony--rule-talon-pattern rule) ")\n")))
+
 (cl-defgeneric phony-talon--insert-python (rule))
 
 (cl-defmethod phony-talon--insert-python ((rule phony--open-rule))
-  ;; Do not insert rule if there are no alternatives.  This filtering
-  ;; should probably be done during analysis, not here.
-  (when (phony--open-rule-alternatives rule)
-    (insert "@module.capture(rule=\n        '  "
-            (string-join (seq-map
-                          (lambda (alternative)
-                            (format "<user.%s>'"
-                                    (phony--external-name alternative)))
-                          (phony--open-rule-alternatives rule))
-                         "\n        '| ")
-            ")\n")
-    (insert
-     (format "def %s(m) -> str:\n    return %s\n"
-             (phony--rule-external-name rule)
-             (if (phony--open-rule-transformation rule)
-                 (format "f\"(%s {m[0]})\""
-                         (phony--open-rule-transformation rule))
-               "m[0]")))))
+  (insert
+   (format "def %s(m) -> str:\n    return %s\n"
+           (phony--rule-external-name rule)
+           (if (phony--open-rule-transformation rule)
+               (format "f\"(%s {m[0]})\""
+                       (phony--open-rule-transformation rule))
+             "m[0]"))))
 
 (defun phony-talon--find-argument-element (argument rule)
   "Find element matching ARGUMENT in RULE.
@@ -181,8 +190,7 @@ MATCH-ELEMENT among all of those `equal' to it."
    #'eq))
 
 (cl-defmethod phony-talon--insert-python ((rule phony--procedure-rule))
-  (insert "@module.capture(rule='" (phony--rule-talon-pattern rule) "')\n"
-          "def " (phony--rule-external-name rule) "(m) -> str:\n")
+  (insert "def " (phony--rule-external-name rule) "(m) -> str:\n")
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
     (let* ((argument-element
             (phony-talon--find-argument-element argument rule)))
@@ -229,15 +237,14 @@ MATCH-ELEMENT among all of those `equal' to it."
             " "))))
 
 (cl-defmethod phony-talon--insert-python ((rule phony--dictionary))
-  (insert "@module.capture(rule='{user." (phony--rule-external-name rule) "}')\n"
-          "def " (phony--rule-external-name rule) "(m) -> str:\n"
+  (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
           "    return m[0]"))
 
 (defun phony-talon--insert-python-disabled (rule)
   (insert "# Disabled\n"
           "@module.capture(rule='<user.disabled_phony_rule>')\n"
           "def " (phony--rule-external-name rule) "(m) -> str:\n"
-          "    return False"))
+          "    return False\n"))
 
 (defvar phony-talon--always-listen nil
   "Whether to always listen for utterances, even if Emacs is not focused.
@@ -331,7 +338,6 @@ If you are using EXWM, you probably want this to be t.")
     (with-temp-file (phony--output-directory "talon" "rules.py")
       (insert "import talon\n\n"
               "module = talon.Module()\n"
-              "context = talon.Context()\n\n"
               ;; I heard you like escapes
               "def quote_string(str):\n"
               "    return '\"' + str.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\") + '\"'"
@@ -351,9 +357,10 @@ If you are using EXWM, you probably want this to be t.")
               "    return formatted\n\n")
       (seq-doseq (rule rules)
         (insert "\n")
-        (if (phony--rule-enabled-p rule)
-            (phony-talon--insert-python rule)
-          (phony-talon--insert-python-disabled rule))
+        (if (not (phony--rule-enabled-p rule))
+            (phony-talon--insert-python-disabled rule)
+          (phony-talon--insert-capture-preamble rule)
+          (phony-talon--insert-python rule))
         (phony-talon--clone-rule
          rule
          (max 0 (1- (phony--maximum-backward-multiplicity analysis-data rule))))))
