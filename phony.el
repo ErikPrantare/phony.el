@@ -430,20 +430,29 @@ MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-rule'."
            name (car non-string-key)))
 
   (defalias name
-    (lambda (&optional utterance new-value)
+    (lambda (&optional utterance-or-alist new-value)
       (:documentation (concat "Return the alist of dictionary `"
                               (symbol-name name)
-                              "'.\nIf UTTERANCE is given, return instead the corresponding value of the
-alist.  If NEW-VALUE is provided as well, associate instead UTTERANCE
-to NEW-VALUE in this dictionary and re-export dictionary definitions."))
-      (if utterance
+                              "'.\nIf UTTERANCE, a string, is given, return instead the corresponding
+value of the alist.  If NEW-VALUE is provided but not UTTERANCE,
+reassign instead the full dictionary to NEW-VALUE.  If NEW-VALUE and
+UTTERANCE are both provided, reassign instead UTTERANCE to NEW-VALUE.
+
+Upon modification of the dictionary, it is also exported.
+
+\(fn [UTTERANCE] NEW-VALUE)"))
+      (if (stringp utterance-or-alist)
           (if new-value
               (progn
-                (setf (alist-get utterance mapping nil nil #'equal)
+                (setf (alist-get utterance-or-alist mapping nil nil #'equal)
                       new-value)
                 (phony--request-export-dictionaries))
-            (alist-get utterance mapping nil nil #'equal))
-        mapping)))
+            (alist-get utterance-or-alist mapping nil nil #'equal))
+        (if utterance-or-alist
+            (progn
+              (setq mapping utterance-or-alist)
+              (phony--request-export-dictionaries))
+            mapping))))
 
   (eval `(gv-define-simple-setter ,name ,name))
 
