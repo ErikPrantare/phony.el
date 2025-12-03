@@ -142,18 +142,12 @@
                   (phony--rule-external-name rule))))
 
 (defun phony-talon--insert-capture-preamble (rule)
-  (if (memq 'global (phony--rule-modes rule))
-      (insert "@module.capture(rule=" (phony--rule-talon-pattern rule) ")\n")
-    (insert "# Base case for when the relevant mode is not active\n")
-    (phony-talon--insert-python-disabled rule)
-    (insert "\ncontext = talon.Context()\n")
-    (insert "context.matches = \"\"\"\n"
-            (string-join (seq-map (lambda (mode) (concat "user.emacs_mode: /:" (symbol-name mode) ":/"))
-                                  (phony--rule-modes rule))
-                         "\n")
-            "\n\"\"\"\n")
-    (insert "@context.capture('user." (phony--rule-external-name rule)
-            "', rule=" (phony--rule-talon-pattern rule) ")\n")))
+  (insert "# Base case for when the rule is inactive\n")
+  (phony-talon--insert-python-disabled rule)
+  (insert "\ncontext = talon.Context()\n")
+  (insert "context.matches = \"\"\"\ntag: user." (phony--rule-external-name rule) "\n\"\"\"\n")
+  (insert "@context.capture('user." (phony--rule-external-name rule)
+          "', rule=" (phony--rule-talon-pattern rule) ")\n"))
 
 (cl-defgeneric phony-talon--insert-python (rule))
 
@@ -294,7 +288,6 @@ If you are using EXWM, you probably want this to be t.")
               "        for list_name in message:\n"
               "            module.list(list_name, '')\n"
               "            context.lists['user.' + list_name] = message[list_name]\n"
-              "            print('Loaded list ' + list_name)\n"
               "\n"
               "path = '" (phony--output-directory "dictionaries.json") "'\n"
               "if os.path.isfile(path):\n"
@@ -346,10 +339,10 @@ If you are using EXWM, you probably want this to be t.")
               "    return formatted\n\n")
       (seq-doseq (rule rules)
         (insert "\n")
-        (if (not (phony--rule-enabled-p rule))
-            (phony-talon--insert-python-disabled rule)
-          (phony-talon--insert-capture-preamble rule)
-          (phony-talon--insert-python rule))
+        (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
+                        (phony--external-name rule)))
+        (phony-talon--insert-capture-preamble rule)
+        (phony-talon--insert-python rule)
         (phony-talon--clone-rule
          rule
          (max 0 (1- (phony--maximum-backward-multiplicity analysis-data rule))))))

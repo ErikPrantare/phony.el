@@ -237,11 +237,24 @@ engine, and should be a string."
   (modes '(global) :type list)
   (external-name nil :type string))
 
-(defun phony--rule-enabled-p (rule)
-  "Return non-nil if RULE is enabled."
-  (if-let ((module (phony--rule-module rule)))
-      (phony--module-enabled-p module)
-    t))
+(defun phony--rule-active-p (rule)
+  "Return non-nil if RULE is active.
+
+A rule is inactive if it belongs to a disabled module or none of its
+modes are currently active."
+  (and
+   (let ((modes (phony--rule-modes rule)))
+     (or
+      (memq 'global modes)
+      (derived-mode-p modes)
+      (seq-some (lambda (mode)
+                  (or
+                   (memq mode local-minor-modes)
+                   (memq mode global-minor-modes)))
+                modes)))
+   (if-let ((module (phony--rule-module rule)))
+       (phony--module-enabled-p module)
+     t)))
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
