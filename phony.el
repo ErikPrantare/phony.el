@@ -231,11 +231,15 @@ the 'global symbol, which indicates that the rule should always be
 active.
 
 EXTERNAL-NAME is the name this rule will have for the speech recognition
-engine, and should be a string."
+engine, and should be a string.
+
+WHEN is a predicate of no arguments which returns nil if the rule should
+be inactive.  If WHEN is nil, it behaves as if it always returned t."
   (name nil :type symbol)
   (module nil :type phony--module)
   (modes '(global) :type list)
-  (external-name nil :type string))
+  (external-name nil :type string)
+  (when nil :type (function () t)))
 
 (defun phony--rule-active-p (rule)
   "Return non-nil if RULE is active.
@@ -254,6 +258,9 @@ modes are currently active."
                 modes)))
    (if-let ((module (phony--rule-module rule)))
        (phony--module-enabled-p module)
+     t)
+   (if-let ((when (phony--rule-when rule)))
+       (funcall when)
      t)))
 
 (cl-defstruct (phony--procedure-rule
@@ -965,7 +972,8 @@ instead."
                               external-name
                               (export t)
                               anchor-beginning
-                              anchor-end)
+                              anchor-end
+                              when)
   ;; checkdoc-params: (mode contributes-to external-name export anchor-beginning anchor-end)
   "Declare FUNCTION to be a rule invokeable by voice.
 
@@ -997,6 +1005,7 @@ documentation for `phony-rule'."
                 :elements elements)
       :arglist arglist
       :modes mode
+      :when when
       :export export
       :anchor-beginning-p anchor-beginning
       :anchor-end-p anchor-end))
@@ -1050,6 +1059,10 @@ of alternating KEY and VALUE.  Optional arguments are:
                      active.  If none of the modes match, this rule
                      never matches.  As a special case, 'global always
                      matches.  Default is 'global.
+  :when              A function of no arguments returning non-nil when
+                     this rule should be active.  If this argument
+                     omitted provided, it behaves as if a function
+                     always returning t was provided.
   :contributes-to    A symbol or list of symbols of open rules that this
                      procedure should contribute to.  See
                      `phony-define-open-rule' for open rules.  Default
