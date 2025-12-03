@@ -322,8 +322,8 @@ If you are using EXWM, you probably want this to be t.")
               "module = talon.Module()\n"
               ;; I heard you like escapes
               "def quote_string(str):\n"
-              "    return '\"' + str.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\") + '\"'"
-              "\n\n"
+              "    return '\"' + str.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\") + '\"'\n"
+              "\n"
               "def from_talon_capture(capture):\n"
               "    formatted = None\n"
               "    if isinstance(capture,str):\n"
@@ -336,7 +336,17 @@ If you are using EXWM, you probably want this to be t.")
               "        formatted = '(list ' + ' '.join([from_talon_capture(x) for x in capture]) + ')'\n"
               "    else:\n"
               "        raise TypeError(f\"Talon capture must have type str, int, list or talon.grammar.vm.Phrase, had type {type(capture)}\")\n"
-              "    return formatted\n\n")
+              "    return formatted\n"
+              "\n"
+              "tag_context = talon.Context()\n"
+              "\n"
+              "def update_active_tags():\n"
+              "    with open('" (phony--output-directory "active-rules") "', 'r') as inn:\n"
+              "        tags = ['user.' + tag for tag in inn.read().strip().split('\\n')]\n"
+              "        tag_context.tags = tags\n"
+              "\n"
+              "talon.fs.watch('" (phony--output-directory "active-rules") "',\n"
+              "        lambda x, y: update_active_tags())\n")
       (seq-doseq (rule rules)
         (insert "\n")
         (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"

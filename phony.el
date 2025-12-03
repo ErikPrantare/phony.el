@@ -951,6 +951,8 @@ If any errors are detected in the grammar, the rules are not exported."
       (when (and (not (server-running-p))
                  (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
         (server-start))
+      (cancel-function-timers #'phony--sync-state)
+      (run-with-idle-timer 0.1 t #'phony--sync-state)
       (funcall phony-export-function analysis-data))))
 
 (defun phony-request-export ()
@@ -1098,6 +1100,16 @@ of alternating KEY and VALUE.  Optional arguments are:
     (if name
         (phony-enable-module name (y-or-n-p (format "Disable %s for future sessions? " name)))
       (call-interactively #'phony-disable-module))))
+
+(defun phony--sync-state ()
+  ;; We must filter the enabled rules before doing with-temp-file, as
+  ;; that may otherwise influence which rules are enabled.
+  (let ((active-rules (seq-filter #'phony--rule-active-p (phony--get-rules))))
+    (with-temp-file (phony--output-directory "active-rules")
+      (insert (string-join
+               (seq-map #'phony--rule-external-name active-rules)
+               "\n")
+              "\n"))))
 
 (require 'phony-talon)
 (require 'phony-dragonfly)
