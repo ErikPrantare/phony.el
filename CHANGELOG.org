@@ -7,6 +7,8 @@
   determine whether a given rule is currently active.  If it is not,
   the rule will not be possible to match.
 - All rules now support :contributes-to and :mode.
+- Procedure rule element forms can now take a new form ~seq~, matching
+  whenever its arguments match in a sequence.
 
 * 0.2.1 [2025-10-09 Thu]
 - Missing directories are now created on first run.

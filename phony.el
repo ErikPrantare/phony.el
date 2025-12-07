@@ -678,30 +678,41 @@ This is required for recognizing if a form should bind turn argument."
    ;; it in the specification of the pattern we actually need to
    ;; match on the character after that, which we require to be
    ;; space.
-   ((eq (car-safe element-form) ?\s) (make-phony--element-optional
-                                      :element
-                                      (make-phony--element-sequence
-                                       :elements (mapcar
-                                                  (lambda (subelement)
-                                                    (phony--parse-speech-element
-                                                     subelement arglist))
-                                                  (cdr element-form)))))
-   ((eq (car-safe element-form) '+) (make-phony--element-one-or-more
-                                     :element
-                                     (make-phony--element-sequence
-                                      :elements (mapcar
-                                                 (lambda (subelement)
-                                                   (phony--parse-speech-element
-                                                    subelement arglist))
-                                                 (cdr element-form)))))
-   ((eq (car-safe element-form) '*) (make-phony--element-zero-or-more
-                                     :element
-                                     (make-phony--element-sequence
-                                      :elements (mapcar
-                                                 (lambda (subelement)
-                                                   (phony--parse-speech-element
-                                                    subelement arglist))
-                                                 (cdr element-form)))))
+   ((eq (car-safe element-form) ?\s)
+    (make-phony--element-optional
+     :element
+     (make-phony--element-sequence
+      :elements (mapcar
+                 (lambda (subelement)
+                   (phony--parse-speech-element
+                    subelement arglist))
+                 (cdr element-form)))))
+   ((eq (car-safe element-form) '+)
+    (make-phony--element-one-or-more
+     :element
+     (make-phony--element-sequence
+      :elements (mapcar
+                 (lambda (subelement)
+                   (phony--parse-speech-element
+                    subelement arglist))
+                 (cdr element-form)))))
+   ((eq (car-safe element-form) '*)
+    (make-phony--element-zero-or-more
+     :element
+     (make-phony--element-sequence
+      :elements (mapcar
+                 (lambda (subelement)
+                   (phony--parse-speech-element
+                    subelement arglist))
+                 (cdr element-form)))))
+   ((eq (car-safe element-form) 'seq)
+    (make-phony--element-sequence
+     :elements
+     (mapcar
+      (lambda (subelement)
+        (phony--parse-speech-element
+         subelement arglist))
+      (cdr element-form))))
    (t (phony--parse-speech-value-element element-form))))
 
 (defun phony--element-children (element)
@@ -994,28 +1005,25 @@ documentation for `phony-rule'."
   ;;   already be done implicitly in parsing?)
   ;; - Rule may not be potentially empty (talon and dragonfly(?)
   ;;   limitation)
-  (let* ((elements
-          (seq-map (lambda (element)
-                     (phony--parse-speech-element element (byte-compile-arglist-vars arglist)))
-                   element-forms)))
-    (phony--add-rule
-     (make-phony--procedure-rule
-      :name function
-      :external-name external-name
-      :function function
-      :element (make-phony--element-sequence
-                :elements elements)
-      :arglist arglist
-      :modes mode
-      :when when
-      :export export
-      :anchor-beginning-p anchor-beginning
-      :anchor-end-p anchor-end))
+  (phony--add-rule
+   (make-phony--procedure-rule
+    :name function
+    :external-name external-name
+    :function function
+    :element (phony--parse-speech-element
+              (cons 'seq element-forms)
+              (byte-compile-arglist-vars arglist))
+    :arglist arglist
+    :modes mode
+    :when when
+    :export export
+    :anchor-beginning-p anchor-beginning
+    :anchor-end-p anchor-end))
 
-    (seq-doseq (to (ensure-list contributes-to))
-      (phony--add-alternative function to))
+  (seq-doseq (to (ensure-list contributes-to))
+    (phony--add-alternative function to))
 
-    (phony-request-export)))
+  (phony-request-export))
 
 (cl-defun phony--speech-declaration (function arglist &rest declaration-args)
   ;; checkdoc-params: (arglist declaration-args)
@@ -1048,6 +1056,7 @@ matched.  An element may have one of the following forms:
   SYMBOL           Match a rule named SYMBOL.
   (ARG SYMBOL)     Match a rule named SYMBOL, bind its value to argument
                    ARG.  ARG must be part of the function's arglist.
+  (seq ELEMS...)   Match elements ELEMS.
   (? ELEMS...)     Optionally match elements ELEMS.
   (* ELEMS...)     Match elements ELEMS zero or more times.
   (+ ELEMS...)     Match elements ELEMS one or more times.
