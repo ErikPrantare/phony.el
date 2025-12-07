@@ -137,8 +137,10 @@
     (list (car element-form)))
    (t '())))
 
-(defun phony--function-calls-at-point ()
+(defun phony--function-calls-at (&optional position)
+  (unless position (setq position (point)))
   (save-excursion
+    (goto-char position)
     (let ((functions '()))
       ;; We walk up the chain of function calls, until
       ;; backward-up-list yields an error.  At that point, we are at
@@ -149,9 +151,9 @@
             (backward-up-list))
         (error functions)))))
 
-(defun phony--in-element-form-p ()
-  (and (seq-contains-p (phony--function-calls-at-point) '(phony-defun 2))
-       t))
+(defun phony--in-element-form-p (&optional position)
+  (unless position (setq position (point)))
+  (seq-contains-p (phony--function-calls-at position) '(phony-defun 2)))
 
 (defun phony--completion-at-point ()
   (and (phony--in-element-form-p)
@@ -179,6 +181,35 @@
       1 'font-lock-function-name-face))))
 
 (add-hook 'emacs-lisp-mode-hook #'phony--install-font-lock)
+
+(defun phony--infer-namespace-advice (position)
+  (and (phony--in-element-form-p position)
+       'phony))
+
+(advice-add #'elisp--xref-infer-namespace :before-until
+            #'phony--infer-namespace-advice)
+
+(defun phony--find-definitions-advice (f symbol)
+  (if-let ((rule-name (intern-soft
+                       (concat "rule/" (symbol-name symbol)))))
+      (append (funcall f rule-name)
+              (funcall f symbol))
+    (funcall f symbol)))
+
+(advice-add #'elisp--xref-find-definitions :around
+            #'phony--find-definitions-advice)
+
+(defun phony--filter-definitions-advice (definitions namespace symbol)
+  (and (eq namespace 'phony)
+       (let ((rule-name (intern (concat "rule/" (symbol-name symbol)))))
+         (seq-filter (lambda (item)
+                       (eq (xref-elisp-location-symbol
+                            (xref-item-location item))
+                           rule-name))
+                     definitions))))
+
+(advice-add #'elisp--xref-filter-definitions :before-until
+            #'phony--filter-definitions-advice)
 
 (provide 'phony-experimental)
 ;;; phony-experimental.el ends here
