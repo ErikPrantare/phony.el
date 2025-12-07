@@ -38,6 +38,7 @@
   ;; - Do not hijack the function namespace.  The tooling may need to
   ;;   be revisited after this.
   ;; - Check TODOs for better error messages.
+  ;; - Migrate old rule kinds with rule/ prefixes.
 
   ;; Syntactical design decisions:
   ;; - Automatic argument deduction: Explicitly specifying the
@@ -135,6 +136,37 @@
    ((listp element-form)
     (list (car element-form)))
    (t '())))
+
+(defun phony--function-calls-at-point ()
+  (save-excursion
+    (let ((functions '()))
+      ;; We walk up the chain of function calls, until
+      ;; backward-up-list yields an error.  At that point, we are at
+      ;; top level.
+      (condition-case nil
+          (while t
+            (push (elisp--fnsym-in-current-sexp) functions)
+            (backward-up-list))
+        (error functions)))))
+
+(defun phony--in-element-form-p ()
+  (and (seq-contains-p (phony--function-calls-at-point) '(phony-defun 2))
+       t))
+
+(defun phony--completion-at-point ()
+  (and (phony--in-element-form-p)
+       (and-let* ((bounds (bounds-of-thing-at-point 'symbol)))
+         (list (car bounds)
+               (cdr bounds)
+               (seq-map #'phony--rule-name (phony--get-rules))
+               :exclusive 'yes))))
+
+(defun phony--install-capf ()
+  (make-local-variable 'completion-at-point-functions)
+  (add-to-list 'completion-at-point-functions
+              #'phony--completion-at-point))
+
+(add-hook 'emacs-lisp-mode-hook #'phony--install-capf)
 
 (provide 'phony-experimental)
 ;;; phony-experimental.el ends here
