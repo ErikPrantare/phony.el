@@ -31,7 +31,7 @@
            (doc-string 3))
   ;; Tooling that we want to work before we are ready to ship this:
   ;; - xref: DONE
-  ;; - completion-at-point
+  ;; - completion-at-point: DONE
   ;; - syntax highlighting for keywords
 
   ;; Other todos:
@@ -167,6 +167,18 @@
               #'phony--completion-at-point))
 
 (add-hook 'emacs-lisp-mode-hook #'phony--install-capf)
+
+(defun phony--install-font-lock ()
+  (font-lock-add-keywords
+   nil
+   `((,(rx "(" (or "phony-defun"
+                   "phony-define-dictionary"
+                   "phony-define-open-rule")
+           (+ blank)
+           (group (+ (or (syntax word) (syntax symbol)))))
+      1 'font-lock-function-name-face))))
+
+(add-hook 'emacs-lisp-mode-hook #'phony--install-font-lock)
 
 (provide 'phony-experimental)
 ;;; phony-experimental.el ends here
