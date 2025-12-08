@@ -187,34 +187,14 @@
 
 (add-hook 'emacs-lisp-mode-hook #'phony--install-font-lock)
 
-(defun phony--infer-namespace-advice (position)
-  (and (phony--in-element-form-p position)
-       'phony))
+(defun phony--xref-backend-definitions (f backend identifier)
+  (funcall f backend
+           (if (and (eq backend 'elisp)
+                    (phony--in-element-form-p (get-text-property 0 'pos identifier)))
+               (concat "rule/" identifier)
+             identifier)))
 
-(advice-add #'elisp--xref-infer-namespace :before-until
-            #'phony--infer-namespace-advice)
-
-(defun phony--find-definitions-advice (f symbol)
-  (if-let ((rule-name (intern-soft
-                       (concat "rule/" (symbol-name symbol)))))
-      (append (funcall f rule-name)
-              (funcall f symbol))
-    (funcall f symbol)))
-
-(advice-add #'elisp--xref-find-definitions :around
-            #'phony--find-definitions-advice)
-
-(defun phony--filter-definitions-advice (definitions namespace symbol)
-  (and (eq namespace 'phony)
-       (let ((rule-name (intern (concat "rule/" (symbol-name symbol)))))
-         (seq-filter (lambda (item)
-                       (eq (xref-elisp-location-symbol
-                            (xref-item-location item))
-                           rule-name))
-                     definitions))))
-
-(advice-add #'elisp--xref-filter-definitions :before-until
-            #'phony--filter-definitions-advice)
+(advice-add #'xref-backend-definitions :around #'phony--xref-backend-definitions)
 
 (provide 'phony-experimental)
 ;;; phony-experimental.el ends here
