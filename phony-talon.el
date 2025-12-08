@@ -85,25 +85,25 @@
    (phony--element-argument-element element)
    rule))
 
-(cl-defgeneric phony--rule-talon-pattern (rule))
+(cl-defgeneric phony--rule-talon-pattern (rule analysis-data))
 
-(cl-defmethod phony--rule-talon-pattern ((rule phony--procedure-rule))
+(cl-defmethod phony--rule-talon-pattern ((rule phony--procedure-rule) _analysis-data)
   (let* ((element (phony--procedure-rule-element rule)))
     (concat "'" (phony--ast-match-string element rule) "'")))
 
-(cl-defmethod phony--rule-talon-pattern ((rule phony--open-rule))
-  (if (phony--open-rule-alternatives rule)
+(cl-defmethod phony--rule-talon-pattern ((rule phony--open-rule) analysis-data)
+  (if (gethash rule (phony--analysis-data-forward analysis-data))
       (concat
        "\n        '  "
        (string-join (seq-map
                      (lambda (alternative)
                        (format "<user.%s>'"
                                (phony--external-name alternative)))
-                     (phony--open-rule-alternatives rule))
+                     (gethash rule (phony--analysis-data-forward analysis-data)))
                     "\n        '| "))
     "'<user.disabled_phony_rule>'"))
 
-(cl-defmethod phony--rule-talon-pattern ((rule phony--dictionary))
+(cl-defmethod phony--rule-talon-pattern ((rule phony--dictionary) _analysis-data)
   (concat "'{user." (phony--rule-external-name rule) "}'"))
 
 (cl-defgeneric phony--argument-context (argument elements)
@@ -141,13 +141,13 @@
   (insert (format ":\n    user.phony_evaluate_emacs_lisp(%s)\n\n"
                   (phony--rule-external-name rule))))
 
-(defun phony-talon--insert-capture-preamble (rule)
+(defun phony-talon--insert-capture-preamble (rule analysis-data)
   (insert "# Base case for when the rule is inactive\n")
   (phony-talon--insert-python-disabled rule)
   (insert "\ncontext = talon.Context()\n")
   (insert "context.matches = \"\"\"\ntag: user." (phony--rule-external-name rule) "\n\"\"\"\n")
   (insert "@context.capture('user." (phony--rule-external-name rule)
-          "', rule=" (phony--rule-talon-pattern rule) ")\n"))
+          "', rule=" (phony--rule-talon-pattern rule analysis-data) ")\n"))
 
 (cl-defgeneric phony-talon--insert-python (rule))
 
@@ -351,7 +351,7 @@ If you are using EXWM, you probably want this to be t.")
         (insert "\n")
         (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
                         (phony--external-name rule)))
-        (phony-talon--insert-capture-preamble rule)
+        (phony-talon--insert-capture-preamble rule analysis-data)
         (phony-talon--insert-python rule)
         (phony-talon--clone-rule
          rule

@@ -234,12 +234,15 @@ EXTERNAL-NAME is the name this rule will have for the speech recognition
 engine, and should be a string.
 
 WHEN is a predicate of no arguments which returns nil if the rule should
-be inactive.  If WHEN is nil, it behaves as if it always returned t."
+be inactive.  If WHEN is nil, it behaves as if it always returned t.
+
+CONTRIBUTES-TO is a list of open rules that this rule contributes to."
   (name nil :type symbol)
   (module nil :type phony--module)
   (modes '(global) :type list)
   (external-name nil :type string)
-  (when nil :type (function () t)))
+  (when nil :type (function () t))
+  (contributes-to '() :type list))
 
 (defun phony--rule-active-p (rule)
   "Return non-nil if RULE is active.
@@ -481,10 +484,8 @@ Upon modification of the dictionary, it is also exported.
     :name name
     :external-name external-name
     :format-raw-p format-raw
-    :modes mode))
-
-  (seq-doseq (to (ensure-list contributes-to))
-    (phony--add-alternative name to))
+    :modes mode
+    :contributes-to (ensure-list contributes-to)))
 
   (if (or contributes-to (not (memq 'global mode)))
       (phony-request-export)
@@ -563,10 +564,8 @@ be one of the following:
     :external-name external-name
     :transformation transformation
     :alternatives alternatives
-    :modes mode))
-
-  (seq-doseq (to (ensure-list contributes-to))
-    (phony--add-alternative name to))
+    :modes mode
+    :contributes-to (ensure-list contributes-to)))
 
   name)
 
@@ -769,6 +768,20 @@ RULE."
   "Return nil."
   '())
 
+(cl-defgeneric phony--references (rule-or-name)
+  "Return list of references of RULE-OR-NAME.
+
+Each element of the list is a cons cell (NAME . CONTRAVARIANT).  NAME is
+a symbol naming the referred to function.  CONTRAVARIANT is non-nil if
+the reference has the effect of NAME potentially matching RULE-OR-NAME.
+This happens with the :contributes-to parameter.  If CONTRAVARIANT is
+nil, the reference has the effect of RULE-OR-NAME matching NAME."
+  (let ((rule (phony--normalize-rule rule-or-name)))
+    (append (seq-map (lambda (reference) (cons reference nil))
+                     (phony--dependencies rule))
+            (seq-map (lambda (reference) (cons reference t))
+                     (phony--rule-contributes-to rule)))))
+
 (cl-defstruct (phony--analysis-data
                (:constructor nil)
                (:constructor phony--make-analysis-data))
@@ -840,14 +853,18 @@ emitted and `phony--analysis-data-contains-errors' will be set to nil."
       (puthash rule '() dependencies)
       (puthash rule '() dependents))
     (seq-doseq (rule (phony--get-rules))
-      (seq-doseq (dependency-name (phony--dependencies rule))
-        (if-let ((dependency (phony--get-rule dependency-name)))
-            (progn
-              (push dependency (gethash rule dependencies))
-              (push rule (gethash dependency dependents)))
+      (seq-doseq (reference (phony--references rule))
+        (if-let* ((reference-rule (phony--get-rule (car reference))))
+            (if (cdr reference)
+                (progn
+                  (push rule (gethash reference-rule dependencies))
+                  (push reference-rule (gethash rule dependents)))
+              (push reference-rule (gethash rule dependencies))
+              (push rule (gethash reference-rule dependents)))
           (display-warning 'phony
                            (format "Rule %S (referenced in %S) is not defined"
-                                   dependency-name (phony--rule-name rule)))
+                                   (car reference)
+                                   (phony--rule-name rule)))
           (oset analysis-data contains-errors t)))
       (oset analysis-data forward dependencies)
       (oset analysis-data backward dependents))))
@@ -1017,11 +1034,9 @@ documentation for `phony-rule'."
     :modes mode
     :when when
     :export export
+    :contributes-to (ensure-list contributes-to)
     :anchor-beginning-p anchor-beginning
     :anchor-end-p anchor-end))
-
-  (seq-doseq (to (ensure-list contributes-to))
-    (phony--add-alternative function to))
 
   (phony-request-export))
 
