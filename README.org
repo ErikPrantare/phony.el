@@ -155,14 +155,14 @@ in effect to the previous one:
 
   (defun rule/current-line ()
     (declare (phony-rule
-              :contributes-to 'rule/region
+              :contributes-to rule/region
               :export nil
               "line"))
     (bounds-of-thing-at-point 'line))
 
   (defun rule/current-sentence ()
     (declare (phony-rule
-              :contributes-to 'rule/region
+              :contributes-to rule/region
               :export nil
               "sentence"))
     (bounds-of-thing-at-point 'sentence))

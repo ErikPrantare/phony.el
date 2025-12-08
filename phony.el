@@ -475,7 +475,7 @@ Upon modification of the dictionary, it is also exported.
             (progn
               (setq mapping utterance-or-alist)
               (phony--request-export-dictionaries))
-            mapping))))
+          mapping))))
 
   (eval `(gv-define-simple-setter ,name ,name))
 
@@ -524,11 +524,18 @@ be one of the following:
 
 \(fn NAME [KEY VALUE]... ALIST)"
   (declare (indent defun))
-  (let ((split-arguments (phony--split-keywords-rest arguments)))
+  (let* ((split-arguments (phony--split-keywords-rest arguments))
+         (optional-arguments (car split-arguments))
+         (alist (cadr split-arguments)))
+
+    (when (map-elt optional-arguments :contributes-to)
+      (setf (map-elt optional-arguments :contributes-to)
+            `',(ensure-list (map-elt optional-arguments :contributes-to))))
+
     `(phony--define-dictionary
       ',name
-      ,@(cdr split-arguments)
-      ,@(car split-arguments))))
+      ,alist
+      ,@optional-arguments)))
 
 (defun phony--add-alternative (alternative open-rule-name)
   "Add rule ALTERNATIVE as an alternative for open rule OPEN-RULE-NAME."
@@ -593,7 +600,7 @@ the same as for `phony-rule'."
   `(phony--define-open-rule
     ',name
     :alternatives ,alternatives
-    :contributes-to ,contributes-to
+    :contributes-to ',contributes-to
     :transformation ,transformation
     :external-name ,external-name
     :mode ,mode))
@@ -630,8 +637,8 @@ the same as for `phony-rule'."
         :type symbol
         :documentation "Symbol naming the argument that captures the value of the match.")
   (element nil
-        :type sexp
-        :documentation "Element whose match will bind to the argument."))
+           :type sexp
+           :documentation "Element whose match will bind to the argument."))
 
 (cl-defstruct phony--element-external-rule
   "Element matching some external rule.
@@ -1047,13 +1054,18 @@ documentation for `phony-rule'."
 This function should not be called directly, but through a `phony-rule'
 form."
   (let* ((split-args (phony--split-keywords-rest declaration-args))
-         (keyword-arguments (car split-args))
+         (optional-arguments (car split-args))
          (pattern (cdr split-args)))
+
+    (when (map-elt optional-arguments :contributes-to)
+      (setf (map-elt optional-arguments :contributes-to)
+            `',(ensure-list (map-elt optional-arguments :contributes-to))))
+
     `(phony--export-rule
       #',function
       ',arglist
       ',pattern
-      ,@keyword-arguments)))
+      ,@optional-arguments)))
 
 (setf (alist-get 'phony-rule defun-declarations-alist)
       (list #'phony--speech-declaration))
@@ -1089,10 +1101,10 @@ of alternating KEY and VALUE.  Optional arguments are:
                      this rule should be active.  If this argument
                      omitted provided, it behaves as if a function
                      always returning t was provided.
-  :contributes-to    A symbol or list of symbols of open rules that this
-                     procedure should contribute to.  See
-                     `phony-define-open-rule' for open rules.  Default
-                     is nil.
+  :contributes-to    An unquoted symbol or list of symbols of open
+                     rules that this procedure should contribute to.
+                     See `phony-define-open-rule' for open rules.
+                     Default is nil.
   :anchor-beginning  If t, this rule must occur first in an utterance.
                      Default is nil.
   :anchor-end        If t, this rule must occur last in an utterance.

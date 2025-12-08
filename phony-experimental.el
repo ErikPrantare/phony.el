@@ -73,6 +73,11 @@
   ;;   most common construction to use at the top level (perhaps
   ;;   excepts a single string literal, which is also covered by
   ;;   shorthand).  Might as well allow eliding it.
+  ;; - Unquoted :contributes-to: By restricting the legal forms that
+  ;;   may be passed to it, we can better utilize capf and xref.  For
+  ;;   example, we know that function names cannot appear in the form,
+  ;;   so those may be filtered out from completion and
+  ;;   go-to-definition.
   (let* ((doc (and (stringp (car rest)) (pop rest)))
          (split-arguments (phony--split-keywords-rest rest))
          (optional-arguments (car split-arguments))
@@ -82,7 +87,7 @@
            (phony--expand-implicit-arguments
             (cons 'seq (ensure-list pattern)))))
          (arguments (phony--collect-arguments expanded-pattern)))
-    (message "%S" arguments)
+
     (cond
      ((not (seq-every-p (lambda (argument) (memq argument (flatten-tree body)))
                         arguments))
@@ -166,7 +171,7 @@
 (defun phony--install-capf ()
   (make-local-variable 'completion-at-point-functions)
   (add-to-list 'completion-at-point-functions
-              #'phony--completion-at-point))
+               #'phony--completion-at-point))
 
 (add-hook 'emacs-lisp-mode-hook #'phony--install-capf)
 
