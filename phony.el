@@ -453,6 +453,11 @@ MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-rule'."
     (error "The keys of %s must be strings, but %S is not a string"
            name (car non-string-key)))
 
+  (setq name
+        (if (string-prefix-p "rule/" (symbol-name name))
+            name
+          (intern (concat "rule/" (symbol-name name)))))
+
   (defalias name
     (lambda (&optional utterance-or-alist new-value)
       (:documentation (concat "Return the alist of dictionary `"
@@ -534,9 +539,7 @@ be one of the following:
             `',(ensure-list (map-elt optional-arguments :contributes-to))))
 
     `(phony--define-dictionary
-      ',(if (string-prefix-p "rule/" (symbol-name name))
-            name
-          (intern (concat "rule/" (symbol-name name))))
+      ',name
       ,alist
       ,@optional-arguments)))
 
@@ -563,6 +566,11 @@ be one of the following:
   (cl-assert (symbolp transformation) nil
              "Transformation argument to rule %S must be a symbol"
              name)
+
+  (setq name
+        (if (string-prefix-p "rule/" (symbol-name name))
+            name
+          (intern (concat "rule/" (symbol-name name)))))
 
   ;; For finding the definition of this rule
   (defalias name (lambda (&rest _) nil)
@@ -601,9 +609,7 @@ Optional keyword arguments MODE, CONTRIBUTES-TO and EXTERNAL-NAME are
 the same as for `phony-rule'."
   (declare (indent defun))
   `(phony--define-open-rule
-    ',(if (string-prefix-p "rule/" (symbol-name name))
-          name
-        (intern (concat "rule/" (symbol-name name))))
+    ',name
     :alternatives ,alternatives
     :contributes-to ',contributes-to
     :transformation ,transformation

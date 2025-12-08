@@ -79,7 +79,7 @@ Only these elements may be bound to arguments."
    ((symbolp element-form)
     (make-phony--element-rule
      :name (if (string-prefix-p "rule/" (symbol-name element-form))
-            name
+            element-form
             (intern (concat "rule/" (symbol-name element-form))))))
    ((eq (car element-form) 'external-rule)
     (make-phony--element-external-rule
