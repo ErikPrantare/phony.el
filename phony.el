@@ -84,7 +84,6 @@ This function is used to automatically generate external names for
 rules."
   (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
 
-
 (cl-defstruct (phony--module
                (:constructor phony--make-module))
   "Modules group rules defined in a file into a unit.
@@ -533,7 +532,9 @@ be one of the following:
             `',(ensure-list (map-elt optional-arguments :contributes-to))))
 
     `(phony--define-dictionary
-      ',name
+      ',(if (string-prefix-p "rule/" (symbol-name name))
+            name
+          (intern (concat "rule/" (symbol-name name))))
       ,alist
       ,@optional-arguments)))
 
@@ -598,7 +599,9 @@ Optional keyword arguments MODE, CONTRIBUTES-TO and EXTERNAL-NAME are
 the same as for `phony-rule'."
   (declare (indent defun))
   `(phony--define-open-rule
-    ',name
+    ',(if (string-prefix-p "rule/" (symbol-name name))
+          name
+        (intern (concat "rule/" (symbol-name name))))
     :alternatives ,alternatives
     :contributes-to ',contributes-to
     :transformation ,transformation
@@ -1119,7 +1122,7 @@ of alternating KEY and VALUE.  Optional arguments are:
 (let ((phony--deny-export-requests-p t))
   ;; Define all builtin rules here.  We suppress export, as the user
   ;; may not have set the correct exporter yet.
-  (phony-define-dictionary rule/phony-module '())
+  (phony-define-dictionary phony-module '())
 
   (defun rule/phony-enable-module (&optional name)
     (declare (phony-rule
