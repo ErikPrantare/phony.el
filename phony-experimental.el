@@ -83,9 +83,8 @@
          (optional-arguments (car split-arguments))
          (body (cdr split-arguments))
          (expanded-pattern
-          (phony--internalize-rules
-           (phony--expand-implicit-arguments
-            (cons 'seq (ensure-list pattern)))))
+          (phony--expand-implicit-arguments
+           (cons 'seq (ensure-list pattern))))
          (arguments (phony--collect-arguments expanded-pattern)))
 
     (cond
@@ -115,15 +114,6 @@
   ;; rule/.  Eventually, we will want to remove the rules from the
   ;; function namespace, at which point this will be superfluous.
   (intern (concat "rule/" (symbol-name name))))
-
-(defun phony--internalize-rules (element-form)
-  (cond
-   ((and (listp element-form) (memq (car element-form) '(seq ? + *)))
-    `(,(car element-form)
-      ,@(seq-map #'phony--internalize-rules (cdr element-form))))
-   ((and (listp element-form) (symbolp (cadr element-form)))
-    `(,(car element-form) ,(phony--internal-name (cadr element-form))))
-   (t element-form)))
 
 (defun phony--expand-implicit-arguments (element-form)
   (cond
