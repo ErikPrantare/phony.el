@@ -554,7 +554,7 @@ be one of the following:
              name)
 
   ;; For finding the definition of this rule
-  (defalias name #'ignore
+  (defalias name (lambda (&rest _) nil)
     "Open rule for phony.")
 
   (phony--add-rule
