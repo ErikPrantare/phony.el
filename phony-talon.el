@@ -366,7 +366,7 @@ If you are using EXWM, you probably want this to be t.")
 
 (let ((phony--deny-export-requests-p t))
   ;; Empty lists create no matches yet emit no errors.
-  (phony-define-dictionary rule/phony-talon--disabled-rule
+  (phony-define-dictionary phony-talon--disabled-rule
     :external-name "disabled_phony_rule"
     '()))
 

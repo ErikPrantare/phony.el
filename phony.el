@@ -1020,7 +1020,6 @@ of alternating KEY and VALUE.  Optional arguments are:
   ;; - Do not hijack the function namespace.  The tooling may need to
   ;;   be revisited after this.
   ;; - Check TODOs for better error messages.
-  ;; - Migrate old rule kinds with rule/ prefixes.
 
   ;; Syntactical design decisions:
   ;; - Automatic argument deduction: Explicitly specifying the
