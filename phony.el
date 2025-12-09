@@ -138,7 +138,7 @@ utterance."
               :file-name file-name
               :enabled-p (memq name (multisession-value phony--enabled-modules)))
              phony--modules-by-file-name)
-    (phony-dictionary-put utterance rule/phony-module name))
+    (phony-dictionary-put utterance 'phony-module name))
   name)
 
 (defmacro phony-module (name &optional utterance)
@@ -288,16 +288,13 @@ modes are currently active."
                (:constructor phony--make-dictionary))
   "A dictionary mapping utterances to values.
 
-NAME must be the symbol containing the mapping, an alist.
+ALIST is the mapping.
 
 FORMAT-RAW-P is t if this dictionary is intended to be used on the
 speech recognition side.  In that case, the mapping may only map to
 strings."
-  (format-raw-p nil :type boolean))
-
-(defun phony--dictionary-alist (dictionary)
-  "Return the alist stored in DICTIONARY."
-  (funcall (phony--dictionary-name dictionary)))
+  (format-raw-p nil :type boolean)
+  (alist nil :type list))
 
 (defun phony--normalize-rule (rule-or-name)
   "Return rule specified by RULE-OR-NAME.
@@ -324,7 +321,7 @@ is identified when exported to the speech engine."
 (defun phony--get-rule (name)
   "Get the rule named NAME.
 Return nil if no such rule exists."
-  (gethash name phony--rules))
+  (gethash (phony--normalize-rule-name name) phony--rules))
 
 (defun phony--add-rule (rule)
   "Add a new rule RULE.
@@ -354,26 +351,53 @@ This function must be invoked every time a rule is declared."
 
 (defun phony-dictionary-get (utterance dictionary)
   "Return the value corresponding to UTTERANCE in DICTIONARY.
-If no such value exists, return nil."
-  (funcall dictionary utterance))
+If no such value exists, return nil.
 
-(defmacro phony-dictionary-put (utterance dictionary value)
+DICTIONARY is the name of the dictionary to modify."
+  (alist-get utterance (phony--dictionary-alist (phony--get-rule dictionary)) nil nil #'equal))
+
+(defun phony-dictionary-put (utterance dictionary value)
   "Set the value of UTTERANCE in DICTIONARY to VALUE.
-If value is nil, remove the utterance from the list instead.
+
+DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (declare (indent defun))
-  `(,dictionary ,utterance ,value))
+  (setf (alist-get utterance (phony--dictionary-alist (phony--get-rule dictionary)))
+        value)
+  (phony--request-export-dictionaries))
 
-(gv-define-expander phony-dictionary-get
-  ;; We need to use `gv-define-expander', because the simpler versions
-  ;; expand to a let-expression binding the dictionary to a local
-  ;; variable.  That meant removing  became impossible.
-  (lambda (do utterance dictionary)
-    (funcall do `(phony-dictionary-get ,utterance ,dictionary)
-             (lambda (value)
-               `(phony-dictionary-put ,utterance ,dictionary ,value)))))
+(defun phony-dictionary-remove (utterance dictionary)
+  "Remove UTTERANCE from DICTIONARY.
+
+DICTIONARY is the name of the dictionary to modify.
+
+Invoking this function will resync the dictionary to the external speech
+recognition engine."
+  (setf (alist-get utterance (phony--dictionary-alist (phony--get-rule dictionary)) nil t)
+        nil)
+  (phony--request-export-dictionaries))
+
+(defun phony-dictionary-alist (dictionary)
+  "Return the mapping of DICTIONARY as an alist.
+
+DICTIONARY is the name of the dictionary to modify."
+  (phony--dictionary-alist (phony--get-rule dictionary)))
+
+(defun phony-set-dictionary-alist (dictionary alist)
+  "Set the mapping of DICTIONARY to ALIST.
+
+DICTIONARY is the name of the dictionary to modify.
+
+Invoking this function will resync the dictionary to the external speech
+recognition engine."
+  (setf (phony--dictionary-alist (phony--get-rule dictionary)) alist))
+
+(gv-define-setter phony-dictionary-get (value utterance dictionary)
+  `(phony-dictionary-put ,utterance ,dictionary ,value))
+
+(gv-define-setter phony-dictionary-alist (value dictionary)
+  `(phony-dictionary-set-alist ,dictionary ,value))
 
 (defun phony--create-lookup-representation (entry dictionary)
   "Create lookup string for ENTRY in DICTIONARY.
@@ -382,9 +406,9 @@ When evaluating the returned string from emacsclient, this performs
 the lookup."
   (if (phony--dictionary-format-raw-p dictionary)
       (cdr entry)
-    (format "(%s \"%s\")"
-            (phony--dictionary-name dictionary)
-            (car entry))))
+    (format "(phony-dictionary-get \"%s\" '%s)"
+            (car entry)
+            (string-remove-prefix "rule/" (symbol-name (phony--dictionary-name dictionary))))))
 
 (defun phony--prepare-dictionary-for-serialization (dictionary)
   "Return DICTIONARY as an entry for `json-serialize'.
@@ -455,36 +479,10 @@ MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-rule'."
 
   (setq name (phony--normalize-rule-name name))
 
-  (defalias name
-    (lambda (&optional utterance-or-alist new-value)
-      (:documentation (concat "Return the alist of dictionary `"
-                              (symbol-name name)
-                              "'.\nIf UTTERANCE, a string, is given, return instead the corresponding
-value of the alist.  If NEW-VALUE is provided but not UTTERANCE,
-reassign instead the full dictionary to NEW-VALUE.  If NEW-VALUE and
-UTTERANCE are both provided, reassign instead UTTERANCE to NEW-VALUE.
-
-Upon modification of the dictionary, it is also exported.
-
-\(fn [UTTERANCE] NEW-VALUE)"))
-      (if (stringp utterance-or-alist)
-          (if new-value
-              (progn
-                (setf (alist-get utterance-or-alist mapping nil nil #'equal)
-                      new-value)
-                (phony--request-export-dictionaries))
-            (alist-get utterance-or-alist mapping nil nil #'equal))
-        (if utterance-or-alist
-            (progn
-              (setq mapping utterance-or-alist)
-              (phony--request-export-dictionaries))
-          mapping))))
-
-  (eval `(gv-define-simple-setter ,name ,name))
-
   (phony--add-rule
    (phony--make-dictionary
     :name name
+    :alist mapping
     :external-name external-name
     :format-raw-p format-raw
     :modes mode
