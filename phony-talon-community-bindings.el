@@ -25,17 +25,14 @@
 ;;; Code:
 
 (defmacro phony-talon-community-bindings--make (name external-name)
-  `(defun ,name (x)
-     (declare (phony-rule
-               :export nil
-               (x (external-rule ,@external-name))))
+  `(phony-defun ,name ((x (external-rule ,@external-name)))
+     :export nil
      x))
 
-(phony-talon-community-bindings--make rule/number (user number))
-(phony-talon-community-bindings--make rule/word (user word))
-(phony-talon-community-bindings--make rule/phrase (user phrase))
-(phony-talon-community-bindings--make rule/digit (user digit))
-(phony-talon-community-bindings--make rule/number (user number))
+(phony-talon-community-bindings--make number (user number))
+(phony-talon-community-bindings--make word (user word))
+(phony-talon-community-bindings--make phrase (user phrase))
+(phony-talon-community-bindings--make digit (user digit))
 
 (phony-defun letter ((char (external-rule user letter)))
   :export nil

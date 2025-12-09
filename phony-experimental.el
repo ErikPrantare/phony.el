@@ -44,12 +44,19 @@
   (unless position (setq position (point)))
   (seq-contains-p (phony--function-calls-at position) '(phony-defun 2)))
 
+(defun phony--strip-rule-prefix (name)
+  "Strip the rule/ prefix from NAME if present."
+  ;; This should be temporary
+  (intern (string-remove-prefix (symbol-name name))))
+
 (defun phony--completion-at-point ()
   (and (phony--in-element-form-p)
        (and-let* ((bounds (bounds-of-thing-at-point 'symbol)))
          (list (car bounds)
                (cdr bounds)
-               (seq-map #'phony--rule-name (phony--get-rules))
+               (seq-map (lambda (rule)
+                          (phony--strip-rule-prefix (phony--rule-name rule)))
+                        (phony--get-rules))
                :exclusive 'yes))))
 
 (defun phony--install-capf ()

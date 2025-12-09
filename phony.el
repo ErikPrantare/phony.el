@@ -453,10 +453,7 @@ MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-rule'."
     (error "The keys of %s must be strings, but %S is not a string"
            name (car non-string-key)))
 
-  (setq name
-        (if (string-prefix-p "rule/" (symbol-name name))
-            name
-          (intern (concat "rule/" (symbol-name name)))))
+  (setq name (phony--normalize-rule-name name))
 
   (defalias name
     (lambda (&optional utterance-or-alist new-value)
@@ -491,7 +488,8 @@ Upon modification of the dictionary, it is also exported.
     :external-name external-name
     :format-raw-p format-raw
     :modes mode
-    :contributes-to (ensure-list contributes-to)))
+    :contributes-to (seq-map #'phony--normalize-rule-name
+                             (ensure-list contributes-to))))
 
   (if (or contributes-to (not (memq 'global mode)))
       (phony-request-export)
@@ -567,10 +565,7 @@ be one of the following:
              "Transformation argument to rule %S must be a symbol"
              name)
 
-  (setq name
-        (if (string-prefix-p "rule/" (symbol-name name))
-            name
-          (intern (concat "rule/" (symbol-name name)))))
+  (setq name (phony--normalize-rule-name name))
 
   ;; For finding the definition of this rule
   (defalias name (lambda (&rest _) nil)
@@ -581,9 +576,10 @@ be one of the following:
     :name name
     :external-name external-name
     :transformation transformation
-    :alternatives alternatives
+    :alternatives (seq-map #'phony--normalize-rule-name alternatives)
     :modes mode
-    :contributes-to (ensure-list contributes-to)))
+    :contributes-to (seq-map #'phony--normalize-rule-name
+                             (ensure-list contributes-to))))
 
   name)
 
@@ -936,7 +932,8 @@ documentation for `phony-rule'."
     :modes mode
     :when when
     :export export
-    :contributes-to (ensure-list contributes-to)
+    :contributes-to (seq-map #'phony--normalize-rule-name
+                             (ensure-list contributes-to))
     :anchor-beginning-p anchor-beginning
     :anchor-end-p anchor-end))
 
@@ -1089,18 +1086,20 @@ of alternating KEY and VALUE.  Optional arguments are:
         ,(format (concat "Duplicate arguments in %s\n"
                          "If you use implicit argument names, make them explicit")
                  name)))
-     (t `(defun ,(phony--internal-name name) ,arguments
+     (t `(defun ,(phony--normalize-rule-name name) ,arguments
            ,@(ensure-list doc)
            (declare (phony-rule
                      ,@optional-arguments
                      ,expanded-pattern))
            ,@body)))))
 
-(defun phony--internal-name (name)
-  ;; For now, we will assume the convention of prefixing rules with
-  ;; rule/.  Eventually, we will want to remove the rules from the
-  ;; function namespace, at which point this will be superfluous.
-  (intern (concat "rule/" (symbol-name name))))
+(defun phony--normalize-rule-name (name)
+  "Normalize NAME to include the rule/ prefix.
+If NAME already starts with rule/, return it unchanged."
+  ;; This is intended to be temporary
+  (if (string-prefix-p "rule/" (symbol-name name))
+      name
+    (intern (concat "rule/" (symbol-name name)))))
 
 (defun phony--expand-implicit-arguments (element-form)
   (cond
@@ -1124,20 +1123,14 @@ of alternating KEY and VALUE.  Optional arguments are:
   ;; may not have set the correct exporter yet.
   (phony-define-dictionary phony-module '())
 
-  (defun rule/phony-enable-module (&optional name)
-    (declare (phony-rule
-              "phony enable"
-              (? (name rule/phony-module))))
+  (phony-defun phony-enable-module ("phony enable" (? (name phony-module)))
     (if name
         (phony-enable-module name (y-or-n-p (format "Enable %s for future sessions? " name)))
       (call-interactively #'phony-enable-module)))
 
-  (defun rule/phony-disable-module (name)
-    (declare (phony-rule
-              "phony disable"
-              (? (name rule/phony-module))))
+  (phony-defun phony-disable-module ("phony disable" (? (name phony-module)))
     (if name
-        (phony-enable-module name (y-or-n-p (format "Disable %s for future sessions? " name)))
+        (phony-disable-module name (y-or-n-p (format "Disable %s for future sessions? " name)))
       (call-interactively #'phony-disable-module))))
 
 (defun phony--sync-state ()

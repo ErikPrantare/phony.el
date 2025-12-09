@@ -81,7 +81,7 @@ Dictionaries are utterance -> value maps.  The following code defines
 a dictionary for the first five numbers:
 
 #+begin_src elisp
-  (phony-define-dictionary rule/number
+  (phony-define-dictionary number
     '(("one" . 1)
       ("two" . 2)
       ("three" . 3)
@@ -116,8 +116,8 @@ current line, or "delete sentence" to delete the current sentence:
     :export nil
     (bounds-of-thing-at-point 'sentence))
 
-  (phony-define-open-rule rule/region
-    :alternatives '(rule/current-line rule/current-sentence))
+  (phony-define-open-rule region
+    :alternatives '(current-line current-sentence))
 
   (phony-defun delete-current ("delete" (bounds region))
     (delete-region (car bounds) (cdr bounds)))
@@ -129,15 +129,15 @@ extensibility for your grammars.  The next code example is identical
 in effect to the previous one:
 
 #+begin_src elisp
-  (phony-define-open-rule rule/region)
+  (phony-define-open-rule region)
 
   (phony-defun current-line "line"
-    :contributes-to rule/region
+    :contributes-to region
     :export nil
     (bounds-of-thing-at-point 'line))
 
   (phony-defun current-sentence "sentence"
-    :contributes-to rule/region
+    :contributes-to region
     :export nil
     (bounds-of-thing-at-point 'sentence))
 
