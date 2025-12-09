@@ -6,8 +6,7 @@ After having set up this package, you will be able to define voice
 commands like this:
 
 #+begin_src elisp
-  (defun rule/say-hello ()
-    (declare (phony-rule "hello emacs"))
+  (phony-defun say-hello "hello emacs"
     (message "Hello!"))
 #+end_src
 
@@ -41,46 +40,36 @@ should produce values and side effects.
 
 ** Procedure rules
 Procedure rules map your spoken utterances to code.  Procedure rules
-are declared in the ~declare~ form of a ~defun~.  With the following
-example, uttering "hello emacs" will display "Hello!" in the message
-area:
+are defined using ~phony-defun~.  With the following example, uttering
+"hello emacs" will display "Hello!" in the message area:
 
 #+begin_src elisp
-  (defun rule/say-hello ()
-    (declare (phony-rule "hello emacs"))
+  (phony-defun say-hello "hello emacs"
     (message "Hello!"))
 #+end_src
 
 Procedure rules can produce values.  Other rules can refer to
 value-producing rules and bind their values to the arguments of the
-function.  In the following code example, ~rule/current-line~ defines
-a rule matching "line" and returning the region of the current line.
-It declares ~:export nil~ to avoid "line" by itself to be matched,
-making it only possible to match when referred to by another rule.
+function.  In the following code example, ~current-line~ defines a
+rule matching "line" and returning the region of the current line.  It
+declares ~:export nil~ to avoid "line" by itself to be matched, making
+it only possible to match when referred to by another rule.
 
-The two rules ~rule/delete-current-line~ and
-~rule/beginning-of-current-line~ make use of ~rule/current-line~ to
-bind their argument to its return value.  Thus, saying "delete line"
-will delete the current line and saying "beginning of line" will move
-point to the beginning of the current line.
+The two rules ~delete-current-line~ and ~beginning-of-current-line~
+make use of ~current-line~ to bind their argument to its return value.
+Thus, saying "delete line" will delete the current line and saying
+"beginning of line" will move point to the beginning of the current
+line.
 
 #+begin_src elisp
-  (defun rule/current-line ()
-    (declare (phony-rule
-              :export nil
-              "line"))
+  (phony-defun current-line "line"
+    :export nil
     (bounds-of-thing-at-point 'line))
 
-  (defun rule/delete-current-line (bounds)
-    (declare (phony-rule
-              "delete"
-              (bounds rule/current-line)))
+  (phony-defun delete-current-line ("delete" (bounds current-line))
     (delete-region (car bounds) (cdr bounds)))
 
-  (defun rule/beginning-of-current-line (bounds)
-    (declare (phony-rule
-              "beginning of"
-              (bounds rule/current-line)))
+  (phony-defun beginning-of-current-line ("beginning of" (bounds current-line))
     (goto-char (car bounds)))
 #+end_src
 
@@ -105,11 +94,7 @@ procedure rule, uttering "delete three lines" will delete three lines,
 and correspondingly for any other number between one and five.
 
 #+begin_src elisp
-  (defun rule/delete-lines (n)
-    (declare (phony-rule
-              "delete"
-              (n rule/number)
-              "lines"))
+  (phony-defun delete-lines ("delete" (n number) "lines")
     (dotimes (i n)
       (delete-line)))
 #+end_src
@@ -123,25 +108,18 @@ following code example, one may utter "delete line" to delete the
 current line, or "delete sentence" to delete the current sentence:
 
 #+begin_src elisp
-  (defun rule/current-line ()
-    (declare (phony-rule
-              :export nil
-              "line"))
+  (phony-defun current-line "line"
+    :export nil
     (bounds-of-thing-at-point 'line))
 
-  (defun rule/current-sentence ()
-    (declare (phony-rule
-              :export nil
-              "sentence"))
+  (phony-defun current-sentence "sentence"
+    :export nil
     (bounds-of-thing-at-point 'sentence))
 
   (phony-define-open-rule rule/region
     :alternatives '(rule/current-line rule/current-sentence))
 
-  (defun rule/delete-current (bounds)
-    (declare (phony-rule
-              "delete"
-              (bounds rule/region)))
+  (phony-defun delete-current ("delete" (bounds region))
     (delete-region (car bounds) (cdr bounds)))
 #+end_src
 
@@ -153,24 +131,17 @@ in effect to the previous one:
 #+begin_src elisp
   (phony-define-open-rule rule/region)
 
-  (defun rule/current-line ()
-    (declare (phony-rule
-              :contributes-to rule/region
-              :export nil
-              "line"))
+  (phony-defun current-line "line"
+    :contributes-to rule/region
+    :export nil
     (bounds-of-thing-at-point 'line))
 
-  (defun rule/current-sentence ()
-    (declare (phony-rule
-              :contributes-to rule/region
-              :export nil
-              "sentence"))
+  (phony-defun current-sentence "sentence"
+    :contributes-to rule/region
+    :export nil
     (bounds-of-thing-at-point 'sentence))
 
-  (defun rule/delete-current (bounds)
-    (declare (phony-rule
-              "delete"
-              (bounds rule/region)))
+  (phony-defun delete-current ("delete" (bounds region))
     (delete-region (car bounds) (cdr bounds)))
 #+end_src
 

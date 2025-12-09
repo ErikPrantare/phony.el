@@ -37,22 +37,16 @@
 (phony-talon-community-bindings--make rule/digit (user digit))
 (phony-talon-community-bindings--make rule/number (user number))
 
-(defun rule/letter (char)
-  (declare (phony-rule
-            :export nil
-            (char (external-rule user letter))))
+(phony-defun letter ((char (external-rule user letter)))
+  :export nil
   (seq-first char))
 
-(defun rule/any-alphanumeric-key (char)
-  (declare (phony-rule
-            :export nil
-            (char (external-rule user any_alphanumeric_key))))
+(phony-defun any-alphanumeric-key ((char (external-rule user any_alphanumeric_key)))
+  :export nil
   (seq-first char))
 
-(defun rule/symbol-key (char)
-  (declare (phony-rule
-            :export nil
-            (char (external-rule user symbol_key))))
+(phony-defun symbol-key ((char (external-rule user symbol_key)))
+  :export nil
   (seq-first char))
 
 (provide 'phony-talon-community-bindings)
