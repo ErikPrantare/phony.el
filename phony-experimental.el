@@ -89,7 +89,9 @@
 
     (cond
      ((not (seq-every-p (lambda (argument) (memq argument (flatten-tree body)))
-                        arguments))
+                        (seq-remove (lambda (argument)
+                                      (string-prefix-p "_" (symbol-name argument)))
+                                    arguments)))
       ;; TODO: Which arguments?
       `(display-warning
         'phony
