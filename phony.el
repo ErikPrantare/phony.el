@@ -224,7 +224,10 @@ Rules belonging to disabled modules are never exported."
 NAME is the name of the rule.
 
 MODULE is a the module this rule belongs to.  Modules are specified with
-`phony-module'.
+`phony-module'.  Its value is nil if it is not part of a module.
+
+FILE-NAME is the filename of the file where this rule was defined.  Its
+value is nil if it was not evaluated from a file.
 
 MODES is a list of modes under which this rule is active.  If none of
 the modes are active, this rule cannot be matched.  A special case is
@@ -240,6 +243,7 @@ be inactive.  If WHEN is nil, it behaves as if it always returned t.
 CONTRIBUTES-TO is a list of open rules that this rule contributes to."
   (name nil :type symbol)
   (module nil :type phony--module)
+  (file-name nil :type string)
   (modes '(global) :type list)
   (external-name nil :type string)
   (when nil :type (function () t))
@@ -332,6 +336,7 @@ module.
 
 This function must be invoked every time a rule is declared."
   (setf (phony--rule-module rule) (phony--current-module))
+  (setf (phony--rule-file-name rule) (phony--current-file-name))
   (puthash (phony--rule-name rule)
            rule
            phony--rules))
