@@ -411,9 +411,9 @@ When evaluating the returned string from emacsclient, this performs
 the lookup."
   (if (phony--dictionary-format-raw-p dictionary)
       (cdr entry)
-    (format "(phony-dictionary-get \"%s\" '%s)"
-            (car entry)
-            (string-remove-prefix "rule/" (symbol-name (phony--dictionary-name dictionary))))))
+    (format "(%s \"%s\")"
+            (string-remove-prefix "rule/" (symbol-name (phony--dictionary-name dictionary)))
+            (car entry))))
 
 (defun phony--prepare-dictionary-for-serialization (dictionary)
   "Return DICTIONARY as an entry for `json-serialize'.
@@ -569,10 +569,6 @@ be one of the following:
              name)
 
   (setq name (phony--normalize-rule-name name))
-
-  ;; For finding the definition of this rule
-  (defalias name (lambda (&rest _) nil)
-    "Open rule for phony.")
 
   (phony--add-rule
    (make-phony--open-rule
@@ -1144,6 +1140,27 @@ If NAME already starts with rule/, return it unchanged."
                (seq-map #'phony--rule-external-name active-rules)
                "\n")
               "\n"))))
+
+(defun phony--procedure-rule-definition (rule)
+  (phony--normalize-rule-name (phony--rule-name rule)))
+
+(defun phony--evaluate-ast (ast)
+  (if (atom ast)
+      ast
+    (let* ((type (car ast))
+           (arguments (cdr ast))
+           (rule (phony--get-rule type)))
+      (cond
+       ((eq type 'list)
+        (seq-map #'phony--evaluate-ast
+                 arguments))
+       ((phony--dictionary-p rule)
+        (phony-dictionary-get (car arguments) type))
+       ((phony--procedure-rule-p rule)
+        (apply (phony--procedure-rule-definition rule)
+               (seq-map #'phony--evaluate-ast
+                        arguments)))
+       (t ast)))))
 
 (require 'phony-talon)
 (require 'phony-dragonfly)

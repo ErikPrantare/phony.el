@@ -223,7 +223,9 @@ MATCH-ELEMENT among all of those `equal' to it."
       (insert "\n")))
   (insert
    (format "    return f\"(%s %s)\"\n"
-           (phony--procedure-rule-function rule)
+           (string-remove-prefix
+            "rule/"
+            (symbol-name (phony--procedure-rule-name rule)))
            (string-join
             (seq-map (lambda (argument)
                        (format "{%s}" (phony--to-python-identifier argument)))
@@ -306,7 +308,7 @@ If you are using EXWM, you probably want this to be t.")
               "    return subprocess.Popen(\n"
               "        ['emacsclient',\n"
               "         '--eval',\n"
-              "         f\"(phony--evaluate-form '{expression})\"])\n"
+              "         f\"(phony--evaluate-form '(phony--evaluate-ast '{expression}))\"])\n"
               "\n"
               "def evaluate_lisp(expression: str):\n"
               "    evaluate_lisp_async(expression).wait()\n"
