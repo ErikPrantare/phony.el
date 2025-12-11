@@ -346,6 +346,7 @@ This function must be invoked every time a rule is declared."
   (interactive (list (intern (completing-read "Remove rule: "
                                               (hash-table-keys
                                                phony--rules)))))
+  (setq rule-name (phony--normalize-rule-name rule-name))
   (remhash rule-name phony--rules)
   (seq-doseq (open-rule (seq-filter
                          #'phony--open-rule-p
