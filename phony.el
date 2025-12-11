@@ -1163,6 +1163,9 @@ If NAME already starts with rule/, return it unchanged."
                         arguments)))
        (t ast)))))
 
+(defmacro phony--evaluate-ast-macro (ast)
+  `(phony--evaluate-ast ',ast))
+
 (require 'phony-talon)
 (require 'phony-dragonfly)
 
