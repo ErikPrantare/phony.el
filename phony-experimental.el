@@ -78,32 +78,47 @@
 
 (add-hook 'emacs-lisp-mode-hook #'phony--install-font-lock)
 
+(defun phony--find-definition (name)
+  (re-search-forward
+   (rx (seq (or "(phony-defun"
+                "(phony-define-dictionary"
+                "(phony-define-open-rule")
+            (+ (not graphic))
+            (group (literal (symbol-name name)))
+            symbol-end))
+   nil t))
+
+(require 'find-func)
+
+(setf (alist-get 'phony find-function-regexp-alist)
+      #'phony--find-definition)
+
 (defun phony--xref-backend-definitions (f backend identifier)
-  ;; TODO: Handle macro expansions
-  (if (and (eq backend 'elisp)
-           (phony--in-element-form-p (get-text-property 0 'pos identifier)))
-      (and-let* ((rule-name (intern-soft identifier))
-                 (rule (phony--get-rule rule-name))
-                 (file-name (phony--rule-file-name rule)))
-        (with-current-buffer (find-file-noselect file-name)
+  (if (or (not (eq backend 'elisp))
+          (not (phony--in-element-form-p
+                (get-text-property 0 'pos identifier))))
+      (funcall f backend identifier)
+    (and-let* ((rule-name (intern-soft identifier))
+               (rule (phony--get-rule rule-name))
+               (file-name (phony--rule-file-name rule))
+               (location (find-function-search-for-symbol
+                          rule-name
+                          'phony
+                          file-name))
+               (buffer (car location))
+               (position (cdr location)))
+      (with-current-buffer buffer
+        (save-restriction
+          (widen)
           (save-excursion
-            (goto-char (point-min))
-            (and (re-search-forward
-                  (rx (seq "(" (or "phony-defun"
-                                   "phony-define-dictionary"
-                                   "phony-define-open-rule")
-                           (+ (not graphic))
-                           (group (literal identifier))
-                           symbol-end))
-                  nil
-                  t)
-                 (list (xref-make
-                        identifier
-                        (xref-make-file-location
-                         file-name
-                         (line-number-at-pos (point))
-                         (- (point) (line-beginning-position)))))))))
-    (funcall f backend identifier)))
+            (goto-char position)
+            (list
+             (xref-make
+              identifier
+              (xref-make-file-location
+               file-name
+               (line-number-at-pos nil t)
+               (- (point) (line-beginning-position)))))))))))
 
 (advice-add #'xref-backend-definitions :around #'phony--xref-backend-definitions)
 
