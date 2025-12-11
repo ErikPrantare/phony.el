@@ -223,9 +223,7 @@ MATCH-ELEMENT among all of those `equal' to it."
       (insert "\n")))
   (insert
    (format "    return f\"(%s %s)\"\n"
-           (string-remove-prefix
-            "rule/"
-            (symbol-name (phony--procedure-rule-name rule)))
+           (symbol-name (phony--procedure-rule-name rule))
            (string-join
             (seq-map (lambda (argument)
                        (format "{%s}" (phony--to-python-identifier argument)))

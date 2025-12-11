@@ -325,7 +325,7 @@ is identified when exported to the speech engine."
 (defun phony--get-rule (name)
   "Get the rule named NAME.
 Return nil if no such rule exists."
-  (gethash (phony--normalize-rule-name name) phony--rules))
+  (gethash name phony--rules))
 
 (defun phony--add-rule (rule)
   "Add a new rule RULE.
@@ -346,7 +346,6 @@ This function must be invoked every time a rule is declared."
   (interactive (list (intern (completing-read "Remove rule: "
                                               (hash-table-keys
                                                phony--rules)))))
-  (setq rule-name (phony--normalize-rule-name rule-name))
   (remhash rule-name phony--rules)
   (seq-doseq (open-rule (seq-filter
                          #'phony--open-rule-p
@@ -413,7 +412,7 @@ the lookup."
   (if (phony--dictionary-format-raw-p dictionary)
       (cdr entry)
     (format "(%s \"%s\")"
-            (string-remove-prefix "rule/" (symbol-name (phony--dictionary-name dictionary)))
+            (phony--dictionary-name dictionary)
             (car entry))))
 
 (defun phony--prepare-dictionary-for-serialization (dictionary)
@@ -483,8 +482,6 @@ MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-rule'."
     (error "The keys of %s must be strings, but %S is not a string"
            name (car non-string-key)))
 
-  (setq name (phony--normalize-rule-name name))
-
   (phony--add-rule
    (phony--make-dictionary
     :name name
@@ -492,8 +489,7 @@ MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-rule'."
     :external-name external-name
     :format-raw-p format-raw
     :modes mode
-    :contributes-to (seq-map #'phony--normalize-rule-name
-                             (ensure-list contributes-to))))
+    :contributes-to (ensure-list contributes-to)))
 
   (if (or contributes-to (not (memq 'global mode)))
       (phony-request-export)
@@ -569,17 +565,14 @@ be one of the following:
              "Transformation argument to rule %S must be a symbol"
              name)
 
-  (setq name (phony--normalize-rule-name name))
-
   (phony--add-rule
    (make-phony--open-rule
     :name name
     :external-name external-name
     :transformation transformation
-    :alternatives (seq-map #'phony--normalize-rule-name alternatives)
+    :alternatives alternatives
     :modes mode
-    :contributes-to (seq-map #'phony--normalize-rule-name
-                             (ensure-list contributes-to))))
+    :contributes-to (ensure-list contributes-to)))
 
   name)
 
@@ -891,9 +884,10 @@ instead."
     (cancel-function-timers #'phony--export-all)
     (run-with-idle-timer 0 nil #'phony--export-all)))
 
-(cl-defun phony--export-rule (function
+(cl-defun phony--export-rule (name
+                              function
                               arglist
-                              element-forms
+                              element-form
                               &key
                               (mode 'global)
                               contributes-to
@@ -905,15 +899,15 @@ instead."
   ;; checkdoc-params: (mode contributes-to external-name export anchor-beginning anchor-end)
   "Declare FUNCTION to be a rule invokeable by voice.
 
-ARGLIST is the argument list of the function.  ELEMENT-FORMS is a list of
+ARGLIST is the argument list of the function.  ELEMENT-FORM is a an
 element forms specifying how to match this rule.
 
 For the named arguments and the specification of element forms, see the
 documentation for `phony-rule'."
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
-  (unless external-name (setq external-name (phony--to-python-identifier function)))
-  (phony-remove-rule function)
+  (unless external-name (setq external-name (phony--to-python-identifier name)))
+  (phony-remove-rule name)
   ;; TODO: Add element form checks:
   ;; - Each argument may only occur at most once.
   ;; - Arguments may only be bound to value creating elements.  (May
@@ -922,18 +916,17 @@ documentation for `phony-rule'."
   ;;   limitation)
   (phony--add-rule
    (make-phony--procedure-rule
-    :name function
+    :name name
     :external-name external-name
     :function function
     :element (phony--parse-speech-element
-              (cons 'seq element-forms)
+              element-form
               (byte-compile-arglist-vars arglist))
     :arglist arglist
     :modes mode
     :when when
     :export export
-    :contributes-to (seq-map #'phony--normalize-rule-name
-                             (ensure-list contributes-to))
+    :contributes-to (ensure-list contributes-to)
     :anchor-beginning-p anchor-beginning
     :anchor-end-p anchor-end))
 
@@ -954,6 +947,7 @@ form."
             `',(ensure-list (map-elt optional-arguments :contributes-to))))
 
     `(phony--export-rule
+      #',function
       #',function
       ',arglist
       ',pattern
@@ -1049,6 +1043,11 @@ of alternating KEY and VALUE.  Optional arguments are:
   ;;   example, we know that function names cannot appear in the form,
   ;;   so those may be filtered out from completion and
   ;;   go-to-definition.
+
+  ;; TODO: Move more of the logic to phony--export-rule:
+  ;; - Implicit argument deduction
+  ;; - Adding implicit 'seq (if not already done)
+  ;; - Sanity checks
   (let* ((doc (and (stringp (car rest)) (pop rest)))
          (split-arguments (phony--split-keywords-rest rest))
          (optional-arguments (car split-arguments))
@@ -1057,6 +1056,10 @@ of alternating KEY and VALUE.  Optional arguments are:
           (phony--expand-implicit-arguments
            (cons 'seq (ensure-list pattern))))
          (arguments (phony--collect-arguments expanded-pattern)))
+
+    (when (map-elt optional-arguments :contributes-to)
+      (setf (map-elt optional-arguments :contributes-to)
+            `',(ensure-list (map-elt optional-arguments :contributes-to))))
 
     (cond
      ((not (seq-every-p (lambda (argument) (memq argument (flatten-tree body)))
@@ -1075,20 +1078,12 @@ of alternating KEY and VALUE.  Optional arguments are:
         ,(format (concat "Duplicate arguments in %s\n"
                          "If you use implicit argument names, make them explicit")
                  name)))
-     (t `(defun ,(phony--normalize-rule-name name) ,arguments
-           ,@(ensure-list doc)
-           (declare (phony-rule
-                     ,@optional-arguments
-                     ,expanded-pattern))
-           ,@body)))))
-
-(defun phony--normalize-rule-name (name)
-  "Normalize NAME to include the rule/ prefix.
-If NAME already starts with rule/, return it unchanged."
-  ;; This is intended to be temporary
-  (if (string-prefix-p "rule/" (symbol-name name))
-      name
-    (intern (concat "rule/" (symbol-name name)))))
+     (t `(phony--export-rule
+          ',name
+          (lambda ,arguments ,@(ensure-list doc) ,@body)
+          ',arguments
+          ',expanded-pattern
+          ,@optional-arguments)))))
 
 (defun phony--expand-implicit-arguments (element-form)
   (cond
@@ -1132,9 +1127,6 @@ If NAME already starts with rule/, return it unchanged."
                "\n")
               "\n"))))
 
-(defun phony--procedure-rule-definition (rule)
-  (phony--normalize-rule-name (phony--rule-name rule)))
-
 (defun phony--evaluate-ast (ast)
   (if (atom ast)
       ast
@@ -1148,7 +1140,7 @@ If NAME already starts with rule/, return it unchanged."
        ((phony--dictionary-p rule)
         (phony-dictionary-get (car arguments) type))
        ((phony--procedure-rule-p rule)
-        (apply (phony--procedure-rule-definition rule)
+        (apply (phony--procedure-rule-function rule)
                (seq-map #'phony--evaluate-ast
                         arguments)))
        (t ast)))))
