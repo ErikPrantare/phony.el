@@ -74,7 +74,7 @@ line.
 #+end_src
 
 For more documentation on procedure rules, see the function
-documentation of ~phony-rule~.
+documentation of ~phony-defun~.
 
 ** Dictionaries
 Dictionaries are utterance -> value maps.  The following code defines

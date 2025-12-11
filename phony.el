@@ -465,7 +465,7 @@ If FORMAT-RAW is t, the dictionary will be formated for use on the side
 of the speech recognition engine.  This only works if the values of the
 dictionary are strings.
 
-MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-rule'."
+MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-defun'."
   (unless external-name (setq external-name (phony--to-python-identifier name)))
   (setq mode (ensure-list mode))
 
@@ -522,9 +522,9 @@ be one of the following:
   :format-raw       Export values in a form usable by the engine,
                     not Emacs.  This only works when the values are
                     strings.
-  :mode             Same as for `phony-rule'.
-  :external-name    Same as for `phony-rule'.
-  :contributes-to   Same as for `phony-rule'.
+  :mode             Same as for `phony-defun'.
+  :external-name    Same as for `phony-defun'.
+  :contributes-to   Same as for `phony-defun'.
 
 \(fn NAME [KEY VALUE]... ALIST)"
   (declare (indent defun))
@@ -595,7 +595,7 @@ value is first passed through TRANSFORMATION.  Otherwise, the value is
 passed through without modification.
 
 Optional keyword arguments MODE, CONTRIBUTES-TO and EXTERNAL-NAME are
-the same as for `phony-rule'."
+the same as for `phony-defun'."
   (declare (indent defun))
   `(phony--define-open-rule
     ',name
@@ -903,7 +903,7 @@ ARGLIST is the argument list of the function.  ELEMENT-FORM is a an
 element forms specifying how to match this rule.
 
 For the named arguments and the specification of element forms, see the
-documentation for `phony-rule'."
+documentation for `phony-defun'."
   (setq arglist (byte-compile-arglist-vars arglist))
   (setq mode (ensure-list mode))
   (unless external-name (setq external-name (phony--to-python-identifier name)))
@@ -932,61 +932,43 @@ documentation for `phony-rule'."
 
   (phony-request-export))
 
-(cl-defun phony--speech-declaration (function arglist &rest declaration-args)
-  ;; checkdoc-params: (arglist declaration-args)
-  "Declare FUNCTION to be a rule invokeable by voice.
+(defmacro phony-defun (name pattern &rest rest)
+  "Define a procedure rule invokeable by voice.
 
-This function should not be called directly, but through a `phony-rule'
-form."
-  (let* ((split-args (phony--split-keywords-rest declaration-args))
-         (optional-arguments (car split-args))
-         (pattern (cdr split-args)))
+NAME is the unquoted name of the rule.
 
-    (when (map-elt optional-arguments :contributes-to)
-      (setf (map-elt optional-arguments :contributes-to)
-            `',(ensure-list (map-elt optional-arguments :contributes-to))))
+When PATTERN is matched, BODY is evaluated.  This can be done to perform
+actions through side effects, or to provide values for other rules.  The
+value of matching the procedure rule is the value returned by BODY.
 
-    `(phony--export-rule
-      #',function
-      #',function
-      ',arglist
-      ',pattern
-      ,@optional-arguments)))
-
-(setf (alist-get 'phony-rule defun-declarations-alist)
-      (list #'phony--speech-declaration))
-
-(defmacro phony-rule (args)
-  ;; checkdoc-params: (args)
-  "Declare function to be a rule invokeable by voice.
-
-This form must occur inside a `declare' form to take effect.
-
-ELEMENTS is a sequence of elements declaring when this rule gets
-matched.  An element may have one of the following forms:
+PATTERN is either a string literal, in which case the rule is matched
+when that string is uttered.  Otherwise, it is an unquoted list of
+elements.  An element may have one of the following forms:
 
   STRING           Match a literal STRING.
-  SYMBOL           Match a rule named SYMBOL.
-  (ARG SYMBOL)     Match a rule named SYMBOL, bind its value to argument
-                   ARG.  ARG must be part of the function's arglist.
-  (seq ELEMS...)   Match elements ELEMS.
+  RULE             Match a rule named RULE.
+  (ARG RULE)       Match RULE, bind its value to argument ARG when
+                   evaluating BODY.
+  (seq ELEMS...)   Match elements ELEMS in sequence.
   (? ELEMS...)     Optionally match elements ELEMS.
   (* ELEMS...)     Match elements ELEMS zero or more times.
   (+ ELEMS...)     Match elements ELEMS one or more times.
 
-Optional arguments for the rule are given before ELEMENTS as a sequence
-of alternating KEY and VALUE.  Optional arguments are:
+Optional argument DOCSTRING is a documentation string for the rule.
+
+Optional keyword arguments or provided as an alternating sequence of KEY
+and VALUE.  Optional keyword arguments are:
 
   :export            If nil, this rule cannot be spoken directly but may
                      occur as part of other rules.  Default is t.
-  :mode              A mode or list of modes for this rule should be
+  :mode              A mode or list of modes for which this rule should be
                      active.  If none of the modes match, this rule
-                     never matches.  As a special case, 'global always
-                     matches.  Default is 'global.
+                     never matches.  As a special case, \\='global always
+                     matches.  Default is \\='global.
   :when              A function of no arguments returning non-nil when
-                     this rule should be active.  If this argument
-                     omitted provided, it behaves as if a function
-                     always returning t was provided.
+                     this rule should be active.  If this argument is
+                     omitted, it behaves as if a function always
+                     returning t was provided.
   :contributes-to    An unquoted symbol or list of symbols of open
                      rules that this procedure should contribute to.
                      See `phony-define-open-rule' for open rules.
@@ -999,10 +981,7 @@ of alternating KEY and VALUE.  Optional arguments are:
                      the external speech engine.  Otherwise, it gets
                      assigned an unspecified auto-generated name.
 
-\(fn [KEY VALUE]... ELEMENTS...)"
-  `(message "Stray `phony-rule' form: %S" '(phony-rule . ,args)))
-
-(defmacro phony-defun (name pattern &rest rest)
+\(fn NAME PATTERN [DOCSTRING] [KEY VALUE]... BODY...)"
   (declare (indent 2)
            (doc-string 3))
   ;; Syntactical design decisions:
