@@ -1011,16 +1011,6 @@ of alternating KEY and VALUE.  Optional arguments are:
 (defmacro phony-defun (name pattern &rest rest)
   (declare (indent 2)
            (doc-string 3))
-  ;; Tooling that we want to work before we are ready to ship this:
-  ;; - xref: DONE
-  ;; - completion-at-point: DONE
-  ;; - syntax highlighting for keywords
-
-  ;; Other todos:
-  ;; - Do not hijack the function namespace.  The tooling may need to
-  ;;   be revisited after this.
-  ;; - Check TODOs for better error messages.
-
   ;; Syntactical design decisions:
   ;; - Automatic argument deduction: Explicitly specifying the
   ;;   argument list meant that adding a parameter necessitated a
