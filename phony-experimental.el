@@ -42,7 +42,9 @@
 
 (defun phony--in-element-form-p (&optional position)
   (unless position (setq position (point)))
-  (seq-contains-p (phony--function-calls-at position) '(phony-defun 2)))
+  (or
+   (seq-contains-p (phony--function-calls-at position) '(phony-defun 2))
+   (seq-contains-p (phony--function-calls-at position) '(phony--evaluate-ast-macro 1))))
 
 (defun phony--completion-at-point ()
   (and (phony--in-element-form-p)
@@ -86,34 +88,36 @@
 (setf (alist-get 'phony find-function-regexp-alist)
       #'phony--find-definition)
 
-(defun phony--xref-backend-definitions (f backend identifier)
-  (if (or (not (eq backend 'elisp))
-          (not (phony--in-element-form-p
-                (get-text-property 0 'pos identifier))))
-      (funcall f backend identifier)
-    (and-let* ((rule-name (intern-soft identifier))
-               (rule (phony--get-rule rule-name))
-               (file-name (phony--rule-file-name rule))
-               (location (find-function-search-for-symbol
-                          rule-name
-                          'phony
-                          file-name))
-               (buffer (car location))
-               (position (cdr location)))
-      (with-current-buffer buffer
-        (save-restriction
-          (widen)
-          (save-excursion
-            (goto-char position)
-            (list
-             (xref-make
-              identifier
-              (xref-make-file-location
-               file-name
-               (line-number-at-pos nil t)
-               (- (point) (line-beginning-position)))))))))))
+(cl-defmethod xref-backend-definitions ((_backend (eql 'phony)) identifier)
+  (and-let* ((rule-name (intern-soft identifier))
+             (rule (phony--get-rule rule-name))
+             (file-name (phony--rule-file-name rule))
+             (location (find-function-search-for-symbol
+                        rule-name
+                        'phony
+                        file-name))
+             (buffer (car location))
+             (position (cdr location)))
+    (with-current-buffer buffer
+      (save-restriction
+        (widen)
+        (save-excursion
+          (goto-char position)
+          (list
+           (xref-make
+            identifier
+            (xref-make-file-location
+             file-name
+             (line-number-at-pos nil t)
+             (- (point) (line-beginning-position))))))))))
 
-(advice-add #'xref-backend-definitions :around #'phony--xref-backend-definitions)
+(defun phony--xref-backend ()
+  (and (phony--in-element-form-p) 'phony))
+
+(defun phony--install-xref ()
+  (add-hook 'xref-backend-functions #'phony--xref-backend nil t))
+
+(add-hook 'emacs-lisp-mode-hook #'phony--install-xref)
 
 (provide 'phony-experimental)
 ;;; phony-experimental.el ends here
