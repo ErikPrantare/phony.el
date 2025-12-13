@@ -292,13 +292,13 @@ modes are currently active."
                (:constructor phony--make-dictionary))
   "A dictionary mapping utterances to values.
 
-ALIST is the mapping.
+MAPING is an alist mapping utterances, given as strings, to values.
 
 FORMAT-RAW-P is t if this dictionary is intended to be used on the
 speech recognition side.  In that case, the mapping may only map to
 strings."
   (format-raw-p nil :type boolean)
-  (alist nil :type list))
+  (mapping nil :type list))
 
 (defun phony--normalize-rule (rule-or-name)
   "Return rule specified by RULE-OR-NAME.
@@ -341,6 +341,43 @@ This function must be invoked every time a rule is declared."
            rule
            phony--rules))
 
+(defun phony--add-new-rule (constructor parameters)
+  ;; We will be destructively modifying the parameter list, so copy
+  ;; it.  All modifications are shallow.
+  (setq parameters (apply #'list parameters))
+
+  ;; NOTE: The external parameter is named :mode, but internally we
+  ;; normalize it to a list :modes.
+  (when-let ((mode (map-elt parameters :mode)))
+    (when (and (listp mode) (eq (car mode) 'quote))
+      (error ":mode keyword argument must be unquoted"))
+    (setf (map-elt parameters :modes)
+          (ensure-list (map-elt parameters :mode)))
+    (cl-remf parameters :mode))
+
+  (when-let ((contributes-to (map-elt parameters :contributes-to)))
+    (when (and (listp contributes-to) (eq (car contributes-to) 'quote))
+      (error ":contributes-to keyword argument must be unquoted"))
+    (setf (map-elt parameters :contributes-to)
+          (ensure-list (map-elt parameters :contributes-to))))
+
+  ;; TODO: Check if this can be handled directly in the constructor.
+  ;; I would guess that custom constructors are ignored when
+  ;; constructing substructs.
+  (with-memoization (map-elt parameters :external-name)
+    (phony--to-python-identifier (map-elt parameters :name)))
+
+  (setf (map-elt parameters :module)
+        (phony--current-module))
+
+  (setf (map-elt parameters :file-name)
+        (phony--current-file-name))
+
+  (puthash
+   (map-elt parameters :name)
+   (apply constructor parameters)
+   phony--rules))
+
 (defun phony-remove-rule (rule-name)
   "Remove rule named RULE-NAME."
   (interactive (list (intern (completing-read "Remove rule: "
@@ -359,7 +396,7 @@ This function must be invoked every time a rule is declared."
 If no such value exists, return nil.
 
 DICTIONARY is the name of the dictionary to modify."
-  (alist-get utterance (phony--dictionary-alist (phony--get-rule dictionary)) nil nil #'equal))
+  (alist-get utterance (phony--dictionary-mapping (phony--get-rule dictionary)) nil nil #'equal))
 
 (defun phony-dictionary-put (utterance dictionary value)
   "Set the value of UTTERANCE in DICTIONARY to VALUE.
@@ -368,7 +405,7 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (alist-get utterance (phony--dictionary-alist (phony--get-rule dictionary)))
+  (setf (alist-get utterance (phony--dictionary-mapping (phony--get-rule dictionary)))
         value)
   (phony--request-export-dictionaries))
 
@@ -379,7 +416,7 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (alist-get utterance (phony--dictionary-alist (phony--get-rule dictionary)) nil t)
+  (setf (alist-get utterance (phony--dictionary-mapping (phony--get-rule dictionary)) nil t)
         nil)
   (phony--request-export-dictionaries))
 
@@ -387,7 +424,7 @@ recognition engine."
   "Return the mapping of DICTIONARY as an alist.
 
 DICTIONARY is the name of the dictionary to modify."
-  (phony--dictionary-alist (phony--get-rule dictionary)))
+  (phony--dictionary-mapping (phony--get-rule dictionary)))
 
 (defun phony-set-dictionary-alist (dictionary alist)
   "Set the mapping of DICTIONARY to ALIST.
@@ -396,7 +433,7 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (phony--dictionary-alist (phony--get-rule dictionary)) alist))
+  (setf (phony--dictionary-mapping (phony--get-rule dictionary)) alist))
 
 (gv-define-setter phony-dictionary-get (value utterance dictionary)
   `(phony-dictionary-put ,utterance ,dictionary ,value))
@@ -428,7 +465,7 @@ to its dictionary."
                    ;; will evaluate to the actual value.
                    (phony--create-lookup-representation
                     entry dictionary)))
-                (phony--dictionary-alist dictionary))))
+                (phony--dictionary-mapping dictionary))))
 
 ;; TODO: Handle IO errors
 (defun phony--export-dictionaries ()
@@ -452,13 +489,7 @@ dictionaries."
     (cancel-function-timers #'phony--export-dictionaries)
     (run-with-idle-timer 0.0 nil #'phony--export-dictionaries)))
 
-(cl-defun phony--define-dictionary (name
-                                    mapping
-                                    &key
-                                    external-name
-                                    (mode 'global)
-                                    format-raw
-                                    contributes-to)
+(cl-defun phony--define-dictionary (arguments)
   "Define dictionary rule NAME containing MAPPING.
 
 If FORMAT-RAW is t, the dictionary will be formated for use on the side
@@ -466,32 +497,34 @@ of the speech recognition engine.  This only works if the values of the
 dictionary are strings.
 
 MODE, CONTRIBUTES-TO and EXTERNAL-NAME are the same as for `phony-defun'."
-  (unless external-name (setq external-name (phony--to-python-identifier name)))
-  (setq mode (ensure-list mode))
+  (let ((mapping (plist-get arguments :mapping))
+        (name (plist-get arguments :name)))
+    (unless (plist-member arguments :mapping)
+      (error "Required mapping for %s not provided" name))
 
-  (unless (proper-list-p mapping)
-    (error "The mapping of %s must be a list" name))
+    (unless (proper-list-p mapping)
+      (error "The mapping of %s must be a list" name))
 
-  (when-let ((non-cons (seq-find (lambda (x) (not (consp x))) mapping)))
-    (error "The mapping of %s must be a alist, but %S is not a cons cell"
-           name non-cons))
+    (when-let ((non-cons (seq-find (lambda (x) (not (consp x))) mapping)))
+      (error "The mapping of %s must be a alist, but %S is not a cons cell"
+             name non-cons))
 
-  (when-let ((non-string-key (seq-find
-                              (lambda (entry) (not (stringp (car-safe entry))))
-                              mapping)))
-    (error "The keys of %s must be strings, but %S is not a string"
-           name (car non-string-key)))
+    (when-let ((non-string-key (seq-find
+                                (lambda (entry) (not (stringp (car-safe entry))))
+                                mapping)))
+      (error "The keys of %s must be strings, but %S is not a string"
+             name (car non-string-key))))
 
-  (phony--add-rule
-   (phony--make-dictionary
-    :name name
-    :alist mapping
-    :external-name external-name
-    :format-raw-p format-raw
-    :modes mode
-    :contributes-to (ensure-list contributes-to)))
+  (when (plist-member arguments :format-raw)
+    (setf (plist-get arguments :format-raw-p)
+          (plist-member arguments :format-raw))
+    (cl-remf arguments :format-raw))
 
-  (if (or contributes-to (not (memq 'global mode)))
+  (phony--add-new-rule #'phony--make-dictionary arguments)
+
+  (if (or (map-elt arguments :contributes-to)
+          (and (map-elt arguments :mode)
+               (not (memq 'global (map-elt arguments :mode)))))
       (phony-request-export)
     (phony--request-export-dictionaries)))
 
@@ -528,18 +561,12 @@ be one of the following:
 
 \(fn NAME [KEY VALUE]... ALIST)"
   (declare (indent defun))
-  (let* ((split-arguments (phony--split-keywords-rest arguments))
-         (optional-arguments (car split-arguments))
-         (alist (cadr split-arguments)))
-
-    (when (map-elt optional-arguments :contributes-to)
-      (setf (map-elt optional-arguments :contributes-to)
-            `',(ensure-list (map-elt optional-arguments :contributes-to))))
-
+  (pcase-let* ((`(,optional-arguments . (,mapping))
+                (phony--split-keywords-rest arguments)))
     `(phony--define-dictionary
-      ',name
-      ,alist
-      ,@optional-arguments)))
+      (append (list :name ',name
+                    :mapping ,mapping)
+              ',optional-arguments))))
 
 (defun phony--add-alternative (alternative open-rule-name)
   "Add rule ALTERNATIVE as an alternative for open rule OPEN-RULE-NAME."
