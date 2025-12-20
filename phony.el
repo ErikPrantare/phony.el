@@ -687,7 +687,7 @@ RULE."
   '())
 
 (cl-defgeneric phony--references (rule-or-name)
-  "Return list of references of RULE-OR-NAME.
+  "Return list of references to rules in RULE-OR-NAME.
 
 Each element of the list is a cons cell (NAME . CONTRAVARIANT).  NAME is
 a symbol naming the referred to function.  CONTRAVARIANT is non-nil if
