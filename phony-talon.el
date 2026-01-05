@@ -46,8 +46,7 @@
     ;; Avoid capture indirection unless required.
     (if (and (phony--dictionary-p match-rule)
              (eq occurrence-number 0)
-             (memq 'global (phony--rule-modes match-rule))
-             (not (phony--rule-when match-rule)))
+             (phony--rule-always-active-p match-rule))
         (format "{user.%s}"
                 (phony--external-name match-rule))
       (format "<user.%s%s>"
@@ -149,12 +148,14 @@
                   (phony--rule-external-name rule))))
 
 (defun phony-talon--insert-capture-preamble (rule analysis-data)
-  (insert "# Base case for when the rule is inactive\n")
-  (phony-talon--insert-python-disabled rule)
-  (insert "\ncontext = talon.Context()\n")
-  (insert "context.matches = \"\"\"\ntag: user." (phony--rule-external-name rule) "\n\"\"\"\n")
-  (insert "@context.capture('user." (phony--rule-external-name rule)
-          "', rule=" (phony--rule-talon-pattern rule analysis-data) ")\n"))
+  (if (phony--rule-always-active-p rule)
+      (insert "@module.capture(rule=" (phony--rule-talon-pattern rule analysis-data) ")\n")
+    (insert "# Base case for when the rule is inactive\n")
+    (phony-talon--insert-python-disabled rule)
+    (insert "\ncontext = talon.Context()\n")
+    (insert "context.matches = \"\"\"\ntag: user." (phony--rule-external-name rule) "\n\"\"\"\n")
+    (insert "@context.capture('user." (phony--rule-external-name rule)
+            "', rule=" (phony--rule-talon-pattern rule analysis-data) ")\n")))
 
 (cl-defgeneric phony-talon--insert-python (rule))
 
@@ -356,8 +357,9 @@ If you are using EXWM, you probably want this to be t.")
               "        lambda x, y: update_active_tags())\n")
       (seq-doseq (rule rules)
         (insert "\n")
-        (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
-                        (phony--external-name rule)))
+        (unless (phony--rule-always-active-p rule)
+          (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
+                          (phony--external-name rule))))
         (phony-talon--insert-capture-preamble rule analysis-data)
         (phony-talon--insert-python rule)
         (phony-talon--clone-rule

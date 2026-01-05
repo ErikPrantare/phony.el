@@ -1,6 +1,6 @@
 ;;; phony.el --- Speech bindings for Elisp           -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024, 2025 Erik Präntare
+;; Copyright (C) 2024, 2025, 2026 Erik Präntare
 
 ;; Author: Erik Präntare
 ;; Keywords: files
@@ -270,6 +270,17 @@ modes are currently active."
    (if-let ((when (phony--rule-when rule)))
        (funcall when)
      t)))
+
+(defun phony--rule-always-active-p (rule)
+  "Return non-nil if RULE is guaranteed to always be active.
+
+A rule is always active if it is global, has no :when clause, and is
+part of an enabled module (or no module)."
+  (and (memq 'global (phony--rule-modes rule))
+       (not (phony--rule-when rule))
+       (if-let ((module (phony--rule-module rule)))
+           (phony--module-enabled-p module)
+         t)))
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
