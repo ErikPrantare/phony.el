@@ -294,7 +294,6 @@ part of an enabled module (or no module)."
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
   (alternatives nil :type (repeat symbol))
-  ;; TODO: Set explicitly to #'identity
   (transformation nil :type function))
 
 (cl-defstruct (phony--dictionary
