@@ -350,8 +350,9 @@ If you are using EXWM, you probably want this to be t.")
               "\n"
               "def update_active_tags():\n"
               "    with open('" (phony--output-directory "active-rules") "', 'r') as inn:\n"
-              "        tags = ['user.' + tag for tag in inn.read().strip().split('\\n')]\n"
-              "        tag_context.tags = tags\n"
+              "        tags = {'user.' + tag for tag in inn.read().strip().split('\\n')}\n"
+              "        if tags != tag_context.tags:"
+              "            tag_context.tags = tags\n"
               "\n"
               "talon.fs.watch('" (phony--output-directory "active-rules") "',\n"
               "        lambda x, y: update_active_tags())\n")
