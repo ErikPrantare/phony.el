@@ -1,6 +1,6 @@
 ;;; phony-talon.el ---                               -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025  Erik Präntare
+;; Copyright (C) 2025, 2026  Erik Präntare
 
 ;; Author: Erik Präntare <erik@system2>
 ;; Keywords: convenience
@@ -43,14 +43,21 @@
 (cl-defmethod phony--ast-match-string ((element phony--element-rule) rule)
   (let* ((occurrence-number (phony-talon--occurrence-number element rule))
          (match-rule (phony--get-rule (phony--element-rule-name element))))
-    (format "<user.%s%s>"
-            (phony--external-name
-             (phony--get-rule
-              (phony--element-rule-name element)))
-            (if (>= occurrence-number 1)
-                (format "_phony_clone%s"
-                        (1- occurrence-number))
-              ""))))
+    ;; Avoid capture indirection unless required.
+    (if (and (phony--dictionary-p match-rule)
+             (eq occurrence-number 0)
+             (memq 'global (phony--rule-modes match-rule))
+             (not (phony--rule-when match-rule)))
+        (format "{user.%s}"
+                (phony--external-name match-rule))
+      (format "<user.%s%s>"
+              (phony--external-name
+               (phony--get-rule
+                (phony--element-rule-name element)))
+              (if (>= occurrence-number 1)
+                  (format "_phony_clone%s"
+                          (1- occurrence-number))
+                "")))))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-sequence) rule)
   (string-join (seq-map (lambda (element) (phony--ast-match-string element rule))
