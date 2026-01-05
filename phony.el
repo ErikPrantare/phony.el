@@ -1140,7 +1140,8 @@ and VALUE.  Optional keyword arguments are:
   (let ((active-rules (seq-filter #'phony--rule-active-p (phony--get-rules))))
     (with-temp-file (phony--output-directory "active-rules")
       (insert (string-join
-               (seq-map #'phony--rule-external-name active-rules)
+               (seq-map #'phony--rule-external-name
+                        (seq-remove #'phony--rule-always-active-p active-rules))
                "\n")
               "\n"))))
 
