@@ -3,8 +3,6 @@
   user directory.
 - Before export: Check that directory is empty or owned by phony.
 
-* TODO Commentary
-
 * TODO Allow docstrings
 Should be put into the newly defined variable and in the list
 docstring on the talon side.
