@@ -1099,21 +1099,25 @@ and VALUE.  Optional keyword arguments are:
          (expanded-pattern
           (phony--expand-implicit-arguments
            (cons 'seq (ensure-list pattern))))
-         (arguments (phony--collect-arguments expanded-pattern)))
+         (arguments (phony--collect-arguments expanded-pattern))
+         (unused-arguments
+          (seq-remove (lambda (argument)
+                        (or (string-prefix-p "_" (symbol-name argument))
+                            (memq argument (flatten-tree body))))
+                      arguments)))
 
     (when (map-elt optional-arguments :contributes-to)
       (setf (map-elt optional-arguments :contributes-to)
             `',(ensure-list (map-elt optional-arguments :contributes-to))))
 
     (cond
-     ((not (seq-every-p (lambda (argument) (memq argument (flatten-tree body)))
-                        (seq-remove (lambda (argument)
-                                      (string-prefix-p "_" (symbol-name argument)))
-                                    arguments)))
-      ;; TODO: Which arguments?
+     (unused-arguments
       `(display-warning
         'phony
-        ,(format "Not all arguments used in body of %s" name)))
+        ,(format (concat "Unused arguments in %s: %s\n"
+                         "Either use it in the body or prefix the argument with \"_\" (underscore)")
+                 name
+                 (mapconcat #'symbol-name unused-arguments ", "))))
      ((not (equal (seq-uniq arguments) arguments))
       ;; TODO: Do not emit this warning if duplication is implicit and
       ;; not used in body.
