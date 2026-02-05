@@ -1048,7 +1048,12 @@ and VALUE.  Optional keyword arguments are:
 
 \(fn NAME PATTERN [DOCSTRING] [KEY VALUE]... BODY...)"
   (declare (indent 2)
-           (doc-string 3))
+           (doc-string 3)
+           (debug (&define
+                   name
+                   [&or stringp sexp]
+                   [&rest keywordp sexp]
+                   def-body)))
   ;; Syntactical design decisions:
   ;; - Automatic argument deduction: Explicitly specifying the
   ;;   argument list meant that adding a parameter necessitated a
