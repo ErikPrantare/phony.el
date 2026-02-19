@@ -728,10 +728,10 @@ RULE."
   "Return list of references to rules in RULE-OR-NAME.
 
 Each element of the list is a cons cell (NAME . CONTRAVARIANT).  NAME is
-a symbol naming the referred to function.  CONTRAVARIANT is non-nil if
-the reference has the effect of NAME potentially matching RULE-OR-NAME.
-This happens with the :contributes-to parameter.  If CONTRAVARIANT is
-nil, the reference has the effect of RULE-OR-NAME matching NAME."
+a symbol naming the referred to rule.  CONTRAVARIANT is non-nil if NAME
+may match RULE-OR-NAME, instead of the other way around.  This happens
+with the :contributes-to parameter.  If CONTRAVARIANT is nil, the
+reference has the effect of RULE-OR-NAME matching NAME."
   (let ((rule (phony--normalize-rule rule-or-name)))
     (append (seq-map (lambda (reference) (cons reference nil))
                      (phony--dependencies rule))
