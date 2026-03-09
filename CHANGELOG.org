@@ -4,9 +4,6 @@
 - Added module system.  Rules defined in libraries should be defined
   in a module.  See documentation for ~phony-module~ for how to use
   modules.
-- New :when argument: When specified, this function is used to
-  determine whether a given rule is currently active.  If it is not,
-  the rule will not be possible to match.
 - All rules now support :contributes-to and :mode.
 - Procedure rule element forms can now take a new form ~seq~, matching
   whenever its arguments match in a sequence.

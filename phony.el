@@ -274,7 +274,6 @@ CONTRIBUTES-TO is a list of open rules that this rule contributes to."
   (file-name nil :type string)
   (modes '(global) :type list)
   (external-name nil :type string)
-  (when nil :type (function () t))
   (contributes-to '() :type list))
 
 (defun phony--rule-active-p (rule)
@@ -294,18 +293,14 @@ modes are currently active."
                 modes)))
    (if-let ((module (phony--rule-module rule)))
        (phony--module-enabled-p module)
-     t)
-   (if-let ((when (phony--rule-when rule)))
-       (funcall when)
      t)))
 
 (defun phony--rule-always-active-p (rule)
   "Return non-nil if RULE is guaranteed to always be active.
 
-A rule is always active if it is global, has no :when clause, and is
-part of an enabled module (or no module)."
+A rule is always active if it is global and is part of an enabled
+module (or no module)."
   (and (memq 'global (phony--rule-modes rule))
-       (not (phony--rule-when rule))
        (if-let ((module (phony--rule-module rule)))
            (phony--module-enabled-p module)
          t)))
@@ -959,8 +954,7 @@ instead."
                               external-name
                               (export t)
                               anchor-beginning
-                              anchor-end
-                              when)
+                              anchor-end)
   ;; checkdoc-params: (mode contributes-to external-name export anchor-beginning anchor-end)
   "Declare FUNCTION to be a rule invokeable by voice.
 
@@ -989,7 +983,6 @@ documentation for `phony-defun'."
               (byte-compile-arglist-vars arglist))
     :arglist arglist
     :modes mode
-    :when when
     :export export
     :contributes-to (ensure-list contributes-to)
     :anchor-beginning-p anchor-beginning
@@ -1030,10 +1023,6 @@ and VALUE.  Optional keyword arguments are:
                      active.  If none of the modes match, this rule
                      never matches.  As a special case, \\='global always
                      matches.  Default is \\='global.
-  :when              A function of no arguments returning non-nil when
-                     this rule should be active.  If this argument is
-                     omitted, it behaves as if a function always
-                     returning t was provided.
   :contributes-to    An unquoted symbol or list of symbols of open
                      rules that this procedure should contribute to.
                      See `phony-define-open-rule' for open rules.
