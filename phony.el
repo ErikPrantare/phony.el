@@ -704,8 +704,8 @@ returned in the same order that they occur in ELEMENT."
 (cl-defmethod phony--dependencies-implementation ((rule phony--procedure-rule))
   "Return list of rule names RULE depends on.
 
-Rules in the list occur the same amount of times they are referenced in
-RULE."
+Names in the returned list occur the same amount of times they are
+mentioned in RULE."
   (seq-map #'phony--element-rule-name
            (phony--collect
             #'phony--element-rule-p
@@ -720,13 +720,11 @@ RULE."
   '())
 
 (cl-defgeneric phony--references (rule-or-name)
-  "Return list of references to rules in RULE-OR-NAME.
+  "Return list of rules mentioned by RULE-OR-NAME in its declaration.
 
-Each element of the list is a cons cell (NAME . CONTRAVARIANT).  NAME is
-a symbol naming the referred to rule.  CONTRAVARIANT is non-nil if NAME
-may match RULE-OR-NAME, instead of the other way around.  This happens
-with the :contributes-to parameter.  If CONTRAVARIANT is nil, the
-reference has the effect of RULE-OR-NAME matching NAME."
+Each element of the list is a cons cell (NAME . IS-PRODUCER).  NAME is
+the name of the mentioned rule.  If IS-PRODUCER is nil, NAME is a
+production of RULE-OR-NAME, otherwise it is a producer of it."
   (let ((rule (phony--normalize-rule rule-or-name)))
     (append (seq-map (lambda (reference) (cons reference nil))
                      (phony--dependencies rule))
@@ -737,16 +735,29 @@ reference has the effect of RULE-OR-NAME matching NAME."
                (:constructor nil)
                (:constructor phony--make-analysis-data))
   "Storage struct for results of statically analyzing the grammar."
-  (forward
+  (mentions
    (make-hash-table)
    :type hash-table
-   :documentation "Hash table mapping a rule to a list of its dependencies.
-If a dependency is referred to multiple times, it is duplicated.")
-  (backward
+   :documentation "Hash table mapping a rule to a list of rules it names in its declaration.
+If a rule is mentioned multiple times, it is duplicated.")
+  (mentioners
    (make-hash-table)
    :type hash-table
-   :documentation "Hash table mapping a rule to a list of its dependents.
-If a dependent refers to a rule multiple times, it is duplicated.")
+   :documentation "Hash table mapping a rule to a list of rules that name it in their declaration.
+If a rule mentions this rule multiple times, it is duplicated.")
+  (productions
+   (make-hash-table)
+   :type hash-table
+   :documentation "Hash table mapping a rule to a list of its submatches.
+A production of a rule is a rule whose match is included in the
+producing rule's match.  If a production is matched multiple times, it
+is duplicated.")
+  (producers
+   (make-hash-table)
+   :type hash-table
+   :documentation "Hash table mapping a rule to a list of rules it is a submatch of.
+A producer of a rule is a rule whose match includes this rule's match.
+If a rule is produced multiple times, it is duplicated.")
   (cycle
    nil
    :type list
@@ -762,29 +773,47 @@ If a dependent refers to a rule multiple times, it is duplicated.")
 Also commonly known as topological order.  Rules occurring in this list
 are guaranteed to only depend on preceding rules."))
 
-(defun phony--backward-references (analysis-data rule-or-name)
+(defun phony--get-mentions (analysis-data rule-or-name)
   ;; checkdoc-params: (analysis-data)
-  "Get list of rules referring to RULE-OR-NAME.
+  "Get list of rules mentioned by RULE-OR-NAME in its declaration.
 
-If a rule refers to RULE-OR-NAME. multiple times, it will also occur as
+If a rule is mentioned multiple times, it will also occur as many times
+in the returned list."
+  (gethash (phony--normalize-rule rule-or-name)
+           (phony--analysis-data-mentions analysis-data)))
+
+(defun phony--get-mentioners (analysis-data rule-or-name)
+  ;; checkdoc-params: (analysis-data)
+  "Get list of rules that mention RULE-OR-NAME in their declaration.
+
+If a rule mentions RULE-OR-NAME multiple times, it will also occur as
 many times in the returned list."
   (gethash (phony--normalize-rule rule-or-name)
-           (phony--analysis-data-backward analysis-data)))
+           (phony--analysis-data-mentioners analysis-data)))
 
-(defun phony--forward-references (analysis-data rule-or-name)
+(defun phony--get-productions (analysis-data rule-or-name)
   ;; checkdoc-params: (analysis-data)
-  "Get list of rules referred to by RULE-OR-NAME.
+  "Get list of rules that are submatches of RULE-OR-NAME.
 
-If a rule is referred to by RULE-OR-NAME. multiple times, it will also
-occur as many times in the returned list."
+If a rule is a submatch multiple times, it will also occur as many times
+in the returned list."
   (gethash (phony--normalize-rule rule-or-name)
-           (phony--analysis-data-forward analysis-data)))
+           (phony--analysis-data-productions analysis-data)))
 
-(defun phony--maximum-backward-multiplicity (analysis-data rule)
+(defun phony--get-producers (analysis-data rule-or-name)
   ;; checkdoc-params: (analysis-data)
-  "Return maximum amount of times RULE is referred to by a single rule."
+  "Get list of rules whose match includes RULE-OR-NAME as a submatch.
+
+If a rule includes RULE-OR-NAME multiple times, it will also occur as
+many times in the returned list."
+  (gethash (phony--normalize-rule rule-or-name)
+           (phony--analysis-data-producers analysis-data)))
+
+(defun phony--maximum-producer-multiplicity (analysis-data rule)
+  ;; checkdoc-params: (analysis-data)
+  "Return maximum amount of times RULE is produced by a single rule."
   (thread-last
-    (phony--backward-references analysis-data rule)
+    (phony--get-producers analysis-data rule)
     (seq-map #'phony--rule-name)
     (seq-map #'symbol-name)
     (seq-sort #'string<)
@@ -796,34 +825,43 @@ occur as many times in the returned list."
 (defun phony--populate-dependency-graph (analysis-data)
   "Populate the dependency graph of ANALYSIS-DATA.
 
-If an undefined rule is referenced in some element, a warning will be
-emitted and `phony--analysis-data-contains-errors' will be set to nil."
-  (let ((dependencies (make-hash-table))
-        (dependents (make-hash-table)))
+If an undefined rule is mentioned in some element, a warning will be
+emitted and `phony--analysis-data-contains-errors' will be set to t."
+  (let ((mentions (make-hash-table))
+        (mentioners (make-hash-table))
+        (productions (make-hash-table))
+        (producers (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
-      (puthash rule '() dependencies)
-      (puthash rule '() dependents))
+      (puthash rule '() mentions)
+      (puthash rule '() mentioners)
+      (puthash rule '() productions)
+      (puthash rule '() producers))
     (seq-doseq (rule (phony--get-rules))
       (seq-doseq (reference (phony--references rule))
         (if-let* ((reference-rule (phony--get-rule (car reference))))
-            (if (cdr reference)
-                (progn
-                  (push rule (gethash reference-rule dependencies))
-                  (push reference-rule (gethash rule dependents)))
-              (push reference-rule (gethash rule dependencies))
-              (push rule (gethash reference-rule dependents)))
+            (progn
+              (push reference-rule (gethash rule mentions))
+              (push rule (gethash reference-rule mentioners))
+              (if (cdr reference)
+                  (progn
+                    (push rule (gethash reference-rule productions))
+                    (push reference-rule (gethash rule producers)))
+                (push reference-rule (gethash rule productions))
+                (push rule (gethash reference-rule producers))))
           (display-warning 'phony
-                           (format "Rule %S (referenced in %S) is not defined"
+                           (format "Rule %S (mentioned in %S) is not defined"
                                    (car reference)
                                    (phony--rule-name rule)))
           (oset analysis-data contains-errors t)))
-      (oset analysis-data forward dependencies)
-      (oset analysis-data backward dependents))))
+      (oset analysis-data mentions mentions)
+      (oset analysis-data mentioners mentioners)
+      (oset analysis-data productions productions)
+      (oset analysis-data producers producers))))
 
 (defun phony--try-linear-extension-impl (rule visited finished analysis-data)
   "Find linear extension of dependency graph in ANALYSIS-DATA.
 
-This function assumes that `phony--analysis-data-forward' has been
+This function assumes that `phony--analysis-data-productions' has been
 populated in ANALYSIS-DATA.
 
 This function populates `phony--analysis-data-linear-extension' in
@@ -836,7 +874,7 @@ RULE is the currently visited rule.  VISITED is a hash table of the
 already visited rules.  FINISHED is a hash table of rules that have been
 fully processed.  This function adds RULE to VISITED before recusing to
 its children, and to FINISHED afterwards."
-  (let ((dependencies (oref analysis-data forward)))
+  (let ((dependencies (oref analysis-data productions)))
     (cl-block nil
       (when (gethash rule finished)
         (cl-return nil))
@@ -859,7 +897,7 @@ its children, and to FINISHED afterwards."
 (cl-defun phony--try-linear-extension (analysis-data)
   "Try to construct the linear extension of dependency graph.
 
-This function assumes that `phony--analysis-data-forward' has been
+This function assumes that `phony--analysis-data-productions' has been
 populated in ANALYSIS-DATA.
 
 If it is not possible to create a linear extension because of a cycle,
@@ -899,14 +937,16 @@ results of the analysis."
     (setq phony--last-analysis analysis-data)
     analysis-data))
 
-(defun phony--dependents (rule-or-name)
-  "Return dependents of RULE-OR-NAME.
+(defun phony--producers (rule-or-name)
+  "Return producers of RULE-OR-NAME.
+
+Producers are rules whose match includes RULE-OR-NAME as a submatch.
 
 This function depends on `phony--last-analysis'.  If an analysis has not
 been performed, the returned value may be out of date."
   (gethash
    (phony--normalize-rule rule-or-name)
-   (phony--analysis-data-backward phony--last-analysis)))
+   (phony--analysis-data-producers phony--last-analysis)))
 
 (defcustom phony-export-function #'phony-talon-export
   "Function to be used for exporting spoken rules."

@@ -98,14 +98,14 @@
     (concat "'" (phony--ast-match-string element rule) "'")))
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--open-rule) analysis-data)
-  (if (gethash rule (phony--analysis-data-forward analysis-data))
+  (if (gethash rule (phony--analysis-data-productions analysis-data))
       (concat
        "\n        '  "
        (string-join (seq-map
                      (lambda (alternative)
                        (format "<user.%s>'"
                                (phony--external-name alternative)))
-                     (gethash rule (phony--analysis-data-forward analysis-data)))
+                     (gethash rule (phony--analysis-data-productions analysis-data)))
                     "\n        '| "))
     "'<user.disabled_phony_rule>'"))
 
@@ -365,7 +365,7 @@ If you are using EXWM, you probably want this to be t.")
         (phony-talon--insert-python rule)
         (phony-talon--clone-rule
          rule
-         (max 0 (1- (phony--maximum-backward-multiplicity analysis-data rule))))))
+         (max 0 (1- (phony--maximum-producer-multiplicity analysis-data rule))))))
 
     (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
       (if (or (not (file-exists-p link-path))
