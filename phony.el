@@ -316,8 +316,7 @@ module (or no module)."
 
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
-  (alternatives nil :type (repeat symbol))
-  (transformation nil :type function))
+  (alternatives nil :type (repeat symbol)))
 
 (cl-defstruct (phony--dictionary
                (:include phony--rule)
@@ -614,22 +613,16 @@ be one of the following:
                                    &key
                                    alternatives
                                    contributes-to
-                                   transformation
                                    external-name
                                    mode)
   "See documentation for `phony-define-open-rule'."
   (unless external-name (setq external-name (phony--to-python-identifier name)))
   (setq mode (ensure-list (or mode 'global)))
 
-  (cl-assert (symbolp transformation) nil
-             "Transformation argument to rule %S must be a symbol"
-             name)
-
   (phony--add-rule
    (make-phony--open-rule
     :name name
     :external-name external-name
-    :transformation transformation
     :alternatives alternatives
     :modes mode
     :contributes-to (ensure-list contributes-to)))
@@ -1226,7 +1219,9 @@ and VALUE.  Optional keyword arguments are:
         (apply (phony--procedure-rule-function rule)
                (seq-map #'phony--evaluate-ast
                         arguments)))
-       (t ast)))))
+       ((phony--open-rule-p rule)
+        (phony--evaluate-ast (cadr ast)))
+       (t (error "Failed to evaluate AST: %S" ast))))))
 
 (defmacro phony--evaluate-ast-macro (ast)
   `(phony--evaluate-ast ',ast))

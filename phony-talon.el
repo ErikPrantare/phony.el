@@ -163,10 +163,7 @@
   (insert
    (format "def %s(m) -> str:\n    return %s\n"
            (phony--rule-external-name rule)
-           (if (phony--open-rule-transformation rule)
-               (format "f\"(%s {m[0]})\""
-                       (phony--open-rule-transformation rule))
-             "m[0]"))))
+           "m[0]")))
 
 (defun phony-talon--find-argument-element (argument rule)
   "Find element matching ARGUMENT in RULE.
