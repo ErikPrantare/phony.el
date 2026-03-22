@@ -5,6 +5,7 @@
   in a module.  See documentation for ~phony-module~ for how to use
   modules.
 - All rules now support :contributes-to and :mode.
+- All rules now support documentation strings.
 - Procedure rule element forms can now take a new form ~seq~, matching
   whenever its arguments match in a sequence.
 

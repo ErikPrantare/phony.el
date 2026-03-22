@@ -247,34 +247,39 @@ Rules belonging to disabled modules are never exported."
 
 (cl-defstruct (phony--rule
                (:constructor nil))
-  "A rule for matching an utterance.
-
-NAME is the name of the rule.
-
-MODULE is a the module this rule belongs to.  Modules are specified with
-`phony-module'.  Its value is nil if it is not part of a module.
-
-FILE-NAME is the filename of the file where this rule was defined.  Its
-value is nil if it was not evaluated from a file.
-
-MODES is a list of modes under which this rule is active.  If none of
-the modes are active, this rule cannot be matched.  A special case is
-the 'global symbol, which indicates that the rule should always be
-active.
-
-EXTERNAL-NAME is the name this rule will have for the speech recognition
-engine, and should be a string.
-
-WHEN is a predicate of no arguments which returns nil if the rule should
-be inactive.  If WHEN is nil, it behaves as if it always returned t.
-
-CONTRIBUTES-TO is a list of open rules that this rule contributes to."
-  (name nil :type symbol)
-  (module nil :type phony--module)
-  (file-name nil :type string)
-  (modes '(global) :type list)
-  (external-name nil :type string)
-  (contributes-to '() :type list))
+  "A rule for matching an utterance."
+  (name
+   nil
+   :type symbol
+   :documentation "The name of the rule.")
+  (documentation nil :type string
+                 :documentation "The documentation string for this rule.")
+  (module
+   nil
+   :type phony--module
+   :documentation "The module this rule belongs to.
+Modules are specified with `phony-module'.  Its value is nil if it is
+not part of a module.")
+  (file-name
+   nil
+   :type string
+   :documentation "The filename of the file where this rule was defined.
+Its value is nil if it was not evaluated from a file.")
+  (modes
+   '(global)
+   :type list
+   :documentation "A list of modes under which this rule is active.
+If none of the modes are active, this rule cannot be matched.  A
+special case is the \\='global symbol, which indicates that the rule
+should always be active.")
+  (external-name
+   nil
+   :type string
+   :documentation "The name this rule will have for the speech recognition engine.")
+  (contributes-to
+   '()
+   :type list
+   :documentation "A list of open rules that this rule contributes to."))
 
 (defun phony--rule-active-p (rule)
   "Return non-nil if RULE is active.
@@ -591,14 +596,17 @@ be one of the following:
   :external-name    Same as for `phony-defun'.
   :contributes-to   Same as for `phony-defun'.
 
-\(fn NAME [KEY VALUE]... ALIST)"
-  (declare (indent defun))
-  (pcase-let* ((`(,optional-arguments . (,mapping))
-                (phony--split-keywords-rest arguments)))
-    `(phony--define-dictionary
-      (append (list :name ',name
-                    :mapping ,mapping)
-              ',optional-arguments))))
+\(fn NAME [DOCSTRING] [KEY VALUE]... ALIST)"
+  (declare (indent defun)
+           (doc-string 2))
+  (let ((documentation (and (stringp (car arguments)) (pop arguments))))
+    (pcase-let* ((`(,optional-arguments . (,mapping))
+                  (phony--split-keywords-rest arguments)))
+      `(phony--define-dictionary
+        (append (list :name ',name
+                      :documentation ,documentation
+                      :mapping ,mapping)
+                ',optional-arguments)))))
 
 (defun phony--add-alternative (alternative open-rule-name)
   "Add rule ALTERNATIVE as an alternative for open rule OPEN-RULE-NAME."
@@ -611,6 +619,7 @@ be one of the following:
 
 (cl-defun phony--define-open-rule (name
                                    &key
+                                   documentation
                                    alternatives
                                    contributes-to
                                    external-name
@@ -622,6 +631,7 @@ be one of the following:
   (phony--add-rule
    (make-phony--open-rule
     :name name
+    :documentation documentation
     :external-name external-name
     :alternatives alternatives
     :modes mode
@@ -629,13 +639,7 @@ be one of the following:
 
   name)
 
-(cl-defmacro phony-define-open-rule (name
-                                     &key
-                                     alternatives
-                                     contributes-to
-                                     transformation
-                                     mode
-                                     external-name)
+(defmacro phony-define-open-rule (name &rest args)
   "Define NAME as an open rule.
 
 Open rules match any of the rules specified in ALTERNATIVES.  Other
@@ -643,20 +647,23 @@ rules may add themselves to the list of alternatives by specifying
 this rule in their CONTRIBUTES-TO argument.
 
 The value of matching this rule is the value of matching the
-corresponding alternative.  If a function TRANSFORMATION is given, the
-value is first passed through TRANSFORMATION.  Otherwise, the value is
-passed through without modification.
+corresponding alternative.
 
 Optional keyword arguments MODE, CONTRIBUTES-TO and EXTERNAL-NAME are
-the same as for `phony-defun'."
-  (declare (indent defun))
-  `(phony--define-open-rule
-    ',name
-    :alternatives ,alternatives
-    :contributes-to ',contributes-to
-    :transformation ,transformation
-    :external-name ,external-name
-    :mode ,mode))
+the same as for `phony-defun'.
+
+\(fn NAME [DOCSTRING] &key ALTERNATIVES CONTRIBUTES-TO MODE EXTERNAL-NAME)"
+  (declare (indent defun)
+           (doc-string 2))
+  (let ((documentation (and (stringp (car args)) (pop args))))
+    (when (map-elt args :contributes-to)
+      (setf (map-elt args :contributes-to)
+            `',(map-elt args :contributes-to)))
+
+    `(phony--define-open-rule
+      ',name
+      :documentation ,documentation
+      ,@args)))
 
 (defun phony--element-children (element)
   "Return all direct sub-elements of ELEMENT."
@@ -982,13 +989,14 @@ instead."
                               arglist
                               element-form
                               &key
+                              documentation
                               (mode 'global)
                               contributes-to
                               external-name
                               (export t)
                               anchor-beginning
                               anchor-end)
-  ;; checkdoc-params: (mode contributes-to external-name export anchor-beginning anchor-end)
+  ;; checkdoc-params: (mode contributes-to external-name export anchor-beginning anchor-end documentation)
   "Declare FUNCTION to be a rule invokeable by voice.
 
 ARGLIST is the argument list of the function.  ELEMENT-FORM is a an
@@ -1009,6 +1017,7 @@ documentation for `phony-defun'."
   (phony--add-rule
    (make-phony--procedure-rule
     :name name
+    :documentation documentation
     :external-name external-name
     :function function
     :element (phony--parse-speech-element
@@ -1158,6 +1167,7 @@ and VALUE.  Optional keyword arguments are:
           (lambda ,arguments ,@(ensure-list doc) ,@body)
           ',arguments
           ',expanded-pattern
+          :documentation ,doc
           ,@optional-arguments)))))
 
 (defun phony--expand-implicit-arguments (element-form)
@@ -1180,16 +1190,28 @@ and VALUE.  Optional keyword arguments are:
 (let ((phony--deny-export-requests-p t))
   ;; Define all builtin rules here.  We suppress export, as the user
   ;; may not have set the correct exporter yet.
-  (phony-define-dictionary phony-module '())
+  (phony-define-dictionary phony-module
+    "Dictionary of defined modules.
+Whenever a module is defined with `phony-module', it is added to this
+dictionary."
+    '())
 
-  (phony-defun phony-enable-module ("phony enable" (? (name phony-module)))
-    (if name
-        (phony-enable-module name (y-or-n-p (format "Enable %s for future sessions? " name)))
+  (phony-defun phony-enable-module ("phony enable" (? (module phony-module)))
+    "Enable MODULE.
+If MODULE is not given, prompt for it before enabling it."
+    (if module
+        (phony-enable-module
+         module
+         (y-or-n-p (format "Enable %s for future sessions? " module)))
       (call-interactively #'phony-enable-module)))
 
-  (phony-defun phony-disable-module ("phony disable" (? (name phony-module)))
-    (if name
-        (phony-disable-module name (y-or-n-p (format "Disable %s for future sessions? " name)))
+  (phony-defun phony-disable-module ("phony disable" (? (module phony-module)))
+    "Disable MODULE.
+If MODULE is not given, prompt for it before disabling it."
+    (if module
+        (phony-disable-module
+         module
+         (y-or-n-p (format "Disable %s for future sessions? " module)))
       (call-interactively #'phony-disable-module))))
 
 (defun phony--sync-state ()
