@@ -433,7 +433,9 @@ This function must be invoked every time a rule is declared."
 If no such value exists, return nil.
 
 DICTIONARY is the name of the dictionary to modify."
-  (alist-get utterance (phony--dictionary-mapping (phony--get-rule dictionary)) nil nil #'equal))
+  (alist-get utterance
+             (phony--dictionary-mapping (phony--get-rule dictionary))
+             nil nil #'string-equal))
 
 (defun phony-dictionary-put (utterance dictionary value)
   "Set the value of UTTERANCE in DICTIONARY to VALUE.
@@ -442,7 +444,9 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (alist-get utterance (phony--dictionary-mapping (phony--get-rule dictionary)))
+  (setf (alist-get utterance
+                   (phony--dictionary-mapping (phony--get-rule dictionary))
+                   nil nil #'string-equal)
         value)
   (phony--request-export-dictionaries))
 
@@ -453,7 +457,9 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (alist-get utterance (phony--dictionary-mapping (phony--get-rule dictionary)) nil t)
+  (setf (alist-get utterance
+                   (phony--dictionary-mapping (phony--get-rule dictionary))
+                   nil t #'string-equal)
         nil)
   (phony--request-export-dictionaries))
 
