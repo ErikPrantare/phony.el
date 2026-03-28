@@ -153,7 +153,7 @@ If you're using talon community, some basic bindings are given in
 ~phony-talon-community-bindings.el~.  Add
 
 #+begin_src elisp
-  (require 'phony-talon-community-bindings)
+  (use-package phony-talon-community-bindings)
 #+end_src
 
 to your configuration to import them.
