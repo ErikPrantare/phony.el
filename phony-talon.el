@@ -25,6 +25,8 @@
 
 ;;; Code:
 
+(require 'phony)
+
 (cl-defgeneric phony-talon--element-name (element)
   (error "No talon name for element %S" element))
 

@@ -25,6 +25,8 @@
 
 ;;; Code:
 
+(require 'phony)
+
 (cl-defgeneric phony-dragonfly--serialize-element (element)
   `((type . "undefined")))
 

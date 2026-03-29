@@ -117,7 +117,7 @@ current line, or "delete sentence" to delete the current sentence:
     (bounds-of-thing-at-point 'sentence))
 
   (phony-define-open-rule region
-    :alternatives '(current-line current-sentence))
+    :alternatives (current-line current-sentence))
 
   (phony-defun delete-current ("delete" (bounds region))
     (delete-region (car bounds) (cdr bounds)))
