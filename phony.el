@@ -387,6 +387,8 @@ Instead of constructing the rule directly, functions that add rules
 invoke this function.  This function validates that the parameters are
 correcly formed, and performs some standard transformations from
 interface sugar to the form used internally."
+  ;; TODO: Document what is meant by "sugar".
+
   ;; We will be destructively modifying the parameter list, so copy
   ;; it.  All modifications are shallow.
   (setq parameters (apply #'list parameters))
@@ -421,7 +423,9 @@ interface sugar to the form used internally."
   (puthash
    (map-elt parameters :name)
    (apply constructor parameters)
-   phony--rules))
+   phony--rules)
+
+  (phony-request-export))
 
 (defun phony-remove-rule (rule-name)
   "Remove rule named RULE-NAME."
@@ -1027,9 +1031,7 @@ documentation for `phony-defun'."
     :export export
     :contributes-to (ensure-list contributes-to)
     :anchor-beginning-p anchor-beginning
-    :anchor-end-p anchor-end))
-
-  (phony-request-export))
+    :anchor-end-p anchor-end)))
 
 (defmacro phony-defun (name pattern &rest rest)
   ;; checkdoc-params: (rest)
