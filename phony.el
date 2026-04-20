@@ -253,7 +253,7 @@ Rules belonging to disabled modules are never exported."
   (name
    nil
    :type symbol
-   :documentation "The name of the rule.")
+   :documentation "The name of this rule.")
   (documentation nil :type string
                  :documentation "The documentation string for this rule.")
   (module
@@ -1044,8 +1044,9 @@ actions through side effects, or to provide values for other rules.  The
 value of matching the procedure rule is the value returned by BODY.
 
 PATTERN is either a string literal, in which case the rule is matched
-when that string is uttered.  Otherwise, it is an unquoted list of
-elements.  An element may have one of the following forms:
+when that string is uttered, or it is an unquoted list of elements.  In
+that case the rule is matched when each element is uttered in sequence.
+An element can take the following forms:
 
   STRING           Match a literal STRING.
   RULE             Match a rule named RULE.
