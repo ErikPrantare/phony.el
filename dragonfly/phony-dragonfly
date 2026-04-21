@@ -24,7 +24,7 @@ def evaluate_lisp_async(expression: str):
     return subprocess.Popen(
         ["emacsclient",
          "--eval",
-         f"(simulacrum-evaluate {expression})"])
+         f"(simulacrum-generate-event {expression})"])
 
 def evaluate_lisp(expression: str):
     evaluate_lisp_async(expression).wait()

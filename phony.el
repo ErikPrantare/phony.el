@@ -85,10 +85,10 @@ command."
   "Evaluate FORM.
 
 If simulacrum.el is installed and loaded, FORM is evaluated with
-`simulacrum-evaluate'.  Otherwise, it is immediately evaluated with
-`eval'."
-  (if (fboundp 'simulacrum-evaluate)
-      (simulacrum-evaluate form)
+`simulacrum-generate-event'.  Otherwise, it is immediately evaluated
+with `eval'."
+  (if (fboundp 'simulacrum-generate-event)
+      (simulacrum-generate-event form)
     (eval form)))
 
 (defun phony--evaluate-form (form)
