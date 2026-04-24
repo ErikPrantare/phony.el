@@ -88,8 +88,11 @@ If simulacrum.el is installed and loaded, FORM is evaluated with
 `simulacrum-generate-event'.  Otherwise, it is immediately evaluated
 with `eval'."
   (if (fboundp 'simulacrum-generate-event)
-      (simulacrum-generate-event form)
+      (simulacrum-generate-event 'phony-form form)
     (eval form)))
+
+(with-eval-after-load "simulacrum"
+  (keymap-global-set "<phony-form>" #'simulacrum--evaluate-form))
 
 (defun phony--evaluate-form (form)
   "Evaluate FORM using `phony-form-evaluation-function'.
