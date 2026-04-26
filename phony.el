@@ -91,6 +91,7 @@ with `phony--evaluate-ast'."
     (phony--evaluate-ast ast)))
 
 (with-eval-after-load "simulacrum"
+  (simulacrum-define-event-type phony-form)
   (keymap-global-set "<phony-form>"
                      (lambda (ast)
                        (interactive (list (cadr last-input-event)))
