@@ -1,6 +1,6 @@
 ;;; phony-experimental.el --- Experimental features for phony  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025  Erik Präntare
+;; Copyright (C) 2025, 2026  Erik Präntare
 
 ;; Author: Erik Präntare <erik@system2>
 ;; Keywords: convenience
@@ -44,8 +44,10 @@
 (defun phony--in-element-form-p (&optional position)
   (unless position (setq position (point)))
   (or
-   (seq-contains-p (phony--function-calls-at position) '(phony-defun 2))
-   (seq-contains-p (phony--function-calls-at position) '(phony--evaluate-ast-macro 1))))
+   (seq-contains-p (phony--function-calls-at position)
+                   '(phony-defun 2))
+   (seq-contains-p (phony--function-calls-at position)
+                   '(phony--evaluate-ast 1))))
 
 (defun phony--completion-at-point ()
   (and (phony--in-element-form-p)
