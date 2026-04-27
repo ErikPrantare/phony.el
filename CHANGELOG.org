@@ -8,6 +8,7 @@
 - All rules now support documentation strings.
 - Procedure rule element forms can now take a new form ~seq~, matching
   whenever its arguments match in a sequence.
+- The package now has a hard dependency on simulacrum.el.
 
 * 0.2.1 [2025-10-09 Thu]
 - Missing directories are now created on first run.
