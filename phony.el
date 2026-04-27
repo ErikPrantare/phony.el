@@ -6,7 +6,7 @@
 ;; Keywords: files
 ;; Version: 0.2.1
 ;; Homepage: https://github.com/ErikPrantare/phony.el
-;; Package-Requires: ((emacs "29.1"))
+;; Package-Requires: ((emacs "29.1") (simulacrum "0.1.0"))
 ;; Created: 13 Jul 2024
 
 ;; This program is free software; you can redistribute it and/or
@@ -63,6 +63,7 @@
 (require 'server)
 
 (require 'phony-element-syntax)
+(require 'simulacrum)
 
 (defgroup phony nil
   "Functionality for defining speech bindings."
@@ -80,20 +81,13 @@ representing the recognized utterance."
   :type 'function
   :group 'phony)
 
+(simulacrum-define-event-type phony-form)
+(keymap-global-set "<phony-form>"
+                   (simulacrum-command #'phony--evaluate-ast))
+
 (defun phony-evaluate-ast (ast)
-  "Evaluate AST.
-
-If simulacrum.el is installed and loaded, AST is evaluated with
-`simulacrum-generate-event'.  Otherwise, it is immediately evaluated
-with `phony--evaluate-ast'."
-  (if (fboundp 'simulacrum-generate-event)
-      (simulacrum-generate-event 'phony-form ast)
-    (phony--evaluate-ast ast)))
-
-(with-eval-after-load "simulacrum"
-  (simulacrum-define-event-type phony-form)
-  (keymap-global-set "<phony-form>"
-                     (simulacrum-command #'phony--evaluate-ast)))
+  "Evaluate AST via `simulacrum-generate-event'."
+  (simulacrum-generate-event 'phony-form ast))
 
 (defun phony--evaluate (ast)
   "Evaluate AST using `phony-ast-evaluation-function'.
