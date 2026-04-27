@@ -1,6 +1,6 @@
 ;;; phony-talon-community-bindings.el --- Basic bindings for rules in talon community  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025  Erik Präntare
+;; Copyright (C) 2025, 2026  Erik Präntare
 
 ;; Author: Erik Präntare <erik@system2>
 ;; Keywords: convenience
@@ -25,10 +25,16 @@
 
 ;;; Code:
 
+(require 'phony)
+
 (defmacro phony-talon-community-bindings--make (name external-name)
-  `(phony-defun ,name ((x (external-rule ,@external-name)))
-     :export nil
-     x))
+  "Define a non-exported phony rule wrapping EXTERNAL-NAME under NAME."
+  (let ((docstring (format "Phony binding for Talon community capture `%s'."
+                           (mapconcat #'symbol-name external-name "."))))
+    `(phony-defun ,name ((x (external-rule ,@external-name)))
+       ,docstring
+       :export nil
+       x)))
 
 (phony-talon-community-bindings--make number (user number))
 (phony-talon-community-bindings--make word (user word))
@@ -36,14 +42,17 @@
 (phony-talon-community-bindings--make digit (user digit))
 
 (phony-defun letter ((char (external-rule user letter)))
+  "Phony binding for Talon community capture `user.letter'."
   :export nil
   (seq-first char))
 
 (phony-defun any-alphanumeric-key ((char (external-rule user any_alphanumeric_key)))
+  "Phony binding for Talon community capture `user.any_alphanumeric_key'."
   :export nil
   (seq-first char))
 
 (phony-defun symbol-key ((char (external-rule user symbol_key)))
+  "Phony binding for Talon community capture `user.symbol_key'."
   :export nil
   (seq-first char))
 

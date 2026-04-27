@@ -1,6 +1,6 @@
 ;;; phony-element-syntax.el --- Element parsing logic  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025  Erik Präntare
+;; Copyright (C) 2025, 2026  Erik Präntare
 
 ;; Author: Erik Präntare <erik@system2>
 ;; Keywords: convenience
@@ -25,6 +25,8 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+
 (cl-defstruct phony--element-literal
   "Element matching a literal utterance."
   (string nil
@@ -33,15 +35,18 @@
 
 (cl-defstruct phony--element-sequence
   "Element matching a sequence of sub-elements."
-  elements)
+  (elements nil
+            :documentation "List of sub-elements that must match in sequence."))
 
 (cl-defstruct phony--element-optional
   "Element matching ELEMENT zero or one times."
-  element)
+  (element nil
+           :documentation "The element to match zero or one times."))
 
 (cl-defstruct phony--element-repeat
   "Element that may match ELEMENT multiple times."
-  element)
+  (element nil
+           :documentation "The element to match repeatedly."))
 
 (cl-defstruct (phony--element-one-or-more
                (:include phony--element-repeat))
@@ -63,7 +68,10 @@
 (cl-defstruct phony--element-external-rule
   "Element matching some external rule.
 Currently only relevant for the talon exporter."
-  name namespace)
+  (name nil
+        :documentation "Symbol naming the external rule.")
+  (namespace nil
+             :documentation "List of symbols forming the namespace prefix."))
 
 (cl-defstruct phony--element-rule
   "Element matching another rule."

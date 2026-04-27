@@ -248,38 +248,33 @@ Rules belonging to disabled modules are never exported."
 (cl-defstruct (phony--rule
                (:constructor nil))
   "A rule for matching an utterance."
-  (name
-   nil
-   :type symbol
-   :documentation "The name of this rule.")
-  (documentation nil :type string
-                 :documentation "The documentation string for this rule.")
-  (module
-   nil
-   :type phony--module
-   :documentation "The module this rule belongs to.
+  ( name nil
+    :type symbol
+    :documentation "The name of this rule.")
+  ( documentation nil
+    :type string
+    :documentation "The documentation string for this rule.")
+  ( module nil
+    :type phony--module
+    :documentation "The module this rule belongs to.
 Modules are specified with `phony-module'.  Its value is nil if it is
 not part of a module.")
-  (file-name
-   nil
-   :type string
-   :documentation "The filename of the file where this rule was defined.
+  ( file-name nil
+    :type string
+    :documentation "The filename of the file where this rule was defined.
 Its value is nil if it was not evaluated from a file.")
-  (modes
-   '(global)
-   :type list
-   :documentation "A list of modes under which this rule is active.
+  ( modes '(global)
+    :type list
+    :documentation "A list of modes under which this rule is active.
 If none of the modes are active, this rule cannot be matched.  A
 special case is the \\='global symbol, which indicates that the rule
 should always be active.")
-  (external-name
-   nil
-   :type string
-   :documentation "The name this rule will have for the speech recognition engine.")
-  (contributes-to
-   '()
-   :type list
-   :documentation "A list of open rules that this rule contributes to."))
+  ( external-name nil
+    :type string
+    :documentation "The name this rule will have for the speech recognition engine.")
+  ( contributes-to '()
+    :type list
+    :documentation "A list of open rules that this rule contributes to."))
 
 (defun phony--rule-active-p (rule)
   "Return non-nil if RULE is active.
@@ -312,16 +307,36 @@ module (or no module)."
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule))
-  (function '() :type function)
-  (element nil :type phony--element-sequence)
-  (arglist '() :type (repeat symbol))
-  (export t :type boolean)
-  (anchor-beginning-p nil :type boolean)
-  (anchor-end-p nil :type boolean))
+  "A rule mapping an utterance pattern to a function call."
+  ( function '()
+    :type function
+    :documentation "Function to call when the utterance is matched.")
+  ( element nil
+    :type phony--element-sequence
+    :documentation "Parsed element tree for the utterance pattern.")
+  ( arglist '()
+    :type (repeat symbol)
+    :documentation "List of argument symbols extracted from the pattern.")
+  ( export t
+    :type boolean
+    :documentation "\
+Whether this rule is a top-level entry point for the speech backend.
+Non-exported rules are only reachable as sub-rules within other rules.")
+  ( anchor-beginning-p nil
+    :type boolean
+    :documentation "\
+Constrain matching to the start of an utterance, like `^' in regex.")
+  ( anchor-end-p nil
+    :type boolean
+    :documentation "\
+Constrain matching to the end of an utterance, like `$' in regex."))
 
 (cl-defstruct (phony--open-rule
                (:include phony--rule))
-  (alternatives nil :type (repeat symbol)))
+  "A rule that matches any of its alternatives."
+  ( alternatives nil
+    :type (repeat symbol)
+    :documentation "List of symbols naming the alternative rules."))
 
 (cl-defstruct (phony--dictionary
                (:include phony--rule)
@@ -1173,6 +1188,11 @@ and VALUE.  Optional keyword arguments are:
 
 (eval-and-compile
   (defun phony--expand-implicit-arguments (element-form)
+    "Expand implicit arguments in ELEMENT-FORM.
+
+A bare symbol `foo' is expanded to `(foo foo)', binding the rule's
+match value to an argument of the same name.  Recurses into `seq',
+`?', `+', `*' forms."
     (cond
      ((and (listp element-form) (memq (car element-form) '(seq ? + *)))
       `(,(car element-form)
@@ -1182,6 +1202,9 @@ and VALUE.  Optional keyword arguments are:
      (t element-form)))
 
   (defun phony--collect-arguments (element-form)
+    "Collect argument names from ELEMENT-FORM.
+Return a list of symbols, one per argument binding found in the
+element tree."
     (cond
      ((and (listp element-form) (memq (car element-form) '(seq ? + *)))
       (seq-mapcat #'phony--collect-arguments (cdr element-form)))

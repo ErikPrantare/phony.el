@@ -29,6 +29,7 @@
 (require 'phony)
 
 (cl-defgeneric phony-talon--element-name (element)
+  "Return the Talon capture name for ELEMENT."
   (error "No talon name for element %S" element))
 
 (cl-defmethod phony-talon--element-name ((element phony--element-rule))
@@ -38,7 +39,10 @@
 (cl-defmethod phony-talon--element-name ((element phony--element-external-rule))
   (phony--element-external-rule-name element))
 
-(cl-defgeneric phony--ast-match-string (element) rule)
+(cl-defgeneric phony--ast-match-string (element rule)
+  "Return the Talon pattern string for matching ELEMENT.
+
+RULE provides context for occurrence numbering.")
 
 (cl-defmethod phony--ast-match-string ((element phony--element-literal) rule)
   (string-replace "'" "\\'" (phony--element-literal-string element)))
@@ -94,7 +98,8 @@
    (phony--element-argument-element element)
    rule))
 
-(cl-defgeneric phony--rule-talon-pattern (rule analysis-data))
+(cl-defgeneric phony--rule-talon-pattern (rule analysis-data)
+  "Return the full Talon rule pattern for RULE given ANALYSIS-DATA.")
 
 (cl-defmethod phony--rule-talon-pattern ((rule phony--procedure-rule) _analysis-data)
   (let* ((element (phony--procedure-rule-element rule)))
@@ -116,6 +121,10 @@
   (concat "'{user." (phony--rule-external-name rule) "}'"))
 
 (cl-defgeneric phony--argument-context (argument elements)
+  "Return the context of ARGUMENT within ELEMENTS.
+
+The context is one of: `none' (singular occurrence), `optional',
+or `repeat'.  Returns nil if ARGUMENT is not found in ELEMENTS."
   nil)
 
 (cl-defmethod phony--argument-context (argument (element phony--element-sequence))
@@ -142,6 +151,7 @@
       'repeat))
 
 (defun phony--speech-insert-rule (rule)
+  "Insert a .talon rule entry for procedure RULE."
   (when (phony--procedure-rule-anchor-beginning-p rule)
     (insert "^"))
   (insert (format "<user.%s>" (phony--rule-external-name rule)))
@@ -151,6 +161,7 @@
                   (phony--rule-external-name rule))))
 
 (defun phony-talon--insert-capture-preamble (rule analysis-data)
+  "Insert the Python capture preamble for RULE."
   (if (phony--rule-always-active-p rule)
       (insert "@module.capture(rule=" (phony--rule-talon-pattern rule analysis-data) ")\n")
     (insert "# Base case for when the rule is inactive\n")
@@ -243,6 +254,7 @@ MATCH-ELEMENT among all of those `equal' to it."
           "    return m[0]"))
 
 (defun phony-talon--insert-python-disabled (rule)
+  "Insert a Python stub for disabled RULE that returns False."
   (insert "# Disabled\n"
           "@module.capture(rule='<user.disabled_phony_rule>')\n"
           "def " (phony--rule-external-name rule) "(m) -> str:\n"
@@ -254,6 +266,10 @@ MATCH-ELEMENT among all of those `equal' to it."
 If you are using EXWM, you probably want this to be t.")
 
 (defun phony-talon--clone-rule (rule times)
+  "Insert TIMES clone captures for RULE.
+
+Clone captures are needed because Talon does not differentiate
+between multiple captures of the same name in one pattern."
   (dotimes (i times)
     (insert (format "\n@module.capture(rule='<user.%s>')\n"
                     (phony--rule-external-name rule)))
@@ -262,6 +278,7 @@ If you are using EXWM, you probably want this to be t.")
              (phony--rule-external-name rule) i))))
 
 (cl-defun phony-talon--insert-exported-rules (rules)
+  "Insert .talon entries for all exported procedure rules in RULES."
   (unless phony-talon--always-listen (insert "app: emacs\n"))
   (insert "-\n")
   (seq-doseq (rule rules)
@@ -271,6 +288,10 @@ If you are using EXWM, you probably want this to be t.")
       (phony--speech-insert-rule rule))))
 
 (defun phony-talon-export (analysis-data)
+  "Generate all Talon files from the current phony grammar.
+
+This function creates .talon and .py files in the output directory and
+symlinks them into ~/.talon/user/."
   (mkdir (phony--output-directory "talon") t)
   (let* ((rules (phony--get-rules))
          (modes (seq-uniq
