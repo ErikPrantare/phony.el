@@ -1,4 +1,5 @@
-* NEXT
+* 0.3.0 [2026-04-28 Tue]
+- New macro ~phony-defun~ for defining rules.
 - Removed ~phony-rule~.  Use ~phony-defun~ instead.
 - Added basic bindings for talon community.
 - Added module system.  Rules defined in libraries should be defined
