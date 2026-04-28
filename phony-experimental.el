@@ -26,6 +26,7 @@
 ;;; Code:
 
 (require 'phony)
+(require 'xref)
 
 (defun phony--function-calls-at (&optional position)
   (unless position (setq position (point)))

@@ -44,7 +44,7 @@
 
 RULE provides context for occurrence numbering.")
 
-(cl-defmethod phony--ast-match-string ((element phony--element-literal) rule)
+(cl-defmethod phony--ast-match-string ((element phony--element-literal) _rule)
   (string-replace "'" "\\'" (phony--element-literal-string element)))
 
 (cl-defmethod phony--ast-match-string ((element phony--element-rule) rule)
@@ -85,7 +85,7 @@ RULE provides context for occurrence numbering.")
                    (phony--element-zero-or-more-element element)
                    rule)))
 
-(cl-defmethod phony--ast-match-string ((element phony--element-external-rule) rule)
+(cl-defmethod phony--ast-match-string ((element phony--element-external-rule) _rule)
   (format "<%s>" (string-join
                   (seq-map #'symbol-name
                            (append
@@ -125,6 +125,7 @@ RULE provides context for occurrence numbering.")
 
 The context is one of: `none' (singular occurrence), `optional',
 or `repeat'.  Returns nil if ARGUMENT is not found in ELEMENTS."
+  (ignore argument elements)
   nil)
 
 (cl-defmethod phony--argument-context (argument (element phony--element-sequence))
@@ -293,12 +294,7 @@ between multiple captures of the same name in one pattern."
 This function creates .talon and .py files in the output directory and
 symlinks them into ~/.talon/user/."
   (mkdir (phony--output-directory "talon") t)
-  (let* ((rules (phony--get-rules))
-         (modes (seq-uniq
-                 (seq-mapcat (lambda (rule)
-                               (when (phony--procedure-rule-p rule)
-                                 (phony--procedure-rule-modes rule)))
-                             rules))))
+  (let ((rules (phony--get-rules)))
     (with-temp-file (phony--output-directory "talon" "exported-rules.talon")
       (phony-talon--insert-exported-rules rules))
 
