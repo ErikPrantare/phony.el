@@ -85,7 +85,7 @@
                        (seq-map #'symbol-name
                                 (phony--procedure-rule-arglist rule))
                        'vector))
-    (export . ,(if (phony--procedure-rule-export rule) t :false))))
+    (export . ,(if (phony--procedure-rule-interactive-p rule) t :false))))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--open-rule))
   `((type . "open")

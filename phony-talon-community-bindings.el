@@ -28,12 +28,12 @@
 (require 'phony)
 
 (defmacro phony-talon-community-bindings--make (name external-name)
-  "Define a non-exported phony rule wrapping EXTERNAL-NAME under NAME."
+  "Define a non-interactive phony rule wrapping EXTERNAL-NAME under NAME."
   (let ((docstring (format "Phony binding for Talon community capture `%s'."
                            (mapconcat #'symbol-name external-name "."))))
     `(phony-defun ,name ((x (external-rule ,@external-name)))
        ,docstring
-       :export nil
+       :interactive nil
        x)))
 
 (phony-talon-community-bindings--make number (user number))
@@ -43,17 +43,17 @@
 
 (phony-defun letter ((char (external-rule user letter)))
   "Phony binding for Talon community capture `user.letter'."
-  :export nil
+  :interactive nil
   (seq-first char))
 
 (phony-defun any-alphanumeric-key ((char (external-rule user any_alphanumeric_key)))
   "Phony binding for Talon community capture `user.any_alphanumeric_key'."
-  :export nil
+  :interactive nil
   (seq-first char))
 
 (phony-defun symbol-key ((char (external-rule user symbol_key)))
   "Phony binding for Talon community capture `user.symbol_key'."
-  :export nil
+  :interactive nil
   (seq-first char))
 
 (provide 'phony-talon-community-bindings)

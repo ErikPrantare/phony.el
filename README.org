@@ -52,8 +52,8 @@ Procedure rules can produce values.  Other rules can refer to
 value-producing rules and bind their values to the arguments of the
 function.  In the following code example, ~current-line~ defines a
 rule matching "line" and returning the region of the current line.  It
-declares ~:export nil~ to avoid "line" by itself to be matched, making
-it only possible to match when referred to by another rule.
+declares ~:interactive nil~ to avoid "line" by itself to be matched,
+making it only possible to match when referred to by another rule.
 
 The two rules ~delete-current-line~ and ~beginning-of-current-line~
 make use of ~current-line~ to bind their argument to its return value.
@@ -63,7 +63,7 @@ line.
 
 #+begin_src elisp
   (phony-defun current-line "line"
-    :export nil
+    :interactive nil
     (bounds-of-thing-at-point 'line))
 
   (phony-defun delete-current-line ("delete" (bounds current-line))
@@ -109,11 +109,11 @@ current line, or "delete sentence" to delete the current sentence:
 
 #+begin_src elisp
   (phony-defun current-line "line"
-    :export nil
+    :interactive nil
     (bounds-of-thing-at-point 'line))
 
   (phony-defun current-sentence "sentence"
-    :export nil
+    :interactive nil
     (bounds-of-thing-at-point 'sentence))
 
   (phony-define-open-rule region
@@ -133,12 +133,12 @@ in effect to the previous one:
 
   (phony-defun current-line "line"
     :contributes-to region
-    :export nil
+    :interactive nil
     (bounds-of-thing-at-point 'line))
 
   (phony-defun current-sentence "sentence"
     :contributes-to region
-    :export nil
+    :interactive nil
     (bounds-of-thing-at-point 'sentence))
 
   (phony-defun delete-current ("delete" (bounds region))

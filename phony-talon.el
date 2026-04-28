@@ -284,7 +284,7 @@ between multiple captures of the same name in one pattern."
   (seq-doseq (rule rules)
     (when (and
            (phony--procedure-rule-p rule)
-           (phony--procedure-rule-export rule))
+           (phony--procedure-rule-interactive-p rule))
       (phony--speech-insert-rule rule))))
 
 (defun phony-talon-export (analysis-data)

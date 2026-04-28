@@ -317,11 +317,11 @@ module (or no module)."
   ( arglist '()
     :type (repeat symbol)
     :documentation "List of argument symbols extracted from the pattern.")
-  ( export t
+  ( interactive-p t
     :type boolean
     :documentation "\
-Whether this rule is a top-level entry point for the speech backend.
-Non-exported rules are only reachable as sub-rules within other rules.")
+Whether this rule can be invoked directly.
+Non-interactive rules are only reachable as sub-rules within other rules.")
   ( anchor-beginning-p nil
     :type boolean
     :documentation "\
@@ -1007,10 +1007,10 @@ instead."
                               (mode 'global)
                               contributes-to
                               external-name
-                              (export t)
+                              (interactive t)
                               anchor-beginning
                               anchor-end)
-  ;; checkdoc-params: (mode contributes-to external-name export anchor-beginning anchor-end documentation)
+  ;; checkdoc-params: (mode contributes-to external-name interactive anchor-beginning anchor-end documentation)
   "Declare NAME to be a rule invokeable by voice.
 
 ARGLIST is the argument list of the function.  ELEMENT-FORM is an
@@ -1041,7 +1041,7 @@ documentation for `phony-defun'."
               (byte-compile-arglist-vars arglist))
     :arglist arglist
     :modes mode
-    :export export
+    :interactive-p interactive
     :contributes-to (ensure-list contributes-to)
     :anchor-beginning-p anchor-beginning
     :anchor-end-p anchor-end)))
@@ -1075,7 +1075,7 @@ Optional argument DOCSTRING is a documentation string for the rule.
 Optional keyword arguments or provided as an alternating sequence of KEY
 and VALUE.  Optional keyword arguments are:
 
-  :export            If nil, this rule cannot be spoken directly but may
+  :interactive       If nil, this rule cannot be spoken directly but may
                      occur as part of other rules.  Default is t.
   :mode              A mode or list of modes for which this rule should be
                      active.  If none of the modes match, this rule
