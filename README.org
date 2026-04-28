@@ -32,6 +32,7 @@ With such a function defined, uttering "hello emacs" will display
   - [[#dictionaries][Dictionaries]]
   - [[#open-rule][Open rule]]
 - [[#bindings-for-talon-community-rules][Bindings for talon community rules]]
+- [[#pre-defined-rulesets][Pre-defined rulesets]]
 - [[#versioning-system][Versioning system]]
 :END:
 
@@ -200,6 +201,14 @@ If you're using talon community, some basic bindings are given in
 #+end_src
 
 to your configuration to import them.
+
+* Pre-defined rulesets
+:PROPERTIES:
+:CUSTOM_ID: pre-defined-rulesets
+:END:
+- [[https://github.com/ErikPrantare/cursorfree.el][cursorfree.el]]: Defines a command language for editing and
+  navigation.
+- Have a published ruleset?  Open a pull request to add it here.
 
 * Versioning system
 :PROPERTIES:
