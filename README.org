@@ -2,19 +2,44 @@
 Bindings for defining voice commands in Emacs.
 
 * Illustrative example
+:PROPERTIES:
+:CUSTOM_ID: illustrative-example
+:END:
 After having set up this package, you will be able to define voice
 commands like this:
 
 #+begin_src elisp
-  (defun rule/say-hello ()
-    (declare (phony-rule "hello emacs"))
+  (phony-defun say-hello "hello emacs"
     (message "Hello!"))
 #+end_src
 
 With such a function defined, uttering "hello emacs" will display
 "Hello!" in the message area.
 
+* Contents
+:PROPERTIES:
+:TOC:      :include all
+:CUSTOM_ID: contents
+:END:
+
+:CONTENTS:
+- [[#illustrative-example][Illustrative example]]
+- [[#contents][Contents]]
+- [[#supported-speech-recognition-backends][Supported speech recognition backends]]
+- [[#setup][Setup]]
+- [[#usage][Usage]]
+  - [[#procedure-rules][Procedure rules]]
+  - [[#dictionaries][Dictionaries]]
+  - [[#open-rule][Open rule]]
+- [[#bindings-for-talon-community-rules][Bindings for talon community rules]]
+- [[#pre-defined-rulesets][Pre-defined rulesets]]
+- [[#versioning-system][Versioning system]]
+:END:
+
 * Supported speech recognition backends
+:PROPERTIES:
+:CUSTOM_ID: supported-speech-recognition-backends
+:END:
 Phony currently only supports Talon.  If you want to help with adding
 support for Dragonfly with kaldi-active-grammar to allow this to be
 used with [[https://www.gnu.org/philosophy/free-sw.html][Free Software]], you can get in contact by opening an issue or
@@ -22,6 +47,9 @@ sending a message in the dragonfly matrix room or the emacs channel on
 the talon slack.
 
 * Setup
+:PROPERTIES:
+:CUSTOM_ID: setup
+:END:
 This package assumes that you have Talon up and running.  See [[https://talon.wiki/Resource%20Hub/Talon%20Installation/installation_guide/][steps
 1-3 on their wiki]] for instructions.
 
@@ -35,64 +63,63 @@ Add the following to your Emacs configuration:
 #+end_src
 
 * Usage
+:PROPERTIES:
+:CUSTOM_ID: usage
+:END:
 There are three types of rules: procedure rules, open rules, and
 dictionaries.  They are different ways of specifying how utterances
 should produce values and side effects.
 
 ** Procedure rules
+:PROPERTIES:
+:CUSTOM_ID: procedure-rules
+:END:
 Procedure rules map your spoken utterances to code.  Procedure rules
-are declared in the ~declare~ form of a ~defun~.  With the following
-example, uttering "hello emacs" will display "Hello!" in the message
-area:
+are defined using ~phony-defun~.  With the following example, uttering
+"hello emacs" will display "Hello!" in the message area:
 
 #+begin_src elisp
-  (defun rule/say-hello ()
-    (declare (phony-rule "hello emacs"))
+  (phony-defun say-hello "hello emacs"
     (message "Hello!"))
 #+end_src
 
 Procedure rules can produce values.  Other rules can refer to
 value-producing rules and bind their values to the arguments of the
-function.  In the following code example, ~rule/current-line~ defines
-a rule matching "line" and returning the region of the current line.
-It declares ~:export nil~ to avoid "line" by itself to be matched,
+function.  In the following code example, ~current-line~ defines a
+rule matching "line" and returning the region of the current line.  It
+declares ~:interactive nil~ to avoid "line" by itself to be matched,
 making it only possible to match when referred to by another rule.
 
-The two rules ~rule/delete-current-line~ and
-~rule/beginning-of-current-line~ make use of ~rule/current-line~ to
-bind their argument to its return value.  Thus, saying "delete line"
-will delete the current line and saying "beginning of line" will move
-point to the beginning of the current line.
+The two rules ~delete-current-line~ and ~beginning-of-current-line~
+make use of ~current-line~ to bind their argument to its return value.
+Thus, saying "delete line" will delete the current line and saying
+"beginning of line" will move point to the beginning of the current
+line.
 
 #+begin_src elisp
-  (defun rule/current-line ()
-    (declare (phony-rule
-              :export nil
-              "line"))
+  (phony-defun current-line "line"
+    :interactive nil
     (bounds-of-thing-at-point 'line))
 
-  (defun rule/delete-current-line (bounds)
-    (declare (phony-rule
-              "delete"
-              (bounds rule/current-line)))
+  (phony-defun delete-current-line ("delete" (bounds current-line))
     (delete-region (car bounds) (cdr bounds)))
 
-  (defun rule/beginning-of-current-line (bounds)
-    (declare (phony-rule
-              "beginning of"
-              (bounds rule/current-line)))
+  (phony-defun beginning-of-current-line ("beginning of" (bounds current-line))
     (goto-char (car bounds)))
 #+end_src
 
 For more documentation on procedure rules, see the function
-documentation of ~phony-rule~.
+documentation of ~phony-defun~.
 
 ** Dictionaries
+:PROPERTIES:
+:CUSTOM_ID: dictionaries
+:END:
 Dictionaries are utterance -> value maps.  The following code defines
 a dictionary for the first five numbers:
 
 #+begin_src elisp
-  (phony-define-dictionary rule/number
+  (phony-define-dictionary number
     '(("one" . 1)
       ("two" . 2)
       ("three" . 3)
@@ -105,11 +132,7 @@ procedure rule, uttering "delete three lines" will delete three lines,
 and correspondingly for any other number between one and five.
 
 #+begin_src elisp
-  (defun rule/delete-lines (n)
-    (declare (phony-rule
-              "delete"
-              (n rule/number)
-              "lines"))
+  (phony-defun delete-lines ("delete" (n number) "lines")
     (dotimes (i n)
       (delete-line)))
 #+end_src
@@ -118,30 +141,26 @@ For more information on dictionaries, see the function documentation
 for ~phony-define-dictionary~.
 
 ** Open rule
+:PROPERTIES:
+:CUSTOM_ID: open-rule
+:END:
 An open rule is a way to match on any one of multiple rules.  In the
 following code example, one may utter "delete line" to delete the
 current line, or "delete sentence" to delete the current sentence:
 
 #+begin_src elisp
-  (defun rule/current-line ()
-    (declare (phony-rule
-              :export nil
-              "line"))
+  (phony-defun current-line "line"
+    :interactive nil
     (bounds-of-thing-at-point 'line))
 
-  (defun rule/current-sentence ()
-    (declare (phony-rule
-              :export nil
-              "sentence"))
+  (phony-defun current-sentence "sentence"
+    :interactive nil
     (bounds-of-thing-at-point 'sentence))
 
-  (phony-define-open-rule rule/region
-    :alternatives '(rule/current-line rule/current-sentence))
+  (phony-define-open-rule region
+    :alternatives (current-line current-sentence))
 
-  (defun rule/delete-current-line (bounds)
-    (declare (phony-rule
-              "delete"
-              (bounds rule/region)))
+  (phony-defun delete-current ("delete" (bounds region))
     (delete-region (car bounds) (cdr bounds)))
 #+end_src
 
@@ -151,26 +170,19 @@ extensibility for your grammars.  The next code example is identical
 in effect to the previous one:
 
 #+begin_src elisp
-  (phony-define-open-rule rule/region)
+  (phony-define-open-rule region)
 
-  (defun rule/current-line ()
-    (declare (phony-rule
-              :contributes-to 'rule/region
-              :export nil
-              "line"))
+  (phony-defun current-line "line"
+    :contributes-to region
+    :interactive nil
     (bounds-of-thing-at-point 'line))
 
-  (defun rule/current-sentence ()
-    (declare (phony-rule
-              :contributes-to 'rule/region
-              :export nil
-              "sentence"))
+  (phony-defun current-sentence "sentence"
+    :contributes-to region
+    :interactive nil
     (bounds-of-thing-at-point 'sentence))
 
-  (defun rule/delete-current-line (bounds)
-    (declare (phony-rule
-              "delete"
-              (bounds rule/region)))
+  (phony-defun delete-current ("delete" (bounds region))
     (delete-region (car bounds) (cdr bounds)))
 #+end_src
 
@@ -178,15 +190,29 @@ For more information on open rules, read the function documentation
 for ~phony-define-open-rule~.
 
 * Bindings for talon community rules
+:PROPERTIES:
+:CUSTOM_ID: bindings-for-talon-community-rules
+:END:
 If you're using talon community, some basic bindings are given in
 ~phony-talon-community-bindings.el~.  Add
 
 #+begin_src elisp
-  (require 'phony-talon-community-bindings)
+  (use-package phony-talon-community-bindings)
 #+end_src
 
 to your configuration to import them.
 
+* Pre-defined rulesets
+:PROPERTIES:
+:CUSTOM_ID: pre-defined-rulesets
+:END:
+- [[https://github.com/ErikPrantare/cursorfree.el][cursorfree.el]]: Defines a command language for editing and
+  navigation.
+- Have a published ruleset?  Open a pull request to add it here.
+
 * Versioning system
+:PROPERTIES:
+:CUSTOM_ID: versioning-system
+:END:
 This project uses [[https://semver.org/][semantic versioning]].  While still on 0.y.z, an
 increment of y signals breaking changes.

@@ -7,23 +7,26 @@
 ;; Created: 26 Jul 2025
 
 ;; This program is free software; you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation, either version 3 of the License, or
-;; (at your option) any later version.
+;; it under the terms of the GNU Affero General Public License as
+;; published by the Free Software Foundation, either version 3 of the
+;; License, or (at your option) any later version.
 
 ;; This program is distributed in the hope that it will be useful,
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;; GNU General Public License for more details.
+;; GNU Affero General Public License for more details.
 
-;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+;; You should have received a copy of the GNU Affero General Public
+;; License along with this program.  If not, see
+;; <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
 ;;
 
 ;;; Code:
+
+(require 'phony)
 
 (cl-defgeneric phony-dragonfly--serialize-element (element)
   `((type . "undefined")))
@@ -37,7 +40,7 @@
     (name . ,(symbol-name
               (phony--element-argument-name variable)))
     (rule . ,(phony-dragonfly--serialize-element
-              (phony--element-argument-form variable)))))
+              (phony--element-argument-element variable)))))
 
 (cl-defmethod phony-dragonfly--serialize-element ((dictionary phony--element-rule))
   `((type . "rule")
@@ -73,7 +76,7 @@
 (cl-defgeneric phony-dragonfly--serialize-rule-concrete (rule))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--procedure-rule))
-  `((type . "procedure-definition")
+  `((type . "procedure")
     (name . ,(phony--external-name rule))
     (function . ,(symbol-name (phony--procedure-rule-function rule)))
     (element . ,(phony-dragonfly--serialize-element
@@ -82,7 +85,7 @@
                        (seq-map #'symbol-name
                                 (phony--procedure-rule-arglist rule))
                        'vector))
-    (export . ,(if (phony--procedure-rule-export rule) t :false))))
+    (export . ,(if (phony--procedure-rule-interactive-p rule) t :false))))
 
 (cl-defmethod phony-dragonfly--serialize-rule-concrete ((rule phony--open-rule))
   `((type . "open")
@@ -111,6 +114,7 @@
 
 (defun phony-dragonfly-export (analysis-data)
   (interactive (list (phony--analyze-grammar)))
+  (mkdir (phony-dragonfly--backend-directory) t)
   (with-temp-file (phony-dragonfly--backend-directory "rules.json")
     (json-insert (phony-dragonfly--serialize-rules analysis-data))
     (json-pretty-print-buffer)))
@@ -133,6 +137,8 @@
       (message "Creating python virtual environment...done")
 
       (mkdir "model" t)
+      (make-symbolic-link (phony--output-directory "dictionaries.json")
+                          "dictionaries.json" t)
       (when (or (not (file-exists-p "model/kaldi-active-grammar"))
                 (y-or-n-p "Model already downloaded.  Redownload? "))
         (delete-file "model/kaldi-active-grammar.zip")

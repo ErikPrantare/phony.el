@@ -1,3 +1,16 @@
+* 0.3.0 [2026-04-28 Tue]
+- New macro ~phony-defun~ for defining rules.
+- Removed ~phony-rule~.  Use ~phony-defun~ instead.
+- Added basic bindings for talon community.
+- Added module system.  Rules defined in libraries should be defined
+  in a module.  See documentation for ~phony-module~ for how to use
+  modules.
+- All rules now support :contributes-to and :mode.
+- All rules now support documentation strings.
+- Procedure rule element forms can now take a new form ~seq~, matching
+  whenever its arguments match in a sequence.
+- The package now has a hard dependency on simulacrum.el.
+
 * 0.2.1 [2025-10-09 Thu]
 - Missing directories are now created on first run.
 - Phony now prompts for starting server if it is not already running.
