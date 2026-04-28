@@ -27,8 +27,11 @@
 ;;; Code:
 
 (require 'phony)
+(require 'dired-aux)
+(require 'json)
+(require 'python)
 
-(cl-defgeneric phony-dragonfly--serialize-element (element)
+(cl-defgeneric phony-dragonfly--serialize-element (_element)
   `((type . "undefined")))
 
 (cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-literal))
@@ -62,7 +65,7 @@
     (element . ,(phony-dragonfly--serialize-element
                  (phony--element-optional-element literal)))))
 
-(cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-external-rule))
+(cl-defmethod phony-dragonfly--serialize-element ((_literal phony--element-external-rule))
   `((type . "impossible")))
 
 (cl-defmethod phony-dragonfly--serialize-element ((sequence phony--element-sequence))
@@ -124,11 +127,10 @@
 
 (defun phony-dragonfly-install-backend ()
   (interactive)
-  (when (or (not (interactive-p))
+  (when (or (not (called-interactively-p 'interactive))
             (y-or-n-p "Install dragonfly+kaldi backend? (This might take a while) "))
     (mkdir (phony-dragonfly--backend-directory) t)
     (let ((default-directory (phony-dragonfly--backend-directory)))
-      (require 'python)
       (message "Creating python virtual environment...")
       (call-process python-interpreter nil nil t "-m" "venv" "python-venv")
       (call-process (expand-file-name "python-venv/bin/python") nil nil t
