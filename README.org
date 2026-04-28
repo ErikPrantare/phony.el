@@ -2,6 +2,9 @@
 Bindings for defining voice commands in Emacs.
 
 * Illustrative example
+:PROPERTIES:
+:CUSTOM_ID: illustrative-example
+:END:
 After having set up this package, you will be able to define voice
 commands like this:
 
@@ -13,7 +16,29 @@ commands like this:
 With such a function defined, uttering "hello emacs" will display
 "Hello!" in the message area.
 
+* Contents
+:PROPERTIES:
+:TOC:      :include all
+:CUSTOM_ID: contents
+:END:
+
+:CONTENTS:
+- [[#illustrative-example][Illustrative example]]
+- [[#contents][Contents]]
+- [[#supported-speech-recognition-backends][Supported speech recognition backends]]
+- [[#setup][Setup]]
+- [[#usage][Usage]]
+  - [[#procedure-rules][Procedure rules]]
+  - [[#dictionaries][Dictionaries]]
+  - [[#open-rule][Open rule]]
+- [[#bindings-for-talon-community-rules][Bindings for talon community rules]]
+- [[#versioning-system][Versioning system]]
+:END:
+
 * Supported speech recognition backends
+:PROPERTIES:
+:CUSTOM_ID: supported-speech-recognition-backends
+:END:
 Phony currently only supports Talon.  If you want to help with adding
 support for Dragonfly with kaldi-active-grammar to allow this to be
 used with [[https://www.gnu.org/philosophy/free-sw.html][Free Software]], you can get in contact by opening an issue or
@@ -21,6 +46,9 @@ sending a message in the dragonfly matrix room or the emacs channel on
 the talon slack.
 
 * Setup
+:PROPERTIES:
+:CUSTOM_ID: setup
+:END:
 This package assumes that you have Talon up and running.  See [[https://talon.wiki/Resource%20Hub/Talon%20Installation/installation_guide/][steps
 1-3 on their wiki]] for instructions.
 
@@ -34,11 +62,17 @@ Add the following to your Emacs configuration:
 #+end_src
 
 * Usage
+:PROPERTIES:
+:CUSTOM_ID: usage
+:END:
 There are three types of rules: procedure rules, open rules, and
 dictionaries.  They are different ways of specifying how utterances
 should produce values and side effects.
 
 ** Procedure rules
+:PROPERTIES:
+:CUSTOM_ID: procedure-rules
+:END:
 Procedure rules map your spoken utterances to code.  Procedure rules
 are defined using ~phony-defun~.  With the following example, uttering
 "hello emacs" will display "Hello!" in the message area:
@@ -77,6 +111,9 @@ For more documentation on procedure rules, see the function
 documentation of ~phony-defun~.
 
 ** Dictionaries
+:PROPERTIES:
+:CUSTOM_ID: dictionaries
+:END:
 Dictionaries are utterance -> value maps.  The following code defines
 a dictionary for the first five numbers:
 
@@ -103,6 +140,9 @@ For more information on dictionaries, see the function documentation
 for ~phony-define-dictionary~.
 
 ** Open rule
+:PROPERTIES:
+:CUSTOM_ID: open-rule
+:END:
 An open rule is a way to match on any one of multiple rules.  In the
 following code example, one may utter "delete line" to delete the
 current line, or "delete sentence" to delete the current sentence:
@@ -149,6 +189,9 @@ For more information on open rules, read the function documentation
 for ~phony-define-open-rule~.
 
 * Bindings for talon community rules
+:PROPERTIES:
+:CUSTOM_ID: bindings-for-talon-community-rules
+:END:
 If you're using talon community, some basic bindings are given in
 ~phony-talon-community-bindings.el~.  Add
 
@@ -159,5 +202,8 @@ If you're using talon community, some basic bindings are given in
 to your configuration to import them.
 
 * Versioning system
+:PROPERTIES:
+:CUSTOM_ID: versioning-system
+:END:
 This project uses [[https://semver.org/][semantic versioning]].  While still on 0.y.z, an
 increment of y signals breaking changes.
