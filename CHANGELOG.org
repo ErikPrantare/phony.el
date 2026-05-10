@@ -1,4 +1,6 @@
 * NEXT
+- ~:interactive~ in ~phony-defun~ now defaults to ~nil~ if
+  ~:contributes-to~ is specified.
 - Arguments of ~pony-defun~ are now parsed as in other rules (e.g.,
   ~:contributes-to~ is now unquoted).
 

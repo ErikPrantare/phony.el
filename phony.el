@@ -1002,10 +1002,12 @@ instead."
   "Define a procedure rule from ARGUMENTS.
 
 See `phony-defun' for more information."
-  (when (plist-member arguments :interactive)
+  (if (plist-member arguments :interactive)
+      (progn (setf (plist-get arguments :interactive-p)
+                   (plist-get arguments :interactive))
+             (cl-remf arguments :interactive))
     (setf (plist-get arguments :interactive-p)
-          (plist-get arguments :interactive))
-    (cl-remf arguments :interactive))
+          (not (map-contains-key arguments :contributes-to))))
   (when (plist-member arguments :anchor-beginning)
     (setf (plist-get arguments :anchor-beginning-p)
           (plist-get arguments :anchor-beginning))
@@ -1046,11 +1048,13 @@ Optional keyword arguments or provided as an alternating sequence of KEY
 and VALUE.  Optional keyword arguments are:
 
   :interactive       If nil, this rule cannot be spoken directly but may
-                     occur as part of other rules.  Default is t.
-  :mode              A mode or list of modes for which this rule should be
-                     active.  If none of the modes match, this rule
-                     never matches.  As a special case, \\='global always
-                     matches.  Default is \\='global.
+                     occur as part of other rules.  Default is t unless
+                     `:contributes-to' is set, in which case the default
+                     is nil.
+  :mode              An unquoted mode or list of modes for which this
+                     rule should be active.  If none of the modes match,
+                     this rule can't match.  As a special case, `global'
+                     always matches.  Default is `global'.
   :contributes-to    An unquoted symbol or list of symbols of open
                      rules that this procedure should contribute to.
                      See `phony-define-open-rule' for open rules.
@@ -1114,7 +1118,6 @@ and VALUE.  Optional keyword arguments are:
   ;; - Sanity checks
   ;; - Consider removing implicit argument naming.  In the presence of
   ;;   namespaces, the default argument name is too clunky anyway.
-  ;; - Make :interactive default nil if :contributes-to is set.
   (let* ((doc (and (stringp (car rest)) (pop rest)))
          (split-arguments (phony--split-keywords-rest rest))
          (optional-arguments (car split-arguments))
