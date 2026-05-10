@@ -998,53 +998,23 @@ instead."
     (cancel-function-timers #'phony--export-all)
     (run-with-idle-timer 0 nil #'phony--export-all)))
 
-(cl-defun phony--export-rule (name
-                              function
-                              arglist
-                              element-form
-                              &key
-                              documentation
-                              (mode 'global)
-                              contributes-to
-                              external-name
-                              (interactive t)
-                              anchor-beginning
-                              anchor-end)
-  ;; checkdoc-params: (mode contributes-to external-name interactive anchor-beginning anchor-end documentation)
-  "Declare NAME to be a rule invokeable by voice.
+(defun phony--define-procedure-rule (arguments)
+  "Define a procedure rule from ARGUMENTS.
 
-ARGLIST is the argument list of the function.  ELEMENT-FORM is an
-element form specifying how to match this rule.  The effect of matching
-the rule is to evaluate FUNCTION with ARGLIST bound according to
-ELEMENT-FORM.
-
-For the named arguments and the specification of element forms, see the
-documentation for `phony-defun'."
-  (setq arglist (byte-compile-arglist-vars arglist))
-  (setq mode (ensure-list mode))
-  (unless external-name (setq external-name (phony--to-python-identifier name)))
-  (phony-remove-rule name)
-  ;; TODO: Add element form checks:
-  ;; - Each argument may only occur at most once.
-  ;; - Arguments may only be bound to value creating elements.  (May
-  ;;   already be done implicitly in parsing?)
-  ;; - Rule may not be potentially empty (talon and dragonfly(?)
-  ;;   limitation)
-  (phony--add-rule
-   (make-phony--procedure-rule
-    :name name
-    :documentation documentation
-    :external-name external-name
-    :function function
-    :element (phony--parse-speech-element
-              element-form
-              (byte-compile-arglist-vars arglist))
-    :arglist arglist
-    :modes mode
-    :interactive-p interactive
-    :contributes-to (ensure-list contributes-to)
-    :anchor-beginning-p anchor-beginning
-    :anchor-end-p anchor-end)))
+See `phony-defun' for more information."
+  (when (plist-member arguments :interactive)
+    (setf (plist-get arguments :interactive-p)
+          (plist-get arguments :interactive))
+    (cl-remf arguments :interactive))
+  (when (plist-member arguments :anchor-beginning)
+    (setf (plist-get arguments :anchor-beginning-p)
+          (plist-get arguments :anchor-beginning))
+    (cl-remf arguments :anchor-beginning))
+  (when (plist-member arguments :anchor-end)
+    (setf (plist-get arguments :anchor-end-p)
+          (plist-get arguments :anchor-end))
+    (cl-remf arguments :anchor-end))
+  (phony--add-new-rule #'make-phony--procedure-rule arguments))
 
 (defmacro phony-defun (name pattern &rest rest)
   ;; checkdoc-params: (rest)
@@ -1115,18 +1085,16 @@ and VALUE.  Optional keyword arguments are:
   ;;   (phony-defun chuck-line "chuck line"
   ;;     (kill-line))
   ;; - Pattern after name, before doc-string:
-  ;;   - I want the pattern to be indented specially, but not for
-  ;;     documentation.  The indent declare form allows this if
+  ;;   - I want the pattern to be indented specially, but not the
+  ;;     docstring.  The indent declare form allows this if
   ;;     pattern is before documentation.
   ;;   - If it was the other way around and documentation was omitted,
   ;;     the elision of parentheses for string literals could trick
-  ;;     the syntax highlighting to treat the test documentation.
+  ;;     the syntax highlighting to treat it as documentation.
   ;; - Implicit argument naming: This allows the following terse
   ;;   syntax for simple rules:
   ;;   (phony-defun chuck-thing ("chuck" thing)
   ;;     (kill-thing thing))
-  ;;   This will be useful when rules don't share namespace with
-  ;;   functions anymore, allowing shorter names.
   ;; - Name phony-defun: Chosen because of the similarity with defun.
   ;;   However, this could potentially give the impression that we are
   ;;   defining a function, something that may not be true in the future.
@@ -1140,10 +1108,13 @@ and VALUE.  Optional keyword arguments are:
   ;;   so those may be filtered out from completion and
   ;;   go-to-definition.
 
-  ;; TODO: Move more of the logic to phony--export-rule:
+  ;; TODO: Move more of the logic to phony--define-procedure-rule:
   ;; - Implicit argument deduction
   ;; - Adding implicit 'seq (if not already done)
   ;; - Sanity checks
+  ;; - Consider removing implicit argument naming.  In the presence of
+  ;;   namespaces, the default argument name is too clunky anyway.
+  ;; - Make :interactive default nil if :contributes-to is set.
   (let* ((doc (and (stringp (car rest)) (pop rest)))
          (split-arguments (phony--split-keywords-rest rest))
          (optional-arguments (car split-arguments))
@@ -1157,10 +1128,6 @@ and VALUE.  Optional keyword arguments are:
                         (or (string-prefix-p "_" (symbol-name argument))
                             (memq argument (flatten-tree body))))
                       arguments)))
-
-    (when (map-elt optional-arguments :contributes-to)
-      (setf (map-elt optional-arguments :contributes-to)
-            `',(ensure-list (map-elt optional-arguments :contributes-to))))
 
     (cond
      (unused-arguments
@@ -1178,13 +1145,16 @@ and VALUE.  Optional keyword arguments are:
         ,(format (concat "Duplicate arguments in %s\n"
                          "If you use implicit argument names, make them explicit")
                  name)))
-     (t `(phony--export-rule
-          ',name
-          (lambda ,arguments ,@(ensure-list doc) ,@body)
-          ',arguments
-          ',expanded-pattern
-          :documentation ,doc
-          ,@optional-arguments)))))
+     (t `(phony--define-procedure-rule
+          (append
+           (list :name ',name
+                 ;; Why the ensure-list?  Probably fine to just splice
+                 ;; doc...
+                 :function (lambda ,arguments ,@(ensure-list doc) ,@body)
+                 :arglist ',arguments
+                 :element ,(phony--parse-speech-element expanded-pattern arguments)
+                 :documentation ,doc)
+           ',optional-arguments))))))
 
 (eval-and-compile
   (defun phony--expand-implicit-arguments (element-form)

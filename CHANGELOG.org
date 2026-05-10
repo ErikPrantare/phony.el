@@ -1,3 +1,7 @@
+* NEXT
+- Arguments of ~pony-defun~ are now parsed as in other rules (e.g.,
+  ~:contributes-to~ is now unquoted).
+
 * 0.3.0 [2026-04-28 Tue]
 - New macro ~phony-defun~ for defining rules.
 - Removed ~phony-rule~.  Use ~phony-defun~ instead.
