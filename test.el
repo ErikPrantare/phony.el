@@ -25,10 +25,12 @@
 (defmacro phony-test (&rest body)
   "Evaluate BODY in a fresh phony test environment.
 
-In the environment, no rules are bound and export is suppressed."
+In the environment, no rules are bound, exporters are nil, and exports
+are suppressed."
   (declare (indent 0))
   `(let ((phony--rules (make-hash-table))
-         (phony--deny-export-requests-p t))
+         (phony--deny-export-requests-p t)
+         (phony-export-function nil))
      ,@body))
 
 (ert-deftest phony-dictionary-get-setf-roundtrip ()
