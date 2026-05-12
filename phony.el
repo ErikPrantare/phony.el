@@ -507,7 +507,7 @@ recognition engine."
   `(phony-dictionary-put ,utterance ,dictionary ,value))
 
 (gv-define-setter phony-dictionary-alist (value dictionary)
-  `(phony-dictionary-set-alist ,dictionary ,value))
+  `(phony-set-dictionary-alist ,dictionary ,value))
 
 (defun phony--create-lookup-representation (entry dictionary)
   "Create lookup string for ENTRY in DICTIONARY.
