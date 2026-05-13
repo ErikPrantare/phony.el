@@ -436,9 +436,7 @@ interface sugar to the form used internally."
   (puthash
    (map-elt parameters :name)
    (apply constructor parameters)
-   phony--rules)
-
-  (phony-request-export))
+   phony--rules))
 
 (defun phony-remove-rule (rule-name)
   "Remove rule named RULE-NAME."
@@ -501,7 +499,8 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (phony--dictionary-mapping (phony--get-rule dictionary)) alist))
+  (setf (phony--dictionary-mapping (phony--get-rule dictionary)) alist)
+  (phony--request-export-dictionaries))
 
 (gv-define-setter phony-dictionary-get (value utterance dictionary)
   `(phony-dictionary-put ,utterance ,dictionary ,value))
@@ -536,7 +535,7 @@ to its dictionary."
                 (phony--dictionary-mapping dictionary))))
 
 ;; TODO: Handle IO errors
-(defun phony--export-dictionaries ()
+(defun phony--write-dictionaries-to-file ()
   "Write dictionaries to dictionaries.json.
 
 The speech recognition backend can read this file to register the
@@ -547,15 +546,27 @@ dictionaries."
      (mapcar #'phony--prepare-dictionary-for-serialization
              (seq-filter #'phony--dictionary-p (phony--get-rules))))))
 
+(defvar phony--dictionary-export-function #'phony--write-dictionaries-to-file
+  "Function called to export dictionaries.")
+
+(defun phony--export-dictionaries ()
+  "Export dictionaries using `phony--dictionary-export-function'."
+  (funcall phony--dictionary-export-function))
+
 (defvar phony--deny-export-requests-p nil
   "Non-nil if requests to export should always be denied.")
+
+(defvar phony--debounce-export-requests t
+  "Non-nil to debounce export requests via idle timers.
+When nil, export requests are executed synchronously.")
 
 (defun phony--request-export-dictionaries ()
   "Sync DICTIONARY-NAMES when next idle."
   (interactive)
   (unless phony--deny-export-requests-p
-    (cancel-function-timers #'phony--export-dictionaries)
-    (run-with-idle-timer 0.0 nil #'phony--export-dictionaries)))
+    (if phony--debounce-export-requests
+        (phony--debounce #'phony--export-dictionaries)
+      (phony--export-dictionaries))))
 
 (cl-defun phony--define-dictionary (arguments)
   "Define a dictionary from ARGUMENTS.
@@ -588,7 +599,7 @@ See documentation of `phony-define-dictionary' for more information."
 
   (if (or (map-elt arguments :contributes-to)
           (and (map-elt arguments :mode)
-               (not (memq 'global (map-elt arguments :mode)))))
+               (not (memq 'global (ensure-list (map-elt arguments :mode))))))
       (phony-request-export)
     (phony--request-export-dictionaries)))
 
@@ -654,6 +665,7 @@ be one of the following:
 
 See documentation of `phony-define-open-rule' for more information."
   (phony--add-new-rule #'make-phony--open-rule arguments)
+  (phony-request-export)
   (map-elt arguments :name))
 
 (defmacro phony-define-open-rule (name &rest arguments)
@@ -988,6 +1000,14 @@ If any errors are detected in the grammar, the rules are not exported."
       (run-with-idle-timer 0.1 t #'phony--sync-state)
       (funcall phony-export-function analysis-data))))
 
+(defun phony--debounce (f)
+  "Debounce the invocation of F by waiting until next idle.
+
+Multiple invocations to F will collapse into one invocation upon idle
+timer activation."
+  (cancel-function-timers f)
+  (run-with-idle-timer 0.0 nil f))
+
 (defun phony-request-export ()
   "Export all rules when next idle.
 
@@ -995,8 +1015,9 @@ If `phony--deny-export-request-p' is non-nil, just return immediately
 instead."
   (interactive)
   (unless phony--deny-export-requests-p
-    (cancel-function-timers #'phony--export-all)
-    (run-with-idle-timer 0 nil #'phony--export-all)))
+    (if phony--debounce-export-requests
+        (phony--debounce #'phony--export-all)
+      (phony--export-all))))
 
 (defun phony--define-procedure-rule (arguments)
   "Define a procedure rule from ARGUMENTS.
@@ -1017,6 +1038,7 @@ See `phony-defun' for more information."
           (plist-get arguments :anchor-end))
     (cl-remf arguments :anchor-end))
   (phony--add-new-rule #'make-phony--procedure-rule arguments)
+  (phony-request-export)
   (plist-get arguments :name))
 
 (defmacro phony-defun (name pattern &rest rest)
