@@ -1016,7 +1016,8 @@ See `phony-defun' for more information."
     (setf (plist-get arguments :anchor-end-p)
           (plist-get arguments :anchor-end))
     (cl-remf arguments :anchor-end))
-  (phony--add-new-rule #'make-phony--procedure-rule arguments))
+  (phony--add-new-rule #'make-phony--procedure-rule arguments)
+  (plist-get arguments :name))
 
 (defmacro phony-defun (name pattern &rest rest)
   ;; checkdoc-params: (rest)
