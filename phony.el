@@ -4,9 +4,9 @@
 
 ;; Author: Erik Präntare
 ;; Keywords: files
-;; Version: 0.3.0
+;; Version: 0.4.0
 ;; Homepage: https://github.com/ErikPrantare/phony.el
-;; Package-Requires: ((emacs "29.1") (simulacrum "0.1.0"))
+;; Package-Requires: ((emacs "29.1") (simulacrum "1.0.0"))
 ;; Created: 13 Jul 2024
 
 ;; This program is free software; you can redistribute it and/or
@@ -436,9 +436,7 @@ interface sugar to the form used internally."
   (puthash
    (map-elt parameters :name)
    (apply constructor parameters)
-   phony--rules)
-
-  (phony-request-export))
+   phony--rules))
 
 (defun phony-remove-rule (rule-name)
   "Remove rule named RULE-NAME."
@@ -501,13 +499,14 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (phony--dictionary-mapping (phony--get-rule dictionary)) alist))
+  (setf (phony--dictionary-mapping (phony--get-rule dictionary)) alist)
+  (phony--request-export-dictionaries))
 
 (gv-define-setter phony-dictionary-get (value utterance dictionary)
   `(phony-dictionary-put ,utterance ,dictionary ,value))
 
 (gv-define-setter phony-dictionary-alist (value dictionary)
-  `(phony-dictionary-set-alist ,dictionary ,value))
+  `(phony-set-dictionary-alist ,dictionary ,value))
 
 (defun phony--create-lookup-representation (entry dictionary)
   "Create lookup string for ENTRY in DICTIONARY.
@@ -536,7 +535,7 @@ to its dictionary."
                 (phony--dictionary-mapping dictionary))))
 
 ;; TODO: Handle IO errors
-(defun phony--export-dictionaries ()
+(defun phony--write-dictionaries-to-file ()
   "Write dictionaries to dictionaries.json.
 
 The speech recognition backend can read this file to register the
@@ -547,15 +546,27 @@ dictionaries."
      (mapcar #'phony--prepare-dictionary-for-serialization
              (seq-filter #'phony--dictionary-p (phony--get-rules))))))
 
+(defvar phony--dictionary-export-function #'phony--write-dictionaries-to-file
+  "Function called to export dictionaries.")
+
+(defun phony--export-dictionaries ()
+  "Export dictionaries using `phony--dictionary-export-function'."
+  (funcall phony--dictionary-export-function))
+
 (defvar phony--deny-export-requests-p nil
   "Non-nil if requests to export should always be denied.")
+
+(defvar phony--debounce-export-requests t
+  "Non-nil to debounce export requests via idle timers.
+When nil, export requests are executed synchronously.")
 
 (defun phony--request-export-dictionaries ()
   "Sync DICTIONARY-NAMES when next idle."
   (interactive)
   (unless phony--deny-export-requests-p
-    (cancel-function-timers #'phony--export-dictionaries)
-    (run-with-idle-timer 0.0 nil #'phony--export-dictionaries)))
+    (if phony--debounce-export-requests
+        (phony--debounce #'phony--export-dictionaries)
+      (phony--export-dictionaries))))
 
 (cl-defun phony--define-dictionary (arguments)
   "Define a dictionary from ARGUMENTS.
@@ -588,7 +599,7 @@ See documentation of `phony-define-dictionary' for more information."
 
   (if (or (map-elt arguments :contributes-to)
           (and (map-elt arguments :mode)
-               (not (memq 'global (map-elt arguments :mode)))))
+               (not (memq 'global (ensure-list (map-elt arguments :mode))))))
       (phony-request-export)
     (phony--request-export-dictionaries)))
 
@@ -654,6 +665,7 @@ be one of the following:
 
 See documentation of `phony-define-open-rule' for more information."
   (phony--add-new-rule #'make-phony--open-rule arguments)
+  (phony-request-export)
   (map-elt arguments :name))
 
 (defmacro phony-define-open-rule (name &rest arguments)
@@ -988,6 +1000,14 @@ If any errors are detected in the grammar, the rules are not exported."
       (run-with-idle-timer 0.1 t #'phony--sync-state)
       (funcall phony-export-function analysis-data))))
 
+(defun phony--debounce (f)
+  "Debounce the invocation of F by waiting until next idle.
+
+Multiple invocations to F will collapse into one invocation upon idle
+timer activation."
+  (cancel-function-timers f)
+  (run-with-idle-timer 0.0 nil f))
+
 (defun phony-request-export ()
   "Export all rules when next idle.
 
@@ -995,56 +1015,31 @@ If `phony--deny-export-request-p' is non-nil, just return immediately
 instead."
   (interactive)
   (unless phony--deny-export-requests-p
-    (cancel-function-timers #'phony--export-all)
-    (run-with-idle-timer 0 nil #'phony--export-all)))
+    (if phony--debounce-export-requests
+        (phony--debounce #'phony--export-all)
+      (phony--export-all))))
 
-(cl-defun phony--export-rule (name
-                              function
-                              arglist
-                              element-form
-                              &key
-                              documentation
-                              (mode 'global)
-                              contributes-to
-                              external-name
-                              (interactive t)
-                              anchor-beginning
-                              anchor-end)
-  ;; checkdoc-params: (mode contributes-to external-name interactive anchor-beginning anchor-end documentation)
-  "Declare NAME to be a rule invokeable by voice.
+(defun phony--define-procedure-rule (arguments)
+  "Define a procedure rule from ARGUMENTS.
 
-ARGLIST is the argument list of the function.  ELEMENT-FORM is an
-element form specifying how to match this rule.  The effect of matching
-the rule is to evaluate FUNCTION with ARGLIST bound according to
-ELEMENT-FORM.
-
-For the named arguments and the specification of element forms, see the
-documentation for `phony-defun'."
-  (setq arglist (byte-compile-arglist-vars arglist))
-  (setq mode (ensure-list mode))
-  (unless external-name (setq external-name (phony--to-python-identifier name)))
-  (phony-remove-rule name)
-  ;; TODO: Add element form checks:
-  ;; - Each argument may only occur at most once.
-  ;; - Arguments may only be bound to value creating elements.  (May
-  ;;   already be done implicitly in parsing?)
-  ;; - Rule may not be potentially empty (talon and dragonfly(?)
-  ;;   limitation)
-  (phony--add-rule
-   (make-phony--procedure-rule
-    :name name
-    :documentation documentation
-    :external-name external-name
-    :function function
-    :element (phony--parse-speech-element
-              element-form
-              (byte-compile-arglist-vars arglist))
-    :arglist arglist
-    :modes mode
-    :interactive-p interactive
-    :contributes-to (ensure-list contributes-to)
-    :anchor-beginning-p anchor-beginning
-    :anchor-end-p anchor-end)))
+See `phony-defun' for more information."
+  (if (plist-member arguments :interactive)
+      (progn (setf (plist-get arguments :interactive-p)
+                   (plist-get arguments :interactive))
+             (cl-remf arguments :interactive))
+    (setf (plist-get arguments :interactive-p)
+          (not (map-contains-key arguments :contributes-to))))
+  (when (plist-member arguments :anchor-beginning)
+    (setf (plist-get arguments :anchor-beginning-p)
+          (plist-get arguments :anchor-beginning))
+    (cl-remf arguments :anchor-beginning))
+  (when (plist-member arguments :anchor-end)
+    (setf (plist-get arguments :anchor-end-p)
+          (plist-get arguments :anchor-end))
+    (cl-remf arguments :anchor-end))
+  (phony--add-new-rule #'make-phony--procedure-rule arguments)
+  (phony-request-export)
+  (plist-get arguments :name))
 
 (defmacro phony-defun (name pattern &rest rest)
   ;; checkdoc-params: (rest)
@@ -1076,11 +1071,13 @@ Optional keyword arguments or provided as an alternating sequence of KEY
 and VALUE.  Optional keyword arguments are:
 
   :interactive       If nil, this rule cannot be spoken directly but may
-                     occur as part of other rules.  Default is t.
-  :mode              A mode or list of modes for which this rule should be
-                     active.  If none of the modes match, this rule
-                     never matches.  As a special case, \\='global always
-                     matches.  Default is \\='global.
+                     occur as part of other rules.  Default is t unless
+                     `:contributes-to' is set, in which case the default
+                     is nil.
+  :mode              An unquoted mode or list of modes for which this
+                     rule should be active.  If none of the modes match,
+                     this rule can't match.  As a special case, `global'
+                     always matches.  Default is `global'.
   :contributes-to    An unquoted symbol or list of symbols of open
                      rules that this procedure should contribute to.
                      See `phony-define-open-rule' for open rules.
@@ -1115,18 +1112,16 @@ and VALUE.  Optional keyword arguments are:
   ;;   (phony-defun chuck-line "chuck line"
   ;;     (kill-line))
   ;; - Pattern after name, before doc-string:
-  ;;   - I want the pattern to be indented specially, but not for
-  ;;     documentation.  The indent declare form allows this if
+  ;;   - I want the pattern to be indented specially, but not the
+  ;;     docstring.  The indent declare form allows this if
   ;;     pattern is before documentation.
   ;;   - If it was the other way around and documentation was omitted,
   ;;     the elision of parentheses for string literals could trick
-  ;;     the syntax highlighting to treat the test documentation.
+  ;;     the syntax highlighting to treat it as documentation.
   ;; - Implicit argument naming: This allows the following terse
   ;;   syntax for simple rules:
   ;;   (phony-defun chuck-thing ("chuck" thing)
   ;;     (kill-thing thing))
-  ;;   This will be useful when rules don't share namespace with
-  ;;   functions anymore, allowing shorter names.
   ;; - Name phony-defun: Chosen because of the similarity with defun.
   ;;   However, this could potentially give the impression that we are
   ;;   defining a function, something that may not be true in the future.
@@ -1140,10 +1135,12 @@ and VALUE.  Optional keyword arguments are:
   ;;   so those may be filtered out from completion and
   ;;   go-to-definition.
 
-  ;; TODO: Move more of the logic to phony--export-rule:
+  ;; TODO: Move more of the logic to phony--define-procedure-rule:
   ;; - Implicit argument deduction
   ;; - Adding implicit 'seq (if not already done)
   ;; - Sanity checks
+  ;; - Consider removing implicit argument naming.  In the presence of
+  ;;   namespaces, the default argument name is too clunky anyway.
   (let* ((doc (and (stringp (car rest)) (pop rest)))
          (split-arguments (phony--split-keywords-rest rest))
          (optional-arguments (car split-arguments))
@@ -1157,10 +1154,6 @@ and VALUE.  Optional keyword arguments are:
                         (or (string-prefix-p "_" (symbol-name argument))
                             (memq argument (flatten-tree body))))
                       arguments)))
-
-    (when (map-elt optional-arguments :contributes-to)
-      (setf (map-elt optional-arguments :contributes-to)
-            `',(ensure-list (map-elt optional-arguments :contributes-to))))
 
     (cond
      (unused-arguments
@@ -1178,13 +1171,16 @@ and VALUE.  Optional keyword arguments are:
         ,(format (concat "Duplicate arguments in %s\n"
                          "If you use implicit argument names, make them explicit")
                  name)))
-     (t `(phony--export-rule
-          ',name
-          (lambda ,arguments ,@(ensure-list doc) ,@body)
-          ',arguments
-          ',expanded-pattern
-          :documentation ,doc
-          ,@optional-arguments)))))
+     (t `(phony--define-procedure-rule
+          (append
+           (list :name ',name
+                 ;; Why the ensure-list?  Probably fine to just splice
+                 ;; doc...
+                 :function (lambda ,arguments ,@(ensure-list doc) ,@body)
+                 :arglist ',arguments
+                 :element ,(phony--parse-speech-element expanded-pattern arguments)
+                 :documentation ,doc)
+           ',optional-arguments))))))
 
 (eval-and-compile
   (defun phony--expand-implicit-arguments (element-form)

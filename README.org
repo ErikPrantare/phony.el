@@ -175,17 +175,18 @@ in effect to the previous one:
 
   (phony-defun current-line "line"
     :contributes-to region
-    :interactive nil
     (bounds-of-thing-at-point 'line))
 
   (phony-defun current-sentence "sentence"
     :contributes-to region
-    :interactive nil
     (bounds-of-thing-at-point 'sentence))
 
   (phony-defun delete-current ("delete" (bounds region))
     (delete-region (car bounds) (cdr bounds)))
 #+end_src
+
+Note also that ~:interactive~ defaults to ~nil~ when ~:contributes-to~
+is provided.
 
 For more information on open rules, read the function documentation
 for ~phony-define-open-rule~.
