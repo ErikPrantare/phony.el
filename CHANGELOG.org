@@ -1,9 +1,11 @@
-* NEXT
+* 0.4.0 [2026-05-16 Sat]
 - ~:interactive~ in ~phony-defun~ now defaults to ~nil~ if
   ~:contributes-to~ is specified.
-- Arguments of ~pony-defun~ are now parsed as in other rules (e.g.,
+- Arguments of ~phony-defun~ are now parsed as in other rules (e.g.,
   ~:contributes-to~ is now unquoted).
-- Fixed bugs resulting in rules sometimes not getting exported.
+- Fixed ~setf~ support for ~phony-dictionary-alist~.
+- Fixed bugs resulting in rules and dictionaries sometimes not getting
+  exported.
 
 * 0.3.0 [2026-04-28 Tue]
 - New macro ~phony-defun~ for defining rules.
