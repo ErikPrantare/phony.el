@@ -367,31 +367,64 @@ is identified when exported to the speech engine."
   (phony--rule-external-name
    (phony--normalize-rule rule-or-name)))
 
-(defvar phony--rules (make-hash-table)
-  "Hash table of all defined rules, indxed by name.")
+(cl-defstruct (phony--grammar
+               (:constructor phony--make-grammar)
+               (:copier nil))
+  "A collection of rules."
+  (rules (make-hash-table)
+         :type hash-table
+         :documentation "Hash table of rules, indexed by name."))
 
-(defun phony--get-rules ()
-  "Return a list containing all defined rules."
-  (hash-table-values phony--rules))
+(defvar phony--default-grammar (phony--make-grammar)
+  "The default grammar for all grammar operations.")
 
-(defun phony--get-rule (name)
-  "Get the rule named NAME.
-Return nil if no such rule exists."
-  (gethash name phony--rules))
+(defun phony--get-rules (&optional grammar)
+  "Return a list containing the rules of GRAMMAR.
 
-(defun phony--add-rule (rule)
-  "Add a new rule RULE.
+If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
+  (setq grammar (or grammar phony--default-grammar))
+  (hash-table-values (phony--grammar-rules grammar)))
 
-RULE is added to the collection of rules.  If RULE was declared in a
-file with a `phony-module' declaration, then RULE is put into that
-module.
+(defun phony--get-rule (name &optional grammar)
+  "Return the rule named NAME in GRAMMAR.
+Return nil if no such rule exists.
+
+If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
+  (setq grammar (or grammar phony--default-grammar))
+  (gethash name (phony--grammar-rules grammar)))
+
+(defun phony--add-rule (rule &optional grammar)
+  "Add RULE to GRAMMAR.
+
+If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'.
+If RULE was declared in a file with a `phony-module' declaration, then
+RULE is put into that module.
 
 This function must be invoked every time a rule is declared."
+  (setq grammar (or grammar phony--default-grammar))
   (setf (phony--rule-module rule) (phony--current-module))
   (setf (phony--rule-file-name rule) (phony--current-file-name))
   (puthash (phony--rule-name rule)
            rule
-           phony--rules))
+           (phony--grammar-rules grammar)))
+
+(defun phony-remove-rule (rule-name &optional grammar)
+  "Remove rule named RULE-NAME from GRAMMAR.
+If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
+  (interactive (list
+                (intern (completing-read
+                         "Remove rule: "
+                         (hash-table-keys
+                          (phony--grammar-rules phony--default-grammar))))))
+  (setq grammar (or grammar phony--default-grammar))
+  (remhash rule-name (phony--grammar-rules grammar))
+  (seq-doseq (open-rule (seq-filter
+                         #'phony--open-rule-p
+                         (phony--get-rules grammar)))
+    (setf (phony--open-rule-alternatives open-rule)
+          (remove rule-name (phony--open-rule-alternatives open-rule))))
+  (phony-request-export))
+
 
 (defun phony--add-new-rule (constructor parameters)
   "Add a new rule from CONSTRUCTOR with PARAMETERS.
@@ -427,29 +460,7 @@ interface sugar to the form used internally."
   (with-memoization (map-elt parameters :external-name)
     (phony--to-python-identifier (map-elt parameters :name)))
 
-  (setf (map-elt parameters :module)
-        (phony--current-module))
-
-  (setf (map-elt parameters :file-name)
-        (phony--current-file-name))
-
-  (puthash
-   (map-elt parameters :name)
-   (apply constructor parameters)
-   phony--rules))
-
-(defun phony-remove-rule (rule-name)
-  "Remove rule named RULE-NAME."
-  (interactive (list (intern (completing-read "Remove rule: "
-                                              (hash-table-keys
-                                               phony--rules)))))
-  (remhash rule-name phony--rules)
-  (seq-doseq (open-rule (seq-filter
-                         #'phony--open-rule-p
-                         (phony--get-rules)))
-    (setf (phony--open-rule-alternatives open-rule)
-          (remove rule-name (phony--open-rule-alternatives open-rule))))
-  (phony-request-export))
+  (phony--add-rule (apply constructor parameters)))
 
 (defun phony-dictionary-get (utterance dictionary)
   "Return the value corresponding to UTTERANCE in DICTIONARY.

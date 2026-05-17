@@ -29,7 +29,7 @@
 In the environment, no rules are bound, exporters are inert, export
 requests are suppressed, and export request debounce is turned off."
   (declare (indent 0))
-  `(let ((phony--rules (make-hash-table))
+  `(let ((phony--default-grammar (phony--make-grammar))
          (phony--deny-export-requests-p t)
          (phony-export-function #'ignore)
          (phony--dictionary-export-function #'ignore)
