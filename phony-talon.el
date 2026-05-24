@@ -146,9 +146,9 @@ or `repeat'.  Returns nil if ARGUMENT is not found in ELEMENTS."
       downstream-context)))
 
 (cl-defmethod phony--argument-context (argument (element phony--element-repeat))
-  (if-let ((downstream-context (phony--argument-context
-                                argument
-                                (phony--element-repeat-element element))))
+  (if-let* ((downstream-context (phony--argument-context
+                                 argument
+                                 (phony--element-repeat-element element))))
       'repeat))
 
 (defun phony--speech-insert-rule (rule)

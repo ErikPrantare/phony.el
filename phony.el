@@ -291,7 +291,7 @@ modes are currently active."
                    (memq mode local-minor-modes)
                    (memq mode global-minor-modes)))
                 modes)))
-   (if-let ((module (phony--rule-module rule)))
+   (if-let* ((module (phony--rule-module rule)))
        (phony--module-enabled-p module)
      t)))
 
@@ -441,14 +441,14 @@ interface sugar to the form used internally."
 
   ;; NOTE: The external parameter is named :mode, but internally we
   ;; normalize it to a list :modes.
-  (when-let ((mode (map-elt parameters :mode)))
+  (when-let* ((mode (map-elt parameters :mode)))
     (when (and (listp mode) (eq (car mode) 'quote))
       (error ":mode keyword argument must be unquoted"))
     (setf (map-elt parameters :modes)
           (ensure-list (map-elt parameters :mode)))
     (cl-remf parameters :mode))
 
-  (when-let ((contributes-to (map-elt parameters :contributes-to)))
+  (when-let* ((contributes-to (map-elt parameters :contributes-to)))
     (when (and (listp contributes-to) (eq (car contributes-to) 'quote))
       (error ":contributes-to keyword argument must be unquoted"))
     (setf (map-elt parameters :contributes-to)
@@ -591,13 +591,13 @@ See documentation of `phony-define-dictionary' for more information."
     (unless (proper-list-p mapping)
       (error "The mapping of %s must be a list" name))
 
-    (when-let ((non-cons (seq-find (lambda (x) (not (consp x))) mapping)))
+    (when-let* ((non-cons (seq-find (lambda (x) (not (consp x))) mapping)))
       (error "The mapping of %s must be a alist, but %S is not a cons cell"
              name non-cons))
 
-    (when-let ((non-string-key (seq-find
-                                (lambda (entry) (not (stringp (car-safe entry))))
-                                mapping)))
+    (when-let* ((non-string-key (seq-find
+                                 (lambda (entry) (not (stringp (car-safe entry))))
+                                 mapping)))
       (error "The keys of %s must be strings, but %S is not a string"
              name (car non-string-key))))
 
@@ -920,8 +920,8 @@ its children, and to FINISHED afterwards."
 
       (puthash rule t visited)
       (seq-doseq (dependency (gethash rule dependencies))
-        (when-let ((path (phony--try-linear-extension-impl
-                          dependency visited finished analysis-data)))
+        (when-let* ((path (phony--try-linear-extension-impl
+                           dependency visited finished analysis-data)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
               (cl-return path)
@@ -945,9 +945,9 @@ extension."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
-      (when-let ((cycle (phony--try-linear-extension-impl
-                         rule visited finished
-                         analysis-data)))
+      (when-let* ((cycle (phony--try-linear-extension-impl
+                          rule visited finished
+                          analysis-data)))
         (oset analysis-data cycle (seq-map #'phony--rule-name cycle))
         (cl-return-from phony--try-linear-extension)))))
 
@@ -965,7 +965,7 @@ results of the analysis."
     (setf (phony--analysis-data-linear-extension analysis-data)
           (reverse
            (phony--analysis-data-linear-extension analysis-data)))
-    (when-let (cycle (phony--analysis-data-cycle analysis-data))
+    (when-let* (cycle (phony--analysis-data-cycle analysis-data))
       (display-warning 'phony (concat "Cycle found: "
                                       (string-join
                                        (seq-map #'symbol-name cycle)
