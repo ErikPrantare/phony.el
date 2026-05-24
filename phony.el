@@ -4,7 +4,7 @@
 
 ;; Author: Erik Präntare
 ;; Keywords: files
-;; Version: 0.4.0
+;; Version: 0.5.0
 ;; Homepage: https://github.com/ErikPrantare/phony.el
 ;; Package-Requires: ((emacs "29.1") (simulacrum "1.0.0"))
 ;; Created: 13 Jul 2024
@@ -291,7 +291,7 @@ modes are currently active."
                    (memq mode local-minor-modes)
                    (memq mode global-minor-modes)))
                 modes)))
-   (if-let ((module (phony--rule-module rule)))
+   (if-let* ((module (phony--rule-module rule)))
        (phony--module-enabled-p module)
      t)))
 
@@ -367,31 +367,64 @@ is identified when exported to the speech engine."
   (phony--rule-external-name
    (phony--normalize-rule rule-or-name)))
 
-(defvar phony--rules (make-hash-table)
-  "Hash table of all defined rules, indxed by name.")
+(cl-defstruct (phony--grammar
+               (:constructor phony--make-grammar)
+               (:copier nil))
+  "A collection of rules."
+  (rules (make-hash-table)
+         :type hash-table
+         :documentation "Hash table of rules, indexed by name."))
 
-(defun phony--get-rules ()
-  "Return a list containing all defined rules."
-  (hash-table-values phony--rules))
+(defvar phony--default-grammar (phony--make-grammar)
+  "The default grammar for all grammar operations.")
 
-(defun phony--get-rule (name)
-  "Get the rule named NAME.
-Return nil if no such rule exists."
-  (gethash name phony--rules))
+(defun phony--get-rules (&optional grammar)
+  "Return a list containing the rules of GRAMMAR.
 
-(defun phony--add-rule (rule)
-  "Add a new rule RULE.
+If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
+  (setq grammar (or grammar phony--default-grammar))
+  (hash-table-values (phony--grammar-rules grammar)))
 
-RULE is added to the collection of rules.  If RULE was declared in a
-file with a `phony-module' declaration, then RULE is put into that
-module.
+(defun phony--get-rule (name &optional grammar)
+  "Return the rule named NAME in GRAMMAR.
+Return nil if no such rule exists.
+
+If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
+  (setq grammar (or grammar phony--default-grammar))
+  (gethash name (phony--grammar-rules grammar)))
+
+(defun phony--add-rule (rule &optional grammar)
+  "Add RULE to GRAMMAR.
+
+If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'.
+If RULE was declared in a file with a `phony-module' declaration, then
+RULE is put into that module.
 
 This function must be invoked every time a rule is declared."
+  (setq grammar (or grammar phony--default-grammar))
   (setf (phony--rule-module rule) (phony--current-module))
   (setf (phony--rule-file-name rule) (phony--current-file-name))
   (puthash (phony--rule-name rule)
            rule
-           phony--rules))
+           (phony--grammar-rules grammar)))
+
+(defun phony-remove-rule (rule-name &optional grammar)
+  "Remove rule named RULE-NAME from GRAMMAR.
+If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
+  (interactive (list
+                (intern (completing-read
+                         "Remove rule: "
+                         (hash-table-keys
+                          (phony--grammar-rules phony--default-grammar))))))
+  (setq grammar (or grammar phony--default-grammar))
+  (remhash rule-name (phony--grammar-rules grammar))
+  (seq-doseq (open-rule (seq-filter
+                         #'phony--open-rule-p
+                         (phony--get-rules grammar)))
+    (setf (phony--open-rule-alternatives open-rule)
+          (remove rule-name (phony--open-rule-alternatives open-rule))))
+  (phony-request-export))
+
 
 (defun phony--add-new-rule (constructor parameters)
   "Add a new rule from CONSTRUCTOR with PARAMETERS.
@@ -408,14 +441,14 @@ interface sugar to the form used internally."
 
   ;; NOTE: The external parameter is named :mode, but internally we
   ;; normalize it to a list :modes.
-  (when-let ((mode (map-elt parameters :mode)))
+  (when-let* ((mode (map-elt parameters :mode)))
     (when (and (listp mode) (eq (car mode) 'quote))
       (error ":mode keyword argument must be unquoted"))
     (setf (map-elt parameters :modes)
           (ensure-list (map-elt parameters :mode)))
     (cl-remf parameters :mode))
 
-  (when-let ((contributes-to (map-elt parameters :contributes-to)))
+  (when-let* ((contributes-to (map-elt parameters :contributes-to)))
     (when (and (listp contributes-to) (eq (car contributes-to) 'quote))
       (error ":contributes-to keyword argument must be unquoted"))
     (setf (map-elt parameters :contributes-to)
@@ -427,29 +460,7 @@ interface sugar to the form used internally."
   (with-memoization (map-elt parameters :external-name)
     (phony--to-python-identifier (map-elt parameters :name)))
 
-  (setf (map-elt parameters :module)
-        (phony--current-module))
-
-  (setf (map-elt parameters :file-name)
-        (phony--current-file-name))
-
-  (puthash
-   (map-elt parameters :name)
-   (apply constructor parameters)
-   phony--rules))
-
-(defun phony-remove-rule (rule-name)
-  "Remove rule named RULE-NAME."
-  (interactive (list (intern (completing-read "Remove rule: "
-                                              (hash-table-keys
-                                               phony--rules)))))
-  (remhash rule-name phony--rules)
-  (seq-doseq (open-rule (seq-filter
-                         #'phony--open-rule-p
-                         (phony--get-rules)))
-    (setf (phony--open-rule-alternatives open-rule)
-          (remove rule-name (phony--open-rule-alternatives open-rule))))
-  (phony-request-export))
+  (phony--add-rule (apply constructor parameters)))
 
 (defun phony-dictionary-get (utterance dictionary)
   "Return the value corresponding to UTTERANCE in DICTIONARY.
@@ -553,17 +564,16 @@ dictionaries."
   "Export dictionaries using `phony--dictionary-export-function'."
   (funcall phony--dictionary-export-function))
 
-(defvar phony--deny-export-requests-p nil
-  "Non-nil if requests to export should always be denied.")
-
 (defvar phony--debounce-export-requests t
   "Non-nil to debounce export requests via idle timers.
 When nil, export requests are executed synchronously.")
 
 (defun phony--request-export-dictionaries ()
-  "Sync DICTIONARY-NAMES when next idle."
+  "Sync DICTIONARY-NAMES when next idle.
+
+If `phony-mode' is disabled, this function does nothing."
   (interactive)
-  (unless phony--deny-export-requests-p
+  (when phony-mode
     (if phony--debounce-export-requests
         (phony--debounce #'phony--export-dictionaries)
       (phony--export-dictionaries))))
@@ -580,13 +590,13 @@ See documentation of `phony-define-dictionary' for more information."
     (unless (proper-list-p mapping)
       (error "The mapping of %s must be a list" name))
 
-    (when-let ((non-cons (seq-find (lambda (x) (not (consp x))) mapping)))
+    (when-let* ((non-cons (seq-find (lambda (x) (not (consp x))) mapping)))
       (error "The mapping of %s must be a alist, but %S is not a cons cell"
              name non-cons))
 
-    (when-let ((non-string-key (seq-find
-                                (lambda (entry) (not (stringp (car-safe entry))))
-                                mapping)))
+    (when-let* ((non-string-key (seq-find
+                                 (lambda (entry) (not (stringp (car-safe entry))))
+                                 mapping)))
       (error "The keys of %s must be strings, but %S is not a string"
              name (car non-string-key))))
 
@@ -909,8 +919,8 @@ its children, and to FINISHED afterwards."
 
       (puthash rule t visited)
       (seq-doseq (dependency (gethash rule dependencies))
-        (when-let ((path (phony--try-linear-extension-impl
-                          dependency visited finished analysis-data)))
+        (when-let* ((path (phony--try-linear-extension-impl
+                           dependency visited finished analysis-data)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
               (cl-return path)
@@ -934,9 +944,9 @@ extension."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules))
-      (when-let ((cycle (phony--try-linear-extension-impl
-                         rule visited finished
-                         analysis-data)))
+      (when-let* ((cycle (phony--try-linear-extension-impl
+                          rule visited finished
+                          analysis-data)))
         (oset analysis-data cycle (seq-map #'phony--rule-name cycle))
         (cl-return-from phony--try-linear-extension)))))
 
@@ -954,7 +964,7 @@ results of the analysis."
     (setf (phony--analysis-data-linear-extension analysis-data)
           (reverse
            (phony--analysis-data-linear-extension analysis-data)))
-    (when-let (cycle (phony--analysis-data-cycle analysis-data))
+    (when-let* ((cycle (phony--analysis-data-cycle analysis-data)))
       (display-warning 'phony (concat "Cycle found: "
                                       (string-join
                                        (seq-map #'symbol-name cycle)
@@ -988,17 +998,20 @@ been performed, the returned value may be out of date."
 (defun phony--export-all ()
   "Export all rules to the speech recognition engine.
 
-If any errors are detected in the grammar, the rules are not exported."
-  (let ((analysis-data (phony--analyze-grammar)))
-    (if (phony--analysis-data-contains-errors analysis-data)
-        (display-warning 'phony "Grammar contains errors, not exporting")
-      (phony--export-dictionaries)
-      (when (and (not (server-running-p))
-                 (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
-        (server-start))
-      (cancel-function-timers #'phony--sync-state)
-      (run-with-idle-timer 0.1 t #'phony--sync-state)
-      (funcall phony-export-function analysis-data))))
+If any errors are detected in the grammar, the rules are not exported.
+
+If no rules are defined, this function does nothing."
+  (when (phony--get-rules)
+    (let ((analysis-data (phony--analyze-grammar)))
+      (if (phony--analysis-data-contains-errors analysis-data)
+          (display-warning 'phony "Grammar contains errors, not exporting")
+        (phony--export-dictionaries)
+        (when (and (not (server-running-p))
+                   (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
+          (server-start))
+        (cancel-function-timers #'phony--sync-state)
+        (run-with-idle-timer 0.1 t #'phony--sync-state)
+        (funcall phony-export-function analysis-data)))))
 
 (defun phony--debounce (f)
   "Debounce the invocation of F by waiting until next idle.
@@ -1011,10 +1024,9 @@ timer activation."
 (defun phony-request-export ()
   "Export all rules when next idle.
 
-If `phony--deny-export-request-p' is non-nil, just return immediately
-instead."
+If `phony-mode' is not enabled, this function does nothing."
   (interactive)
-  (unless phony--deny-export-requests-p
+  (when phony-mode
     (if phony--debounce-export-requests
         (phony--debounce #'phony--export-all)
       (phony--export-all))))
@@ -1182,6 +1194,16 @@ and VALUE.  Optional keyword arguments are:
                  :documentation ,doc)
            ',optional-arguments))))))
 
+(define-minor-mode phony-mode
+  "Toggle phony mode.
+
+When phony mode is enabled, rules will be exported to the speech
+recognition backend."
+  :global t
+  :group 'phony
+  (when phony-mode
+    (phony-request-export)))
+
 (eval-and-compile
   (defun phony--expand-implicit-arguments (element-form)
     "Expand implicit arguments in ELEMENT-FORM.
@@ -1208,32 +1230,29 @@ element tree."
       (list (car element-form)))
      (t '()))))
 
-(let ((phony--deny-export-requests-p t))
-  ;; Define all builtin rules here.  We suppress export, as the user
-  ;; may not have set the correct exporter yet.
-  (phony-define-dictionary phony-module
-    "Dictionary of defined modules.
+(phony-define-dictionary phony-module
+  "Dictionary of defined modules.
 Whenever a module is defined with `phony-module', it is added to this
 dictionary."
-    '())
+  '())
 
-  (phony-defun phony-enable-module ("phony enable" (? (module phony-module)))
-    "Enable MODULE.
+(phony-defun phony-enable-module ("phony enable" (? (module phony-module)))
+  "Enable MODULE.
 If MODULE is not given, prompt for it before enabling it."
-    (if module
-        (phony-enable-module
-         module
-         (y-or-n-p (format "Enable %s for future sessions? " module)))
-      (call-interactively #'phony-enable-module)))
+  (if module
+      (phony-enable-module
+       module
+       (y-or-n-p (format "Enable %s for future sessions? " module)))
+    (call-interactively #'phony-enable-module)))
 
-  (phony-defun phony-disable-module ("phony disable" (? (module phony-module)))
-    "Disable MODULE.
+(phony-defun phony-disable-module ("phony disable" (? (module phony-module)))
+  "Disable MODULE.
 If MODULE is not given, prompt for it before disabling it."
-    (if module
-        (phony-disable-module
-         module
-         (y-or-n-p (format "Disable %s for future sessions? " module)))
-      (call-interactively #'phony-disable-module))))
+  (if module
+      (phony-disable-module
+       module
+       (y-or-n-p (format "Disable %s for future sessions? " module)))
+    (call-interactively #'phony-disable-module)))
 
 (defun phony--sync-state ()
   "Export information about which rules are currently active."

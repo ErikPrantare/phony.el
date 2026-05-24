@@ -58,24 +58,29 @@
                (seq-map #'phony--rule-name (phony--get-rules))
                :exclusive 'yes))))
 
-(defun phony--install-capf ()
+(defun phony--enable-capf ()
   (make-local-variable 'completion-at-point-functions)
   (add-to-list 'completion-at-point-functions
                #'phony--completion-at-point))
 
-(add-hook 'emacs-lisp-mode-hook #'phony--install-capf)
+(defun phony--disable-capf ()
+  (setq completion-at-point-functions
+        (delq #'phony--completion-at-point
+              completion-at-point-functions)))
 
-(defun phony--install-font-lock ()
-  (font-lock-add-keywords
-   nil
-   `((,(rx "(" (or "phony-defun"
-                   "phony-define-dictionary"
-                   "phony-define-open-rule")
-           (+ blank)
-           (group (+ (or (syntax word) (syntax symbol)))))
-      1 'font-lock-function-name-face))))
+(defvar phony--font-lock-keywords
+  `((,(rx "(" (or "phony-defun"
+                  "phony-define-dictionary"
+                  "phony-define-open-rule")
+          (+ blank)
+          (group (+ (or (syntax word) (syntax symbol)))))
+     1 'font-lock-function-name-face)))
 
-(add-hook 'emacs-lisp-mode-hook #'phony--install-font-lock)
+(defun phony--enable-font-lock ()
+  (font-lock-add-keywords nil phony--font-lock-keywords))
+
+(defun phony--disable-font-lock ()
+  (font-lock-remove-keywords nil phony--font-lock-keywords))
 
 (defun phony--find-definition (name)
   (re-search-forward
@@ -88,9 +93,6 @@
    nil t))
 
 (require 'find-func)
-
-(setf (alist-get 'phony find-function-regexp-alist)
-      #'phony--find-definition)
 
 (cl-defmethod xref-backend-definitions ((_backend (eql 'phony)) identifier)
   (and-let* ((rule-name (intern-soft identifier))
@@ -118,10 +120,48 @@
 (defun phony--xref-backend ()
   (and (phony--in-element-form-p) 'phony))
 
-(defun phony--install-xref ()
+(defun phony--enable-xref ()
   (add-hook 'xref-backend-functions #'phony--xref-backend nil t))
 
-(add-hook 'emacs-lisp-mode-hook #'phony--install-xref)
+(defun phony--disable-xref ()
+  (remove-hook 'xref-backend-functions #'phony--xref-backend t))
+
+(defun phony--enable-experimental-features ()
+  (phony--enable-capf)
+  (phony--enable-xref)
+  (phony--enable-font-lock))
+
+(defun phony--disable-experimental-features ()
+  (phony--disable-capf)
+  (phony--disable-xref)
+  (phony--disable-font-lock))
+
+(defun phony--install-experimental-features ()
+  (unless phony-mode
+    (setq phony-experimental-mode nil)
+    (error "Enable `phony-mode' before enabling `phony-experimental-mode'."))
+  (dolist (buffer (match-buffers (cons 'derived-mode 'emacs-lisp-mode)))
+    (with-current-buffer buffer
+      (phony--enable-experimental-features)))
+  (add-hook 'emacs-lisp-mode-hook #'phony--enable-experimental-features)
+  (setf (alist-get 'phony find-function-regexp-alist) #'phony--find-definition))
+
+(defun phony--uninstall-experimental-features ()
+  (dolist (buffer (match-buffers (cons 'derived-mode 'emacs-lisp-mode)))
+    (with-current-buffer buffer
+      (phony--disable-experimental-features)))
+  (remove-hook 'emacs-lisp-mode-hook #'phony--enable-experimental-features)
+  (setf (alist-get 'phony find-function-regexp-alist nil t) nil))
+
+(define-minor-mode phony-experimental-mode
+  "Toggle experimental features for phony.
+
+This includes completion-at-point, xref, and font-locking."
+  :global t
+  :group 'phony
+  (if phony-experimental-mode
+      (phony--install-experimental-features)
+    (phony--uninstall-experimental-features)))
 
 (provide 'phony-experimental)
 ;;; phony-experimental.el ends here

@@ -146,9 +146,9 @@ or `repeat'.  Returns nil if ARGUMENT is not found in ELEMENTS."
       downstream-context)))
 
 (cl-defmethod phony--argument-context (argument (element phony--element-repeat))
-  (if-let ((downstream-context (phony--argument-context
-                                argument
-                                (phony--element-repeat-element element))))
+  (if-let* ((downstream-context (phony--argument-context
+                                 argument
+                                 (phony--element-repeat-element element))))
       'repeat))
 
 (defun phony--speech-insert-rule (rule)
@@ -391,11 +391,10 @@ symlinks them into ~/.talon/user/."
                               link-path t)
         (warn "Path already exists and is not preexistent symlink: %S" link-path)))))
 
-(let ((phony--deny-export-requests-p t))
-  ;; Empty lists create no matches yet emit no errors.
-  (phony-define-dictionary phony-talon--disabled-rule
-    :external-name "disabled_phony_rule"
-    '()))
+;; Empty lists create no matches yet emit no errors in Talon.
+(phony-define-dictionary phony-talon--disabled-rule
+  :external-name "disabled_phony_rule"
+  '())
 
 (provide 'phony-talon)
 ;;; phony-talon.el ends here
