@@ -564,17 +564,16 @@ dictionaries."
   "Export dictionaries using `phony--dictionary-export-function'."
   (funcall phony--dictionary-export-function))
 
-(defvar phony--deny-export-requests-p nil
-  "Non-nil if requests to export should always be denied.")
-
 (defvar phony--debounce-export-requests t
   "Non-nil to debounce export requests via idle timers.
 When nil, export requests are executed synchronously.")
 
 (defun phony--request-export-dictionaries ()
-  "Sync DICTIONARY-NAMES when next idle."
+  "Sync DICTIONARY-NAMES when next idle.
+
+If `phony-mode' is disabled, this function does nothing."
   (interactive)
-  (unless phony--deny-export-requests-p
+  (when phony-mode
     (if phony--debounce-export-requests
         (phony--debounce #'phony--export-dictionaries)
       (phony--export-dictionaries))))
@@ -965,7 +964,7 @@ results of the analysis."
     (setf (phony--analysis-data-linear-extension analysis-data)
           (reverse
            (phony--analysis-data-linear-extension analysis-data)))
-    (when-let* (cycle (phony--analysis-data-cycle analysis-data))
+    (when-let* ((cycle (phony--analysis-data-cycle analysis-data)))
       (display-warning 'phony (concat "Cycle found: "
                                       (string-join
                                        (seq-map #'symbol-name cycle)
@@ -999,17 +998,20 @@ been performed, the returned value may be out of date."
 (defun phony--export-all ()
   "Export all rules to the speech recognition engine.
 
-If any errors are detected in the grammar, the rules are not exported."
-  (let ((analysis-data (phony--analyze-grammar)))
-    (if (phony--analysis-data-contains-errors analysis-data)
-        (display-warning 'phony "Grammar contains errors, not exporting")
-      (phony--export-dictionaries)
-      (when (and (not (server-running-p))
-                 (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
-        (server-start))
-      (cancel-function-timers #'phony--sync-state)
-      (run-with-idle-timer 0.1 t #'phony--sync-state)
-      (funcall phony-export-function analysis-data))))
+If any errors are detected in the grammar, the rules are not exported.
+
+If no rules are defined, this function does nothing."
+  (when (phony--get-rules)
+    (let ((analysis-data (phony--analyze-grammar)))
+      (if (phony--analysis-data-contains-errors analysis-data)
+          (display-warning 'phony "Grammar contains errors, not exporting")
+        (phony--export-dictionaries)
+        (when (and (not (server-running-p))
+                   (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
+          (server-start))
+        (cancel-function-timers #'phony--sync-state)
+        (run-with-idle-timer 0.1 t #'phony--sync-state)
+        (funcall phony-export-function analysis-data)))))
 
 (defun phony--debounce (f)
   "Debounce the invocation of F by waiting until next idle.
@@ -1022,10 +1024,9 @@ timer activation."
 (defun phony-request-export ()
   "Export all rules when next idle.
 
-If `phony--deny-export-request-p' is non-nil, just return immediately
-instead."
+If `phony-mode' is not enabled, this function does nothing."
   (interactive)
-  (unless phony--deny-export-requests-p
+  (when phony-mode
     (if phony--debounce-export-requests
         (phony--debounce #'phony--export-all)
       (phony--export-all))))
@@ -1193,6 +1194,16 @@ and VALUE.  Optional keyword arguments are:
                  :documentation ,doc)
            ',optional-arguments))))))
 
+(define-minor-mode phony-mode
+  "Toggle phony mode.
+
+When phony mode is enabled, rules will be exported to the speech
+recognition backend."
+  :global t
+  :group 'phony
+  (when phony-mode
+    (phony-request-export)))
+
 (eval-and-compile
   (defun phony--expand-implicit-arguments (element-form)
     "Expand implicit arguments in ELEMENT-FORM.
@@ -1219,32 +1230,29 @@ element tree."
       (list (car element-form)))
      (t '()))))
 
-(let ((phony--deny-export-requests-p t))
-  ;; Define all builtin rules here.  We suppress export, as the user
-  ;; may not have set the correct exporter yet.
-  (phony-define-dictionary phony-module
-    "Dictionary of defined modules.
+(phony-define-dictionary phony-module
+  "Dictionary of defined modules.
 Whenever a module is defined with `phony-module', it is added to this
 dictionary."
-    '())
+  '())
 
-  (phony-defun phony-enable-module ("phony enable" (? (module phony-module)))
-    "Enable MODULE.
+(phony-defun phony-enable-module ("phony enable" (? (module phony-module)))
+  "Enable MODULE.
 If MODULE is not given, prompt for it before enabling it."
-    (if module
-        (phony-enable-module
-         module
-         (y-or-n-p (format "Enable %s for future sessions? " module)))
-      (call-interactively #'phony-enable-module)))
+  (if module
+      (phony-enable-module
+       module
+       (y-or-n-p (format "Enable %s for future sessions? " module)))
+    (call-interactively #'phony-enable-module)))
 
-  (phony-defun phony-disable-module ("phony disable" (? (module phony-module)))
-    "Disable MODULE.
+(phony-defun phony-disable-module ("phony disable" (? (module phony-module)))
+  "Disable MODULE.
 If MODULE is not given, prompt for it before disabling it."
-    (if module
-        (phony-disable-module
-         module
-         (y-or-n-p (format "Disable %s for future sessions? " module)))
-      (call-interactively #'phony-disable-module))))
+  (if module
+      (phony-disable-module
+       module
+       (y-or-n-p (format "Disable %s for future sessions? " module)))
+    (call-interactively #'phony-disable-module)))
 
 (defun phony--sync-state ()
   "Export information about which rules are currently active."

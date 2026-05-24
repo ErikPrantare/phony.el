@@ -60,7 +60,9 @@ that, add the following to your Emacs configuration:
   (use-package phony
     :vc (:url "https://github.com/ErikPrantare/phony.el"
               :branch "master"
-              :rev :newest))
+              :rev :newest)
+    :config
+    (phony-mode 1))
 #+end_src
 
 * Usage
