@@ -82,8 +82,21 @@ representing the recognized utterance."
   :group 'phony)
 
 (simulacrum-define-event-type phony-command)
-(keymap-global-set "<phony-command>"
-                   (simulacrum-command #'phony--evaluate-ast))
+
+;;;###autoload
+(define-minor-mode phony-mode
+  "Toggle phony mode.
+
+When phony mode is enabled, rules will be exported to the speech
+recognition backend."
+  :global t
+  :group 'phony
+  (if phony-mode
+      (progn
+        (phony-request-export)
+        (keymap-global-set "<phony-command>"
+                           (simulacrum-command #'phony--evaluate-ast)))
+    (keymap-global-unset "<phony-command>" t)))
 
 (defun phony-generate-event (ast)
   "Evaluate AST via `simulacrum-generate-event'."
@@ -301,7 +314,7 @@ modes are currently active."
 A rule is always active if it is global and is part of an enabled
 module (or no module)."
   (and (memq 'global (phony--rule-modes rule))
-       (if-let ((module (phony--rule-module rule)))
+       (if-let* ((module (phony--rule-module rule)))
            (phony--module-enabled-p module)
          t)))
 
@@ -1193,16 +1206,6 @@ and VALUE.  Optional keyword arguments are:
                  :element ,(phony--parse-speech-element expanded-pattern arguments)
                  :documentation ,doc)
            ',optional-arguments))))))
-
-(define-minor-mode phony-mode
-  "Toggle phony mode.
-
-When phony mode is enabled, rules will be exported to the speech
-recognition backend."
-  :global t
-  :group 'phony
-  (when phony-mode
-    (phony-request-export)))
 
 (eval-and-compile
   (defun phony--expand-implicit-arguments (element-form)
