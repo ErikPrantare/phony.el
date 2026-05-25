@@ -156,7 +156,7 @@
 (define-minor-mode phony-experimental-mode
   "Toggle experimental features for phony.
 
-This includes completion-at-point, xref, and font-locking."
+This includes `completion-at-point', `xref', and font-locking."
   :global t
   :group 'phony
   (if phony-experimental-mode
