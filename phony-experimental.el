@@ -126,6 +126,27 @@
 (defun phony--disable-xref ()
   (remove-hook 'xref-backend-functions #'phony--xref-backend t))
 
+(defun phony--install-checkdoc ()
+  ;; TODO do not rely on syntactically valid program.  Take inspo from
+  ;; advised function.
+  (define-advice checkdoc-defun-info (:around (f) check-phony)
+    (save-excursion
+      (beginning-of-defun)
+      (let* ((sexp (read (point-marker))))
+        (cond
+         ((member (car sexp) '(phony-define-open-rule phony-define-dictionary))
+          `(,(symbol-name (cadr sexp)) nil nil nil))
+         ((eq (car sexp) 'phony-defun)
+          ;; TODO: Extract the full argument parsing to one function
+          ;; and use that e.g. in phony-defun.
+          `(,(symbol-name (cadr sexp)) nil nil nil
+            ,@(seq-map #'symbol-name (phony--collect-arguments (cons 'seq (caddr sexp))))))
+         (t (end-of-defun)
+            (funcall f)))))))
+
+(defun phony--uninstall-checkdoc ()
+  (advice-remove #'checkdoc-defun-info 'check-phony))
+
 (defun phony--enable-experimental-features ()
   (phony--enable-capf)
   (phony--enable-xref)
@@ -144,14 +165,16 @@
     (with-current-buffer buffer
       (phony--enable-experimental-features)))
   (add-hook 'emacs-lisp-mode-hook #'phony--enable-experimental-features)
-  (setf (alist-get 'phony find-function-regexp-alist) #'phony--find-definition))
+  (setf (alist-get 'phony find-function-regexp-alist) #'phony--find-definition)
+  (phony--install-checkdoc))
 
 (defun phony--uninstall-experimental-features ()
   (dolist (buffer (match-buffers (cons 'derived-mode 'emacs-lisp-mode)))
     (with-current-buffer buffer
       (phony--disable-experimental-features)))
   (remove-hook 'emacs-lisp-mode-hook #'phony--enable-experimental-features)
-  (setf (alist-get 'phony find-function-regexp-alist nil t) nil))
+  (setf (alist-get 'phony find-function-regexp-alist nil t) nil)
+  (phony--uninstall-checkdoc))
 
 (define-minor-mode phony-experimental-mode
   "Toggle experimental features for phony.
