@@ -4,7 +4,7 @@
 
 ;; Author: Erik Präntare
 ;; Keywords: files
-;; Version: 0.5.0
+;; Version: 0.5.1
 ;; Homepage: https://github.com/ErikPrantare/phony.el
 ;; Package-Requires: ((emacs "29.1") (simulacrum "1.0.0"))
 ;; Created: 13 Jul 2024
@@ -82,8 +82,21 @@ representing the recognized utterance."
   :group 'phony)
 
 (simulacrum-define-event-type phony-command)
-(keymap-global-set "<phony-command>"
-                   (simulacrum-command #'phony--evaluate-ast))
+
+;;;###autoload
+(define-minor-mode phony-mode
+  "Toggle phony mode.
+
+When phony mode is enabled, rules will be exported to the speech
+recognition backend."
+  :global t
+  :group 'phony
+  (if phony-mode
+      (progn
+        (phony-request-export)
+        (keymap-global-set "<phony-command>"
+                           (simulacrum-command #'phony--evaluate-ast)))
+    (keymap-global-unset "<phony-command>" t)))
 
 (defun phony-generate-event (ast)
   "Evaluate AST via `simulacrum-generate-event'."
@@ -301,7 +314,7 @@ modes are currently active."
 A rule is always active if it is global and is part of an enabled
 module (or no module)."
   (and (memq 'global (phony--rule-modes rule))
-       (if-let ((module (phony--rule-module rule)))
+       (if-let* ((module (phony--rule-module rule)))
            (phony--module-enabled-p module)
          t)))
 
@@ -1171,18 +1184,19 @@ and VALUE.  Optional keyword arguments are:
      (unused-arguments
       `(display-warning
         'phony
-        ,(format (concat "Unused arguments in %s: %s\n"
-                         "Either use it in the body or prefix the argument with \"_\" (underscore)")
-                 name
-                 (mapconcat #'symbol-name unused-arguments ", "))))
+        ,(concat
+          (format "Unused arguments in %s: %s\n"
+                  name
+                  (mapconcat #'symbol-name unused-arguments ", "))
+          "Either use it in the body or prefix the argument with \"_\" (underscore)")))
      ((not (equal (seq-uniq arguments) arguments))
       ;; TODO: Do not emit this warning if duplication is implicit and
       ;; not used in body.
       `(display-warning
         'phony
-        ,(format (concat "Duplicate arguments in %s\n"
-                         "If you use implicit argument names, make them explicit")
-                 name)))
+        ,(concat
+          (format "Duplicate arguments in %s\n" name)
+          "If you use implicit argument names, make them explicit")))
      (t `(phony--define-procedure-rule
           (append
            (list :name ',name
@@ -1193,16 +1207,6 @@ and VALUE.  Optional keyword arguments are:
                  :element ,(phony--parse-speech-element expanded-pattern arguments)
                  :documentation ,doc)
            ',optional-arguments))))))
-
-(define-minor-mode phony-mode
-  "Toggle phony mode.
-
-When phony mode is enabled, rules will be exported to the speech
-recognition backend."
-  :global t
-  :group 'phony
-  (when phony-mode
-    (phony-request-export)))
 
 (eval-and-compile
   (defun phony--expand-implicit-arguments (element-form)
