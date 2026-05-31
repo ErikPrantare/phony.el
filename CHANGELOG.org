@@ -1,3 +1,6 @@
+* 1.0.0 [2026-06-01 Mon]
+- Release 1.0.0 on MELPA.
+
 * 0.5.1 [2026-05-31 Sun]
 - This release just tidied up the code to pass all melpazoid checks.
 
