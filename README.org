@@ -53,14 +53,11 @@ the talon slack.
 This package assumes that you have Talon up and running.  See [[https://talon.wiki/Resource%20Hub/Talon%20Installation/installation_guide/][steps
 1-3 on their wiki]] for instructions.
 
-This package also depends on [[https://github.com/ErikPrantare/simulacrum.el][simulacrum.el]].  After having installed
-that, add the following to your Emacs configuration:
+This package is on MELPA as [[https://melpa.org/#/phony][phony]].  After installation, enable
+~phony-mode~:
 
 #+begin_src elisp
   (use-package phony
-    :vc (:url "https://github.com/ErikPrantare/phony.el"
-              :branch "master"
-              :rev :newest)
     :config
     (phony-mode 1))
 #+end_src
@@ -218,5 +215,4 @@ to your configuration to import them.
 :PROPERTIES:
 :CUSTOM_ID: versioning-system
 :END:
-This project uses [[https://semver.org/][semantic versioning]].  While still on 0.y.z, an
-increment of y signals breaking changes.
+This project uses [[https://semver.org/][semantic versioning]].
