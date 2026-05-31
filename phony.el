@@ -1184,18 +1184,19 @@ and VALUE.  Optional keyword arguments are:
      (unused-arguments
       `(display-warning
         'phony
-        ,(format (concat "Unused arguments in %s: %s\n"
-                         "Either use it in the body or prefix the argument with \"_\" (underscore)")
-                 name
-                 (mapconcat #'symbol-name unused-arguments ", "))))
+        ,(concat
+          (format "Unused arguments in %s: %s\n"
+                  name
+                  (mapconcat #'symbol-name unused-arguments ", "))
+          "Either use it in the body or prefix the argument with \"_\" (underscore)")))
      ((not (equal (seq-uniq arguments) arguments))
       ;; TODO: Do not emit this warning if duplication is implicit and
       ;; not used in body.
       `(display-warning
         'phony
-        ,(format (concat "Duplicate arguments in %s\n"
-                         "If you use implicit argument names, make them explicit")
-                 name)))
+        ,(concat
+          (format "Duplicate arguments in %s\n" name)
+          "If you use implicit argument names, make them explicit")))
      (t `(phony--define-procedure-rule
           (append
            (list :name ',name
