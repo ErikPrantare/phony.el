@@ -1,4 +1,4 @@
-;;; phony.el --- Speech bindings for Elisp           -*- lexical-binding: t; -*-
+;;; phony.el --- Define voice commands           -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024, 2025, 2026 Erik Präntare
 
