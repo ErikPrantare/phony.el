@@ -1087,7 +1087,8 @@ If no rules are defined, this function does nothing."
           (server-start))
         (cancel-function-timers #'phony--sync-state)
         (run-with-idle-timer 0.1 t #'phony--sync-state)
-        (funcall phony-export-function analysis-data)))))
+        (funcall phony-export-function analysis-data)
+        (phony-parser--rebuild analysis-data)))))
 
 (defun phony--debounce (f)
   "Debounce the invocation of F by waiting until next idle.
@@ -1358,4 +1359,5 @@ If MODULE is not given, prompt for it before disabling it."
 (autoload 'phony-dragonfly-export "phony-dragonfly")
 
 (provide 'phony)
+(require 'phony-parser)
 ;;; phony.el ends here
