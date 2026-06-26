@@ -941,7 +941,8 @@ emitted and `phony--analysis-data-contains-errors' will be set to t."
   (let ((mentions (make-hash-table))
         (mentioners (make-hash-table))
         (productions (make-hash-table))
-        (producers (make-hash-table)))
+        (producers (make-hash-table))
+        (undefined-references (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
       (puthash rule '() mentions)
       (puthash rule '() mentioners)
@@ -959,15 +960,22 @@ emitted and `phony--analysis-data-contains-errors' will be set to t."
                     (push reference-rule (gethash rule producers)))
                 (push reference-rule (gethash rule productions))
                 (push rule (gethash reference-rule producers))))
-          (display-warning 'phony
-                           (format "Rule %S (mentioned in %S) is not defined"
-                                   (car reference)
-                                   (phony--rule-name rule)))
+          (cl-pushnew (phony--rule-name rule)
+                      (gethash (car reference) undefined-references))
           (oset analysis-data contains-errors t)))
       (oset analysis-data mentions mentions)
       (oset analysis-data mentioners mentioners)
       (oset analysis-data productions productions)
-      (oset analysis-data producers producers))))
+      (oset analysis-data producers producers))
+    (maphash
+     (lambda (name mentioner-names)
+       (display-warning
+        'phony
+        (format "Rule %S is not defined (mentioned in %s)"
+                name
+                (mapconcat (lambda (n) (format "%S" n))
+                           mentioner-names ", "))))
+     undefined-references)))
 
 (defun phony--try-linear-extension-impl (rule visited finished analysis-data)
   "Find linear extension of dependency graph in ANALYSIS-DATA.
