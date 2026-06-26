@@ -437,18 +437,18 @@ is identified when exported to the speech engine."
          :type hash-table
          :documentation "Hash table of rules, indexed by name."))
 
-(defun phony--compile-grammar (grammar)
-  "Return a compiled copy of GRAMMAR.
+(defun phony--prepare-grammar (grammar)
+  "Return a prepared copy of GRAMMAR.
 
 The returned grammar is safe to mutate; it contains no references
 to the original rules."
-  (let ((compiled (phony--make-grammar)))
+  (let ((prepared (phony--make-grammar)))
     (maphash
      (lambda (name rule)
        (puthash name (phony--copy-rule rule)
-                (phony--grammar-rules compiled)))
+                (phony--grammar-rules prepared)))
      (phony--grammar-rules grammar))
-    compiled))
+    prepared))
 
 (defvar phony--default-grammar (phony--make-grammar)
   "The default grammar for all grammar operations.")
@@ -1077,9 +1077,9 @@ If any errors are detected in the grammar, the rules are not exported.
 
 If no rules are defined, this function does nothing."
   (when (phony--get-rules)
-    (let* ((compiled-grammar (phony--compile-grammar phony--default-grammar))
-           (analysis-data (phony--analyze-grammar compiled-grammar))
-           (phony--default-grammar compiled-grammar))
+    (let* ((prepared-grammar (phony--prepare-grammar phony--default-grammar))
+           (analysis-data (phony--analyze-grammar prepared-grammar))
+           (phony--default-grammar prepared-grammar))
       (if (phony--analysis-data-contains-errors analysis-data)
           (display-warning 'phony "Grammar contains errors, not exporting")
         (phony--export-dictionaries)
