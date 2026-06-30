@@ -61,6 +61,7 @@
 (require 'subr-x)
 (require 'map)
 (require 'server)
+(require 'multisession)
 
 (require 'phony-element-syntax)
 (require 'simulacrum)
