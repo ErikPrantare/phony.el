@@ -1,5 +1,6 @@
-* NEXT
+* 1.0.1 [2026-06-30 Tue]
 - Got rid of warnings in talon's log.
+- Added missing ~(require 'multisession)~.
 
 * 1.0.0 [2026-06-01 Mon]
 - Release 1.0.0 on MELPA.
