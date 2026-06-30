@@ -154,34 +154,63 @@ This is checked with `phony--in-element-form-p'."
 
 (require 'checkdoc)
 
-(defun phony--checkdoc-advice (f)
+(defun phony--read-next-form-safe ()
+  "Read the form following point.
+
+If it is not possible to read a form, be that because of erroneous
+syntax or other issues, this function returns nil."
+  (save-excursion
+    (condition-case nil
+      (read (current-buffer))
+    (error nil))))
+
+(defun phony--checkdoc--next-docstring-advice (f)
+  ;; checkdoc-params: (f)
+  "Around-advice for `checkdoc--next-docstring'.
+
+By default, checkdoc skips forms of the form (A B).  This advice skips
+that check if the definition we are looking at is a phony definition."
+  (let ((form (phony--read-next-form-safe)))
+    (if (not (memq (car-safe form) '(phony-defun phony-define-open-rule phony-define-dictionary)))
+        (funcall f)
+      (let ((doc-string-elt (function-get (car-safe form) 'doc-string-elt)))
+        (down-list)
+        (forward-sexp 1)
+        (forward-sexp (1-
+                       (cond
+                        ((numberp doc-string-elt) doc-string-elt)
+                        ((functionp doc-string-elt) (funcall doc-string-elt)))))
+        (skip-chars-forward " \n\t")
+        t))))
+
+(defun phony--checkdoc-defun-info-advice (f)
   ;; checkdoc-params: (f)
   "Around-advice for `checkdoc-defun-info'.
 
 This adds reporting for phony rules."
-  ;; TODO do not rely on syntactically valid program.  Take inspo from
-  ;; advised function.
   (save-excursion
     (beginning-of-defun)
-    (let* ((sexp (read (point-marker))))
+    (let* ((form (phony--read-next-form-safe)))
       (cond
-       ((member (car sexp)
+       ((member (car form)
                 '(phony-define-open-rule phony-define-dictionary))
-        `(,(symbol-name (cadr sexp)) nil nil nil))
-       ((eq (car sexp) 'phony-defun)
-        `(,(symbol-name (cadr sexp)) nil nil nil ,@
+        `(,(symbol-name (cadr form)) nil nil nil))
+       ((eq (car form) 'phony-defun)
+        `(,(symbol-name (cadr form)) nil nil nil ,@
           (seq-map #'symbol-name
                    (phony--collect-arguments
-                    (cons 'seq (caddr sexp))))))
+                    (cons 'seq (caddr form))))))
        (t (end-of-defun) (funcall f))))))
 
 (defun phony--install-checkdoc ()
   "Enable `checkdoc' for phony rules."
-  (advice-add 'checkdoc-defun-info :around #'phony--checkdoc-advice))
+  (advice-add 'checkdoc-defun-info :around #'phony--checkdoc-defun-info-advice)
+  (advice-add 'checkdoc--next-docstring :around #'phony--checkdoc--next-docstring-advice))
 
 (defun phony--uninstall-checkdoc ()
   "Disable `checkdoc' for phony rules."
-  (advice-remove #'checkdoc-defun-info #'phony--checkdoc-advice))
+  (advice-remove #'checkdoc-defun-info #'phony--checkdoc-defun-info-advice)
+  (advice-remove 'checkdoc--next-docstring #'phony--checkdoc--next-docstring-advice))
 
 (defun phony--enable-experimental-features ()
   "Enable all buffer-local experimental features."

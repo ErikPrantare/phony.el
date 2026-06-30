@@ -135,7 +135,6 @@
 (defun phony-dragonfly-export (analysis-data)
   ;; checkdoc-params: (analysis-data)
   "Export the current grammar to the dragonfly backend."
-  (interactive (list (phony--analyze-grammar)))
   (mkdir (phony-dragonfly--backend-directory) t)
   (with-temp-file (phony-dragonfly--backend-directory "rules.json")
     (json-insert (phony-dragonfly--serialize-rules analysis-data))

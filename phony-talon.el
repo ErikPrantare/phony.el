@@ -405,7 +405,9 @@ symlinks them into ~/.talon/user/."
               "\n"
               "def update_active_tags():\n"
               "    with open('" (phony--output-directory "active-rules") "', 'r') as inn:\n"
-              "        tags = {'user.' + tag for tag in inn.read().strip().split('\\n')}\n"
+              ;; We split without providing delimiter, otherwise
+              ;; splitting the empty string will yield one empty tag.
+              "        tags = {'user.' + tag for tag in inn.read().strip().split()}\n"
               "        if tags != tag_context.tags:"
               "            tag_context.tags = tags\n"
               "\n"
