@@ -93,7 +93,7 @@
   "Convert RULE definition to a form serializable by `json-encode'."
   `((type . "procedure")
     (name . ,(phony--external-name rule))
-    (function . ,(symbol-name (phony--procedure-rule-function rule)))
+    (rule-name . ,(symbol-name (phony--procedure-rule-name rule)))
     (element . ,(phony-dragonfly--serialize-element
                  (phony--procedure-rule-element rule)))
     (argument-list . ,(seq-into

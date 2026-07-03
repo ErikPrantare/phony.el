@@ -51,9 +51,9 @@ class PhonyException(Exception):
 def escape(string):
     return string.replace("\\", "\\\\").replace("\"", "\\\"")
 
-def build_form(function, argument_list, argument_map):
+def build_form(rule_name, argument_list, argument_map):
     arguments = " ".join([argument_map.get(x, 'nil') for x in argument_list])
-    return "(" + function + " " + arguments + ")"
+    return "(" + rule_name + " " + arguments + ")"
 
 def join_argument_maps(maps):
     result = {}
@@ -108,7 +108,7 @@ def create_rule_procedure(spec):
         element = df.Modifier(
             element,
             modifier = lambda x: build_form(
-                spec["function"],spec["argument-list"],x)),
+                spec["rule-name"],spec["argument-list"],x)),
         exported = spec["export"])
     if spec["export"]:
         exported_rules.append(rules[spec["name"]])
@@ -130,7 +130,7 @@ def create_rule(spec):
     try:
         print("Constructing " + spec["name"])
         match spec["type"]:
-            case "procedure-definition":
+            case "procedure":
                 create_rule_procedure(spec)
             case "dictionary":
                 create_rule_dictionary(spec)
@@ -162,18 +162,18 @@ grammar = dragonfly.Grammar(name="mygrammar")
 
 class MasterRule(dragonfly.BasicRule):
     def _process_recognition(self, name, extras):
-        print(extras)
-        for expr in self.value(extras["_node"]):
-            evaluate_lisp(expr)
+        node = extras["_node"]
+        expression = node.value()
+        sentence = " ".join(node.words())
+        print(f"Recognized: {sentence} -> {expression}")
+        evaluate_lisp(expression)
 
 load_rules(f"{data_directory}/rules.json")
 grammar.add_rule(
     MasterRule(
-        name = "Master CCR rule",
-        element = df.Repetition(
-            df.Alternative(
-                [df.RuleRef(rule) for rule in exported_rules]),
-            min=1,max=3),
+        name = "Master rule",
+        element = df.Alternative(
+            [df.RuleRef(rule) for rule in exported_rules]),
         exported = True))
 
 grammar.load()
