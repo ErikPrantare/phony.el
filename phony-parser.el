@@ -262,32 +262,9 @@ Arguments occurring within ELEMENT are collected into list forms."
                                 match-tree))
                 arglist))))
 
-(defmacro phony--define-grammar-attribute (name args docstring &rest body)
-  "Define a lazily evaluated grammar attribute.
-
-Grammar attributes should only be used for grammars that will not be
-mutated.
-
-This defines a function NAME for getting the attribute.  ARGS must
-be (grammar) unquoted.  DOCSTRING is the documentation for the attribute
-function and BODY defines how to compute the attribute."
-  (declare (indent defun)
-           (doc-string 3))
-  ;; TODO: Fix variable generation
-  ;; TODO: Ensure args is just one parameter named grammar
-  `(let ((attribute (make-hash-table :weakness 'key)))
-     (defun ,name ,args
-       ,docstring
-       (with-memoization (map-elt attribute grammar)
-         ,@body))))
-
 (phony--define-grammar-attribute phony-parser--rule-cache (grammar)
   "Return hash table mapping rule names to their parsers in GRAMMAR."
   (make-hash-table))
-
-(phony--define-grammar-attribute phony-parser--analysis (grammar)
-  "Return the analysis data for GRAMMAR."
-  (phony--analyze-grammar grammar))
 
 (cl-defgeneric phony-parser--from-element (element grammar)
   "Build a parser from ELEMENT.
@@ -379,7 +356,7 @@ References to other rules are resolved through GRAMMAR.")
    (phony-parser--rule-active-guard rule)
    (phony-parser--alternative
     (seq-map (lambda (production) (phony-parser--from-rule production grammar))
-             (phony--get-productions (phony-parser--analysis grammar) rule)))))
+             (phony--get-productions (phony--grammar-analysis grammar) rule)))))
 
 (defun phony-parser--make-parser (grammar)
   "Build a parser matching all active interactive procedure rules of GRAMMAR."

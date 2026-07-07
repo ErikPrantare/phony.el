@@ -437,6 +437,25 @@ is identified when exported to the speech engine."
          :type hash-table
          :documentation "Hash table of rules, indexed by name."))
 
+(defmacro phony--define-grammar-attribute (name args docstring &rest body)
+  "Define a lazily evaluated grammar attribute.
+
+Grammar attributes should only be used for grammars that will not be
+mutated.
+
+This defines a function NAME for getting the attribute.  ARGS must
+be (grammar) unquoted.  DOCSTRING is the documentation for the attribute
+function and BODY defines how to compute the attribute."
+  (declare (indent defun)
+           (doc-string 3))
+  ;; TODO: Fix symbol generation
+  ;; TODO: Ensure args is just one parameter named grammar
+  `(let ((attribute (make-hash-table :weakness 'key)))
+     (defun ,name ,args
+       ,docstring
+       (with-memoization (map-elt attribute grammar)
+         ,@body))))
+
 (defun phony--prepare-grammar (grammar)
   "Return a prepared copy of GRAMMAR.
 
@@ -1047,6 +1066,8 @@ extension."
 
 This returns a `phony--analysis-data' structure populated with the
 results of the analysis."
+  ;; TODO: Make this side-effect free and move definition to
+  ;; phony--grammar-analysis.
   (let ((analysis-data (phony--make-analysis-data)))
     (phony--populate-dependency-graph analysis-data grammar)
     (phony--try-linear-extension analysis-data grammar)
@@ -1061,6 +1082,10 @@ results of the analysis."
       (setf (phony--analysis-data-contains-errors analysis-data) t))
     (setq phony--last-analysis analysis-data)
     analysis-data))
+
+(phony--define-grammar-attribute phony--grammar-analysis (grammar)
+  "Return the analysis data for GRAMMAR."
+  (phony--analyze-grammar grammar))
 
 (defun phony--producers (rule-or-name)
   "Return producers of RULE-OR-NAME.
