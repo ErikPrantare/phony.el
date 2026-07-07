@@ -456,6 +456,19 @@ function and BODY defines how to compute the attribute."
        (with-memoization (map-elt attribute grammar)
          ,@body))))
 
+(defun phony--internalize-contributions (grammar)
+  "Insert all contributions to open rules as alternatives.
+
+This mutates GRAMMAR so that all contributions are directly reflected by
+the `phony--open-rule-alternatives' field."
+  (maphash
+   (lambda (name rule)
+     (seq-doseq (contribution (phony--rule-contributes-to rule))
+       (push name (phony--open-rule-alternatives
+                   (phony--get-rule contribution grammar))))
+     (setf (phony--rule-contributes-to rule) nil))
+   (phony--grammar-rules grammar)))
+
 (defun phony--prepare-grammar (grammar)
   "Return a prepared copy of GRAMMAR.
 
@@ -467,6 +480,7 @@ to the original rules."
        (puthash name (phony--copy-rule rule)
                 (phony--grammar-rules prepared)))
      (phony--grammar-rules grammar))
+    (phony--internalize-contributions prepared)
     prepared))
 
 (defvar phony--default-grammar (phony--make-grammar)

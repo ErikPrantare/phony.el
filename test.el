@@ -22,6 +22,7 @@
 
 (require 'ert)
 (require 'phony)
+(require 'phony-parser)
 
 (defmacro phony-test (&rest body)
   "Evaluate BODY in a fresh phony test environment.
@@ -123,5 +124,30 @@ exporters are inert, and export request debounce is turned off."
       (phony-set-dictionary-alist 'test-dict '(("gamma" . 3)))
       (should (= dictionary-export-count 3))
       (should (= rule-export-count 0)))))
+
+(defun phony-test--evaluate (sentence)
+  "Return the result of parsing and evaluating SENTENCE.
+
+SENTENCE must parse unambiguously into a single command."
+  (phony--evaluate-ast
+   (caar (phony-parser--parse-utterance sentence))))
+
+(ert-deftest phony-open-rule-contribution ()
+  "Rule contributions work."
+  (phony-test
+    (phony-mode 1)
+    (phony-define-open-rule number)
+    (phony-defun three "three"
+      :contributes-to number
+      3)
+    (phony-defun five "five"
+      :contributes-to number
+      5)
+    (phony-defun add ("add" (first number) "and" (second number))
+      (+ first second))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "add five and three") 8))
+    (should (= (phony-test--evaluate "add five and five") 10))
+    (should (= (phony-test--evaluate "add three and three") 6))))
 
 ;;; test.el ends here
