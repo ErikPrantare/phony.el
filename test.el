@@ -30,6 +30,7 @@ In the environment, `phony-mode' is disabled, no rules are bound,
 exporters are inert, and export request debounce is turned off."
   (declare (indent 0))
   `(let ((phony--default-grammar (phony--make-grammar))
+         (phony--exported-grammar (phony--make-grammar))
          (phony-export-function #'ignore)
          (phony--dictionary-export-function #'ignore)
          (phony--debounce-export-requests nil)

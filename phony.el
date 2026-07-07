@@ -451,7 +451,13 @@ to the original rules."
     prepared))
 
 (defvar phony--default-grammar (phony--make-grammar)
-  "The default grammar for all grammar operations.")
+  "The current user specification of the grammar.")
+
+(defvar phony--exported-grammar (phony--make-grammar)
+  "The most recently exported grammar.
+
+This is `phony--default-grammar' after going through preparation.  The
+grammar object should never be mutated.")
 
 (defun phony--get-rules (&optional grammar)
   "Return a list containing the rules of GRAMMAR.
@@ -1097,7 +1103,7 @@ If no rules are defined, this function does nothing."
         (cancel-function-timers #'phony--sync-state)
         (run-with-idle-timer 0.1 t #'phony--sync-state)
         (funcall phony-export-function analysis-data)
-        (phony-parser--rebuild analysis-data)))))
+        (setq phony--exported-grammar prepared-grammar)))))
 
 (defun phony--debounce (f)
   "Debounce the invocation of F by waiting until next idle.
