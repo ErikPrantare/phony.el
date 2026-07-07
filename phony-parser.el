@@ -355,8 +355,10 @@ References to other rules are resolved through GRAMMAR.")
   (phony-parser--then
    (phony-parser--rule-active-guard rule)
    (phony-parser--alternative
-    (seq-map (lambda (production) (phony-parser--from-rule production grammar))
-             (phony--get-productions (phony--grammar-analysis grammar) rule)))))
+    (seq-map (lambda (production) (phony-parser--from-rule
+                                   (phony--get-rule production grammar)
+                                   grammar))
+             (phony--open-rule-alternatives rule)))))
 
 (defun phony-parser--make-parser (grammar)
   "Build a parser matching all active interactive procedure rules of GRAMMAR."
@@ -379,7 +381,7 @@ References to other rules are resolved through GRAMMAR.")
   "Parse UTTERANCE string into a list of possible parse results.
 
 Rules are taken from GRAMMAR or `phony--exported-grammar' if it is nil
-or not given."
+or not given.  GRAMMAR must be a prepared grammar."
   (phony-parser--parse
    (phony-parser--get-parser (or grammar phony--exported-grammar))
    (string-split utterance)))
