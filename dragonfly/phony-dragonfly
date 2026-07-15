@@ -43,7 +43,11 @@ load_lists(f"{data_directory}/dictionaries.json")
 
 
 class PhonyRule(dragonfly.BasicRule):
-    pass
+    def _process_recognition(self, node, extras):
+        expression = node.value()
+        sentence = " ".join(node.words())
+        print(f"Recognized: {sentence} -> {expression}")
+        evaluate_lisp(expression)
 
 class PhonyException(Exception):
     pass
@@ -160,21 +164,9 @@ engine = dragonfly.get_engine("kaldi",
 engine.connect()
 grammar = dragonfly.Grammar(name="mygrammar")
 
-class MasterRule(dragonfly.BasicRule):
-    def _process_recognition(self, name, extras):
-        node = extras["_node"]
-        expression = node.value()
-        sentence = " ".join(node.words())
-        print(f"Recognized: {sentence} -> {expression}")
-        evaluate_lisp(expression)
-
 load_rules(f"{data_directory}/rules.json")
-grammar.add_rule(
-    MasterRule(
-        name = "Master rule",
-        element = df.Alternative(
-            [df.RuleRef(rule) for rule in exported_rules]),
-        exported = True))
+for rule in exported_rules:
+    grammar.add_rule(rule)
 
 grammar.load()
 
