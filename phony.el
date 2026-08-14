@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2024, 2025, 2026 Erik Präntare
 
-;; Author: Erik Präntare
+;; Author: Erik Präntare <erik@prantare.xyz>
 ;; Keywords: files
 ;; Version: 1.0.1
 ;; Homepage: https://github.com/ErikPrantare/phony.el
