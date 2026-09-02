@@ -28,7 +28,7 @@
   "Evaluate BODY in a fresh phony test environment.
 
 In the environment, `phony-mode' is disabled, no rules are bound,
-exporters are inert, and export request debounce is turned off."
+exporters do nothing, and export request debounce is turned off."
   (declare (indent 0))
   `(let ((phony--default-grammar (phony--make-grammar))
          (phony--exported-grammar (phony--make-grammar))
