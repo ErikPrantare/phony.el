@@ -582,8 +582,16 @@ interface sugar to the form used internally."
   (when-let* ((contributes-to (map-elt parameters :contributes-to)))
     (when (and (listp contributes-to) (eq (car contributes-to) 'quote))
       (error ":contributes-to keyword argument must be unquoted"))
-    (setf (map-elt parameters :contributes-to)
-          (ensure-list (map-elt parameters :contributes-to))))
+    (setq contributes-to (ensure-list contributes-to))
+    (unless (seq-every-p #'symbolp contributes-to)
+      (error ":contributes-to keyword argument must be a symbol or a list of symbols"))
+    (setf (map-elt parameters :contributes-to) contributes-to))
+
+  (when-let* ((provides (map-elt parameters :provides)))
+    (when (and (listp provides) (eq (car provides) 'quote))
+      (error ":provides keyword argument must be unquoted"))
+    (unless (symbolp provides)
+      (error ":provides keyword argument must be a symbol")))
 
   ;; TODO: Check if this can be handled directly in the constructor.
   ;; I would guess that custom constructors are ignored when
