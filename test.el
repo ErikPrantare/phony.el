@@ -28,7 +28,8 @@
   "Evaluate BODY in a fresh phony test environment.
 
 In the environment, `phony-mode' is disabled, no rules are bound,
-exporters do nothing, and export request debounce is turned off."
+exporters do nothing, export request debounce is turned off, and there
+are no modules."
   (declare (indent 0))
   `(let ((phony--default-grammar (phony--make-grammar))
          (phony--exported-grammar (phony--make-grammar))
@@ -36,7 +37,8 @@ exporters do nothing, and export request debounce is turned off."
          (phony--dictionary-export-function #'ignore)
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
-         (phony--last-analysis nil))
+         (phony--last-analysis nil)
+         (phony--modules-by-file-name (make-hash-table :test #'equal)))
      (unwind-protect
          (progn
            (phony-mode 0)
@@ -135,7 +137,6 @@ SENTENCE must parse unambiguously into a single command."
 (ert-deftest phony-open-rule-contribution ()
   "Rule contributions work."
   (phony-test
-    (phony-mode 1)
     (phony-define-open-rule number)
     (phony-defun three "three"
       :contributes-to number
