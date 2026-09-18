@@ -151,4 +151,16 @@ SENTENCE must parse unambiguously into a single command."
     (should (= (phony-test--evaluate "add five and five") 10))
     (should (= (phony-test--evaluate "add three and three") 6))))
 
+(ert-deftest phony-interface-uses-provider ()
+  "Providers are used in place of interfaces."
+  (phony-test
+    (phony-define-interface number)
+    (phony-defun my-number "three"
+      :provides number
+      3)
+    (phony-defun double ("double" number)
+      (* 2 number))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "double three") 6))))
+
 ;;; test.el ends here

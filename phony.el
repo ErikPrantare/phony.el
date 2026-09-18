@@ -396,6 +396,7 @@ See documentation for `phony-define-interface'.")
   (setf (phony--rule-contributes-to target)
         (copy-sequence (phony--rule-contributes-to source)))
   (setf (phony--rule-virtual-p target) (phony--rule-virtual-p source))
+  (setf (phony--rule-provides target) (phony--rule-provides source))
   target)
 
 (cl-defgeneric phony--copy-rule (rule)
@@ -486,11 +487,72 @@ the `phony--open-rule-alternatives' field."
      (setf (phony--rule-contributes-to rule) nil))
    (phony--grammar-rules grammar)))
 
-(defun phony--prepare-grammar (grammar)
-  "Return a prepared copy of GRAMMAR.
+(cl-defgeneric phony--substititute-in-rule (rule from to)
+  "Change references to rule FROM to rule TO in RULE.
 
-The returned grammar is safe to mutate; it contains no references
-to the original rules."
+This function assumes that contributions have been internalized.  See
+`phony--internalize-contributions'.")
+
+(cl-defmethod phony--substititute-in-rule ((rule phony--open-rule) from to)
+  "Change references to rule FROM to rule TO in RULE."
+  (setf (phony--open-rule-alternatives rule)
+        (seq-map (lambda (alternative)
+                   (if (eq alternative from)
+                       to
+                     alternative))
+                 (phony--open-rule-alternatives rule))))
+
+(cl-defmethod phony--substititute-in-rule ((rule phony--dictionary) _from _to)
+  "Change references to rule FROM to rule TO in RULE."
+  rule)
+
+(cl-defmethod phony--substititute-in-rule ((rule phony--procedure-rule) from to)
+  "Change references to rule FROM to rule TO in RULE."
+  (seq-doseq (element (phony--collect
+                       (lambda (element)
+                         (and (phony--element-rule-p element)
+                              (eq (phony--element-rule-name element)
+                                  from)))
+                       (phony--procedure-rule-element rule)))
+    (setf (phony--element-rule-name element) to)))
+
+(cl-defmethod phony--substititute-in-rule ((rule phony--interface-rule) _from _to)
+  "Change references to rule FROM to rule TO in RULE."
+  rule)
+
+(defun phony--substititute-in-grammar (grammar from to)
+  "Change references to rule FROM to rule TO in GRAMMAR."
+  (seq-doseq (rule (map-values (phony--grammar-rules grammar)))
+    (phony--substititute-in-rule rule from to)))
+
+(defun phony--resolve-interfaces (grammar)
+  "Replace interfaces in GRAMMAR with their providers.
+
+This mutates GRAMMAR so that references to an interface rule instead the
+provider of the interface.  The interface rules are removed from the
+grammar.
+
+This function assumes `phony--internalize-contributions' has been
+applied to the grammar."
+  (let* ((rule-map (phony--grammar-rules grammar))
+         (providers
+          (seq-filter #'phony--rule-provides (map-values rule-map)))
+         (provider-map
+          (seq-map (lambda (provider)
+                     (cons (phony--rule-name provider)
+                           (phony--rule-provides provider)))
+                   providers))
+         (interface-resolution-map
+          (seq-map (lambda (entry) (cons (cdr entry) (car entry)))
+                   provider-map)))
+    (dolist (entry interface-resolution-map)
+      (phony--substititute-in-grammar grammar (car entry) (cdr entry))
+      (remhash (car entry) (phony--grammar-rules grammar)))))
+
+(defun phony--prepare-grammar (grammar)
+  "Prepare GRAMMAR for export.
+
+The returned grammar must not mutated."
   (let ((prepared (phony--make-grammar)))
     (maphash
      (lambda (name rule)
@@ -498,6 +560,7 @@ to the original rules."
                 (phony--grammar-rules prepared)))
      (phony--grammar-rules grammar))
     (phony--internalize-contributions prepared)
+    (phony--resolve-interfaces prepared)
     prepared))
 
 (defvar phony--default-grammar (phony--make-grammar)
