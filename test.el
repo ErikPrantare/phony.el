@@ -28,8 +28,7 @@
   "Evaluate BODY in a fresh phony test environment.
 
 In the environment, `phony-mode' is disabled, no rules are bound,
-exporters do nothing, export request debounce is turned off, and there
-are no modules."
+exporters do nothing, and export request debounce is turned off."
   (declare (indent 0))
   `(let ((phony--default-grammar (phony--make-grammar))
          (phony--exported-grammar (phony--make-grammar))
@@ -37,8 +36,7 @@ are no modules."
          (phony--dictionary-export-function #'ignore)
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
-         (phony--last-analysis nil)
-         (phony--modules-by-file-name (make-hash-table :test #'equal)))
+         (phony--last-analysis nil))
      (unwind-protect
          (progn
            (phony-mode 0)
@@ -130,9 +128,13 @@ are no modules."
 (defun phony-test--evaluate (sentence)
   "Return the result of parsing and evaluating SENTENCE.
 
-SENTENCE must parse unambiguously into a single command."
-  (phony--evaluate-ast
-   (caar (phony-parser--parse-utterance sentence))))
+SENTENCE must parse unambiguously into a single command.
+
+If there is no parse, an error is thrown."
+  (let ((parses (phony-parser--parse-utterance sentence)))
+    (unless parses
+      (error "No parse available for '%s'" sentence))
+    (phony--evaluate-ast (caar parses))))
 
 (ert-deftest phony-open-rule-contribution ()
   "Rule contributions work."
@@ -162,5 +164,35 @@ SENTENCE must parse unambiguously into a single command."
       (* 2 number))
     (phony--export-all)
     (should (= (phony-test--evaluate "double three") 6))))
+
+(ert-deftest phony-interface-uses-enabled-provider ()
+  "Only the enabled provider is used for interface."
+  (phony-test
+   (phony-define-interface number)
+   (phony-define-module three)
+   (phony-define-module five)
+
+   (phony-defun three "three"
+     :module three
+     :provides number
+     3)
+   (phony-defun five "five"
+     :module five
+     :provides number
+     5)
+   (phony-defun double ("double" number)
+     (* 2 number))
+
+   (phony-disable-module 'five)
+   (phony-enable-module 'three)
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double three") 6))
+   (should-error (phony-test--evaluate "double five"))
+
+   (phony-enable-module 'five)
+   (phony-disable-module 'three)
+   (phony--export-all)
+   (should-error (phony-test--evaluate "double three"))
+   (should (= (phony-test--evaluate "double five") 10))))
 
 ;;; test.el ends here

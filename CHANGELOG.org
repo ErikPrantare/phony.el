@@ -1,3 +1,9 @@
+* NEXT
+- Modules can now be defined without associating them to the rules of
+  a file.  To define such a module, use ~phony-define-module~.  To put
+  a rule in a specific module, you can use the ~:module~ argument for
+  rules.
+
 * 1.0.1 [2026-06-30 Tue]
 - Got rid of warnings in talon's log.
 - Added missing ~(require 'multisession)~.

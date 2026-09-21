@@ -127,10 +127,61 @@ This function is used to automatically generate external names for
 rules."
   (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
 
+(cl-defstruct (phony--grammar
+               (:constructor phony--make-grammar)
+               (:copier nil))
+  "A collection of rules."
+  (rules (make-hash-table)
+         :type hash-table
+         :documentation "Hash table of rules, indexed by name.")
+  (modules (make-hash-table)
+           :type hash-table
+           :documentation "Hash table of modules, indexed by name."))
+
+(defun phony--copy-grammar (grammar)
+  "Return a deep copy of GRAMMAR."
+  (let ((rules (make-hash-table))
+        (modules (make-hash-table)))
+    (maphash
+     (lambda (name rule)
+       (puthash name (phony--copy-rule rule) rules))
+     (phony--grammar-rules grammar))
+    (maphash
+     (lambda (name module)
+       (puthash name (phony--copy-module module) modules))
+     (phony--grammar-modules grammar))
+
+    (phony--make-grammar
+     :rules rules
+     :modules modules)))
+
+(defvar phony--default-grammar (phony--make-grammar)
+  "The current user specification of the grammar.")
+
+(defmacro phony--define-grammar-attribute (name args docstring &rest body)
+  "Define a lazily evaluated grammar attribute.
+
+Grammar attributes should only be used for prepared grammars (see
+`phony--prepare-grammar').
+
+This defines a function NAME for getting the attribute.  ARGS must
+be (grammar) unquoted.  DOCSTRING is the documentation for the attribute
+function and BODY defines how to compute the attribute."
+  (declare (indent defun)
+           (doc-string 3))
+  ;; TODO: Fix symbol generation
+  ;; TODO: Ensure args is just one parameter named grammar
+  `(let ((attribute (make-hash-table :weakness 'key)))
+     (defun ,name ,args
+       ,docstring
+       (with-memoization (map-elt attribute grammar)
+         ,@body))))
+
 (cl-defstruct (phony--module
-               (:constructor phony--make-module))
-  "Modules group rules defined in a file into a unit.
-See `phony-module' for information on how to define modules."
+               (:constructor phony--make-module)
+               (:copier phony--copy-module))
+  "Modules group rules into a unit.
+See `phony-define-module' for information on modules."
   ( name nil
     :type symbol
     :documentation
@@ -142,14 +193,15 @@ See `phony-module' for information on how to define modules."
   ( file-name nil
     :type string
     :documentation
-    "Filename of the file defining this module.")
+    "Filename of the file defining this module.
+If nil it is not associated to a particular file.")
   ( enabled-p nil
     :type boolean
     :documentation
     "Whether the rules of this module should be exported."))
 
-(defvar phony--modules-by-file-name (make-hash-table :test #'equal)
-  "All modules, indexed by filename.")
+(defvar phony--modules-by-name (make-hash-table :test #'equal)
+  "All modules, keyed by their name.")
 
 (defun phony--current-file-name ()
   "Return the filename of the current evaluation context.
@@ -166,22 +218,38 @@ than one hardlink."
 (define-multisession-variable phony--enabled-modules '()
   "Names of modules that are enabled across sessions.")
 
-(defun phony--declare-module-of-current-file (name utterance)
-  "Declare module named NAME for the current file.
+(defun phony--define-module (name &optional utterance file)
+  "Define module named NAME.
 
 UTTERANCE is a string specifying how this module is referred to as an
-utterance."
-  (let ((file-name (phony--current-file-name)))
-    (cl-assert file-name nil "No current file could be found")
-    (puthash file-name
-             (phony--make-module
-              :name name
-              :utterance utterance
-              :file-name file-name
-              :enabled-p (memq name (multisession-value phony--enabled-modules)))
-             phony--modules-by-file-name)
+utterance.  FILE, if specified, declares that this module should be the
+default for all rules defined in FILE."
+  (puthash name
+           (phony--make-module
+            :name name
+            :utterance utterance
+            :file-name file
+            :enabled-p (memq name (multisession-value phony--enabled-modules)))
+           (phony--grammar-modules phony--default-grammar))
+  (when utterance
     (phony-dictionary-put utterance 'phony-module name))
   name)
+
+(defmacro phony-define-module (name &optional utterance)
+  "Define a module NAME.
+
+Rules can be associated to modules through the :module parameter.
+
+A module can be disabled or enabled.  If it is disabled, the rules
+associated to the module are not exported.  By default, newly defined
+modules are disabled.  To enable a module, use `phony-enable-module'.
+
+If all the rules of a file are part of the same module, use
+`phony-module' instead of this macro.
+
+If given, UTTERANCE is a string specifying how this module is referred
+to as an utterance."
+  `(phony--define-module ',name ',utterance nil))
 
 (defmacro phony-module (name &optional utterance)
   "Declare current file a phony module.
@@ -195,25 +263,42 @@ modules are disabled.  To enable a module, use `phony-enable-module'.
 
 If given, UTTERANCE is a string specifying how this module is referred
 to as an utterance."
-  `(phony--declare-module-of-current-file ',name ',utterance))
+  `(let ((file (phony--current-file-name)))
+     (cl-assert file nil
+                "Could not determine the file for module `%s'"
+                ',name)
+     (phony--define-module ',name ',utterance file)))
 
 (defun phony--current-module ()
-  "Return the current module.
+  "Return the name of the current module.
 
 If the currently loaded or visited file does not define a module with
 `phony-module', this function returns nil."
-  (gethash (phony--current-file-name) phony--modules-by-file-name))
+  (and-let* ((current-file (phony--current-file-name))
+             (module (seq-find
+                      (lambda (module)
+                        (equal current-file
+                               (phony--module-file-name module)))
+                      (phony--modules))))
+    (phony--module-name module)))
 
-(defun phony--modules ()
-  "Return list of all modules."
-  (map-values phony--modules-by-file-name))
+(defun phony--modules (&optional grammar)
+  "Return list of all modules in GRAMMAR.
 
-(defun phony--get-module (name)
+If GRAMMAR is omitted, `phony--default-grammar' is used instead."
+  (map-values
+   (phony--grammar-modules
+    (or grammar phony--default-grammar))))
+
+(defun phony--get-module (name &optional grammar)
   "Return module with NAME.
 
-If no such module exists, this function returns nil."
+If no such module exists, this function returns nil.
+
+If given, the module is looked up in GRAMMAR.  Otherwise, it is looked
+up in `phony--default-grammar'."
   (seq-find (lambda (module) (eq (phony--module-name module) name))
-            (phony--modules)))
+            (phony--modules grammar)))
 
 (defun phony-enable-module (name &optional persist)
   "Enable module NAME.
@@ -270,10 +355,10 @@ Rules belonging to disabled modules are never exported."
     :type string
     :documentation "The documentation string for this rule.")
   ( module nil
-    :type phony--module
-    :documentation "The module this rule belongs to.
-Modules are specified with `phony-module'.  Its value is nil if it is
-not part of a module.")
+    :type symbol
+    :documentation "Name of the module this rule belongs to.
+Modules are specified with `phony-define-module' or `phony-module'.  Its
+value is nil if it is not part of a module.")
   ( file-name nil
     :type string
     :documentation "The filename of the file where this rule was defined.
@@ -315,17 +400,18 @@ modes are currently active."
                    (memq mode global-minor-modes)))
                 modes)))
    (if-let* ((module (phony--rule-module rule)))
-       (phony--module-enabled-p module)
+       (phony--module-enabled-p (phony--get-module module))
      t)))
 
-(defun phony--rule-always-active-p (rule)
-  "Return non-nil if RULE is guaranteed to always be active.
+(defun phony--rule-always-active-p (rule grammar)
+  "Return non-nil if RULE is guaranteed to always be active in GRAMMAR.
 
 A rule is always active if it is global and is part of an enabled
 module (or no module)."
   (and (memq 'global (phony--rule-modes rule))
        (if-let* ((module (phony--rule-module rule)))
-           (phony--module-enabled-p module)
+           (phony--module-enabled-p
+            (phony--get-module module grammar))
          t)))
 
 (cl-defstruct (phony--procedure-rule
@@ -406,7 +492,7 @@ See documentation for `phony-define-interface'.")
   "Return a deep copy of RULE."
   (let ((copy (phony--make-procedure-rule
                :function (phony--procedure-rule-function rule)
-               :element (phony--procedure-rule-element rule)
+               :element (phony--copy-element (phony--procedure-rule-element rule))
                :arglist (copy-sequence (phony--procedure-rule-arglist rule))
                :interactive-p (phony--procedure-rule-interactive-p rule)
                :anchor-beginning-p (phony--procedure-rule-anchor-beginning-p rule)
@@ -447,33 +533,6 @@ is identified when exported to the speech engine."
   (phony--rule-external-name
    (phony--normalize-rule rule-or-name)))
 
-(cl-defstruct (phony--grammar
-               (:constructor phony--make-grammar)
-               (:copier nil))
-  "A collection of rules."
-  (rules (make-hash-table)
-         :type hash-table
-         :documentation "Hash table of rules, indexed by name."))
-
-(defmacro phony--define-grammar-attribute (name args docstring &rest body)
-  "Define a lazily evaluated grammar attribute.
-
-Grammar attributes should only be used for grammars that will not be
-mutated.
-
-This defines a function NAME for getting the attribute.  ARGS must
-be (grammar) unquoted.  DOCSTRING is the documentation for the attribute
-function and BODY defines how to compute the attribute."
-  (declare (indent defun)
-           (doc-string 3))
-  ;; TODO: Fix symbol generation
-  ;; TODO: Ensure args is just one parameter named grammar
-  `(let ((attribute (make-hash-table :weakness 'key)))
-     (defun ,name ,args
-       ,docstring
-       (with-memoization (map-elt attribute grammar)
-         ,@body))))
-
 (defun phony--internalize-contributions (grammar)
   "Insert all contributions to open rules as alternatives.
 
@@ -487,13 +546,13 @@ the `phony--open-rule-alternatives' field."
      (setf (phony--rule-contributes-to rule) nil))
    (phony--grammar-rules grammar)))
 
-(cl-defgeneric phony--substititute-in-rule (rule from to)
+(cl-defgeneric phony--substitute-in-rule (rule from to)
   "Change references to rule FROM to rule TO in RULE.
 
 This function assumes that contributions have been internalized.  See
 `phony--internalize-contributions'.")
 
-(cl-defmethod phony--substititute-in-rule ((rule phony--open-rule) from to)
+(cl-defmethod phony--substitute-in-rule ((rule phony--open-rule) from to)
   "Change references to rule FROM to rule TO in RULE."
   (setf (phony--open-rule-alternatives rule)
         (seq-map (lambda (alternative)
@@ -502,69 +561,74 @@ This function assumes that contributions have been internalized.  See
                      alternative))
                  (phony--open-rule-alternatives rule))))
 
-(cl-defmethod phony--substititute-in-rule ((rule phony--dictionary) _from _to)
+(cl-defmethod phony--substitute-in-rule ((rule phony--dictionary) _from _to)
   "Change references to rule FROM to rule TO in RULE."
   rule)
 
-(cl-defmethod phony--substititute-in-rule ((rule phony--procedure-rule) from to)
+(cl-defmethod phony--substitute-in-rule ((rule phony--procedure-rule) from to)
   "Change references to rule FROM to rule TO in RULE."
-  (seq-doseq (element (phony--collect
-                       (lambda (element)
-                         (and (phony--element-rule-p element)
-                              (eq (phony--element-rule-name element)
-                                  from)))
-                       (phony--procedure-rule-element rule)))
-    (setf (phony--element-rule-name element) to)))
+  (setf (phony--procedure-rule-element rule)
+        (phony--element-transform
+         (lambda (element)
+           (if (and (phony--element-rule-p element)
+                    (eq (phony--element-rule-name element) from))
+               (make-phony--element-rule :name to)
+             element))
+         (phony--procedure-rule-element rule))))
 
-(cl-defmethod phony--substititute-in-rule ((rule phony--interface-rule) _from _to)
+(cl-defmethod phony--substitute-in-rule ((rule phony--interface-rule) _from _to)
   "Change references to rule FROM to rule TO in RULE."
   rule)
 
-(defun phony--substititute-in-grammar (grammar from to)
+(defun phony--substitute-in-grammar (grammar from to)
   "Change references to rule FROM to rule TO in GRAMMAR."
   (seq-doseq (rule (map-values (phony--grammar-rules grammar)))
-    (phony--substititute-in-rule rule from to)))
+    (phony--substitute-in-rule rule from to)))
 
 (defun phony--resolve-interfaces (grammar)
   "Replace interfaces in GRAMMAR with their providers.
 
-This mutates GRAMMAR so that references to an interface rule instead the
-provider of the interface.  The interface rules are removed from the
-grammar.
+This mutates GRAMMAR so that references to an interface rule instead
+reference the provider of the interface.  The interface rules are
+removed from the grammar.
 
 This function assumes `phony--internalize-contributions' has been
 applied to the grammar."
-  (let* ((rule-map (phony--grammar-rules grammar))
+  (let* ((rules (phony--get-rules grammar))
          (providers
-          (seq-filter #'phony--rule-provides (map-values rule-map)))
-         (provider-map
-          (seq-map (lambda (provider)
-                     (cons (phony--rule-name provider)
-                           (phony--rule-provides provider)))
-                   providers))
+          (seq-filter #'phony--rule-provides rules))
          (interface-resolution-map
-          (seq-map (lambda (entry) (cons (cdr entry) (car entry)))
-                   provider-map)))
+          (seq-map (lambda (provider)
+                     (cons
+                      (phony--rule-provides provider)
+                      (phony--rule-name provider)))
+                   providers)))
     (dolist (entry interface-resolution-map)
-      (phony--substititute-in-grammar grammar (car entry) (cdr entry))
+      (phony--substitute-in-grammar grammar (car entry) (cdr entry))
       (remhash (car entry) (phony--grammar-rules grammar)))))
+
+(defun phony--remove-disabled-rules (grammar)
+  "Remove disabled rules from GRAMMAR.
+
+References to disabled rules are replaced with `phony--impossible'."
+  (dolist (rule (phony--get-rules grammar))
+    (when (and (phony--rule-module rule)
+               (not (phony--module-enabled-p (phony--get-module
+                                              (phony--rule-module rule)
+                                              grammar))))
+      (phony--substitute-in-grammar
+       grammar (phony--rule-name rule) 'phony--impossible)
+      (remhash (phony--rule-name rule) (phony--grammar-rules grammar)))))
 
 (defun phony--prepare-grammar (grammar)
   "Prepare GRAMMAR for export.
 
-The returned grammar must not mutated."
-  (let ((prepared (phony--make-grammar)))
-    (maphash
-     (lambda (name rule)
-       (puthash name (phony--copy-rule rule)
-                (phony--grammar-rules prepared)))
-     (phony--grammar-rules grammar))
+The returned grammar must not be mutated."
+  (let ((prepared (phony--copy-grammar grammar)))
     (phony--internalize-contributions prepared)
+    (phony--remove-disabled-rules prepared)
     (phony--resolve-interfaces prepared)
     prepared))
-
-(defvar phony--default-grammar (phony--make-grammar)
-  "The current user specification of the grammar.")
 
 (defvar phony--exported-grammar (phony--make-grammar)
   "The most recently exported grammar.
@@ -591,12 +655,14 @@ If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
   "Add RULE to GRAMMAR.
 
 If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'.
-If RULE was declared in a file with a `phony-module' declaration, then
-RULE is put into that module.
+If the module of RULE is nil but is declared in a file with a
+`phony-module' declaration, then the module of RULE is set to that
+module.
 
 This function must be invoked every time a rule is declared."
   (setq grammar (or grammar phony--default-grammar))
-  (setf (phony--rule-module rule) (phony--current-module))
+  (unless (phony--rule-module rule)
+    (setf (phony--rule-module rule) (phony--current-module)))
   (setf (phony--rule-file-name rule) (phony--current-file-name))
   (puthash (phony--rule-name rule)
            rule
@@ -655,6 +721,12 @@ interface sugar to the form used internally."
       (error ":provides keyword argument must be unquoted"))
     (unless (symbolp provides)
       (error ":provides keyword argument must be a symbol")))
+
+  (when-let* ((module (map-elt parameters :module)))
+    (when (and (listp module) (eq (car module) 'quote))
+      (error ":module keyword argument must be unquoted"))
+    (unless (symbolp module)
+      (error ":module keyword argument must be a symbol")))
 
   ;; TODO: Check if this can be handled directly in the constructor.
   ;; I would guess that custom constructors are ignored when
@@ -937,21 +1009,6 @@ rule types.
       (append (list :name ',name
                     :documentation ,documentation)
               ',arguments))))
-
-(defun phony--element-children (element)
-  "Return all direct sub-elements of ELEMENT."
-  (cl-typecase element
-    (phony--element-sequence
-     (phony--element-sequence-elements element))
-    (phony--element-optional
-     (list (phony--element-optional-element element)))
-    (phony--element-zero-or-more
-     (list (phony--element-zero-or-more-element element)))
-    (phony--element-one-or-more
-     (list (phony--element-one-or-more-element element)))
-    (phony--element-argument
-     (list (phony--element-argument-element element)))
-    (t nil)))
 
 (defun phony--collect (predicate element)
   "Return list of descendants of ELEMENT matching PREDICATE.
@@ -1365,6 +1422,10 @@ Optional keywords common to all rule types are:
                      rule is a provider of.  See
                      `phony-define-interface' for interface rules.
                      Default is nil.
+  :module            An unquoted symbol naming the module that this rule
+                     is part of.  See `phony-define-module' and
+                     `phony-module' for information on modules.  Default
+                     is nil.
 
 \(fn NAME PATTERN [DOCSTRING] [KEY VALUE]... BODY...)"
   (declare (indent 2)
@@ -1459,6 +1520,10 @@ Optional keywords common to all rule types are:
                  :documentation ,doc)
            ',optional-arguments))))))
 
+(phony-define-dictionary phony--impossible
+  "Rule that always fails to match."
+  '())
+
 (eval-and-compile
   (defun phony--expand-implicit-arguments (element-form)
     "Expand implicit arguments in ELEMENT-FORM.
@@ -1513,11 +1578,16 @@ If MODULE is not given, prompt for it before disabling it."
   "Export information about which rules are currently active."
   ;; We must filter the enabled rules before doing with-temp-file, as
   ;; that may otherwise influence which rules are enabled.
-  (let ((active-rules (seq-filter #'phony--rule-active-p (phony--get-rules))))
+  (let ((active-rules (seq-filter #'phony--rule-active-p
+                                  (phony--get-rules phony--exported-grammar))))
     (with-temp-file (phony--output-directory "active-rules")
       (insert (string-join
                (seq-map #'phony--rule-external-name
-                        (seq-remove #'phony--rule-always-active-p active-rules))
+                        (seq-remove
+                         (lambda (rule)
+                           (phony--rule-always-active-p
+                            rule phony--exported-grammar))
+                         active-rules))
                "\n")
               "\n"))))
 
