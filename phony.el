@@ -1101,7 +1101,11 @@ If a rule is produced multiple times, it is duplicated.")
    :type list
    :documentation "Linear extension of the dependency graph.
 Also commonly known as topological order.  Rules occurring in this list
-are guaranteed to only depend on preceding rules."))
+are guaranteed to only depend on preceding rules.")
+  (grammar
+   nil
+   :type phony--grammar
+   :documentation "The grammar that was analyzed."))
 
 (defun phony--get-mentions (analysis-data rule-or-name)
   ;; checkdoc-params: (analysis-data)
@@ -1275,6 +1279,7 @@ results of the analysis."
                                        " -> ")))
       (setf (phony--analysis-data-contains-errors analysis-data) t))
     (setq phony--last-analysis analysis-data)
+    (setf (phony--analysis-data-grammar analysis-data) grammar)
     analysis-data))
 
 (phony--define-grammar-attribute phony--grammar-analysis (grammar)

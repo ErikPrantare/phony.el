@@ -23,6 +23,7 @@
 (require 'ert)
 (require 'phony)
 (require 'phony-parser)
+(require 'phony-talon)
 
 (defmacro phony-test (&rest body)
   "Evaluate BODY in a fresh phony test environment.
@@ -194,5 +195,29 @@ If there is no parse, an error is thrown."
    (phony--export-all)
    (should-error (phony-test--evaluate "double three"))
    (should (= (phony-test--evaluate "double five") 10))))
+
+(ert-deftest phony-talon-can-export ()
+  "The talon exporter does not fail for valid grammars."
+  (phony-test
+   (let* ((directory (make-temp-file "phony-talon-test" t))
+          (phony-output-directory directory))
+     (unwind-protect
+         (progn
+           (phony-define-open-rule number)
+           (phony-defun three "three"
+             :contributes-to number
+             3)
+           (phony-defun five "five"
+             :contributes-to number
+             3)
+           (phony-define-dictionary more-numbers
+             :contributes-to number
+             '(("pi" . 3.14) ("elite" . 1337)))
+           (phony-defun double ("double" number)
+             (* 2 number))
+           (phony--export-all)
+           (phony-talon--generate-configuration
+            (phony--grammar-analysis phony--exported-grammar)))
+       (delete-directory directory t)))))
 
 ;;; test.el ends here

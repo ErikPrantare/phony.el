@@ -56,22 +56,15 @@ RULE provides context for occurrence numbering."
   "Return the Talon pattern string for matching ELEMENT.
 
 RULE provides context for occurrence numbering."
-  (let* ((occurrence-number (phony-talon--occurrence-number element rule))
-         (match-rule (phony--get-rule (phony--element-rule-name element))))
-    ;; Avoid capture indirection unless required.
-    (if (and (phony--dictionary-p match-rule)
-             (eq occurrence-number 0)
-             (phony--rule-always-active-p match-rule))
-        (format "{user.%s}"
-                (phony--external-name match-rule))
-      (format "<user.%s%s>"
-              (phony--external-name
-               (phony--get-rule
-                (phony--element-rule-name element)))
-              (if (>= occurrence-number 1)
-                  (format "_phony_clone%s"
-                          (1- occurrence-number))
-                "")))))
+  (let* ((occurrence-number (phony-talon--occurrence-number element rule)))
+    (format "<user.%s%s>"
+            (phony--external-name
+             (phony--get-rule
+              (phony--element-rule-name element)))
+            (if (>= occurrence-number 1)
+                (format "_phony_clone%s"
+                        (1- occurrence-number))
+              ""))))
 
 (cl-defmethod phony-talon--element-match-string ((element phony--element-sequence) rule)
   "Return the Talon pattern string for matching ELEMENT.
@@ -196,7 +189,9 @@ if ARGUMENT is not found in ELEMENTS."
 (defun phony-talon--insert-capture-preamble (rule analysis-data)
   ;; checkdoc-params: (analysis-data)
   "Insert the Python capture preamble for RULE."
-  (if (phony--rule-always-active-p rule)
+  (if (phony--rule-always-active-p
+       rule
+       (phony--analysis-data-grammar analysis-data))
       (insert "@module.capture(rule=" (phony-talon--rule-match-string rule analysis-data) ")\n")
     (insert "# Base case for when the rule is inactive\n")
     (phony-talon--insert-python-disabled rule)
@@ -325,12 +320,11 @@ between multiple captures of the same name in one pattern."
            (phony--procedure-rule-interactive-p rule))
       (phony-talon--speech-insert-rule rule))))
 
-(defun phony-talon-export (analysis-data)
+(defun phony-talon--generate-configuration (analysis-data)
   ;; checkdoc-params: (analysis-data)
   "Generate all Talon files from the current phony grammar.
 
-This function creates .talon and .py files in the output directory and
-symlinks them into ~/.talon/user/."
+This function creates .talon and .py files in the output directory."
   (mkdir (phony--output-directory "talon") t)
   (let ((rules (phony--get-rules)))
     (with-temp-file (phony--output-directory "talon" "exported-rules.talon")
@@ -415,21 +409,29 @@ symlinks them into ~/.talon/user/."
               "        lambda x, y: update_active_tags())\n")
       (seq-doseq (rule rules)
         (insert "\n")
-        (unless (phony--rule-always-active-p rule)
+        (unless (phony--rule-always-active-p
+                 rule (phony--analysis-data-grammar analysis-data))
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
                           (phony--external-name rule))))
         (phony-talon--insert-capture-preamble rule analysis-data)
         (phony-talon--insert-python rule)
         (phony-talon--clone-rule
          rule
-         (max 0 (1- (phony--maximum-producer-multiplicity analysis-data rule))))))
+         (max 0 (1- (phony--maximum-producer-multiplicity analysis-data rule))))))))
 
-    (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
-      (if (or (not (file-exists-p link-path))
-              (file-symlink-p link-path))
-          (make-symbolic-link (phony--output-directory "talon")
-                              link-path t)
-        (warn "Path already exists and is not preexistent symlink: %S" link-path)))))
+(defun phony-talon-export (analysis-data)
+  ;; checkdoc-params: (analysis-data)
+  "Generate all Talon files from the current phony grammar.
+
+This function creates .talon and .py files in the output directory and
+symlinks them into ~/.talon/user/."
+  (phony-talon--generate-configuration analysis-data)
+  (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
+    (if (or (not (file-exists-p link-path))
+            (file-symlink-p link-path))
+        (make-symbolic-link (phony--output-directory "talon")
+                            link-path t)
+      (warn "Path already exists and is not preexistent symlink: %S" link-path))))
 
 (phony-define-dictionary phony-talon--disabled-rule
   "Empty list.
