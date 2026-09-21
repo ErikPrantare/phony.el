@@ -1,4 +1,4 @@
-;;; phony-element-syntax.el --- Element parsing logic  -*- lexical-binding: t; -*-
+;;; phony-element.el --- Elements of procedure rules -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025, 2026  Erik Präntare
 
@@ -201,5 +201,5 @@ F is applied to a copy of ELEMENT with children transformed by F."
      element)
     (nreverse children)))
 
-(provide 'phony-element-syntax)
-;;; phony-element-syntax.el ends here
+(provide 'phony-element)
+;;; phony-element.el ends here

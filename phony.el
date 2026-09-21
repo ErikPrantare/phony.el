@@ -63,7 +63,7 @@
 (require 'server)
 (require 'multisession)
 
-(require 'phony-element-syntax)
+(require 'phony-element)
 (require 'simulacrum)
 
 (defgroup phony nil
