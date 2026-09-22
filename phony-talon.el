@@ -239,7 +239,7 @@ MATCH-ELEMENT among all of those `equal' to it."
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
     (let* ((argument-element
             (phony-talon--find-argument-element argument rule)))
-      (insert "    " (phony--to-python-identifier argument)
+      (insert "    " (phony--external-name argument)
               " = ")
       (if (not argument-element)
           (insert "'nil'")
@@ -277,7 +277,7 @@ MATCH-ELEMENT among all of those `equal' to it."
            (symbol-name (phony--procedure-rule-name rule))
            (string-join
             (seq-map (lambda (argument)
-                       (format "{%s}" (phony--to-python-identifier argument)))
+                       (format "{%s}" (phony--external-name argument)))
                      (phony--procedure-rule-arglist rule))
             " "))))
 

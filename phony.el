@@ -120,12 +120,14 @@ If provided, COMPONENTS are appended as components in the returned path."
    (expand-file-name phony-output-directory)
    components))
 
-(defun phony--to-python-identifier (symbol)
-  "Generate a fitting python identifier for SYMBOL.
-
-This function is used to automatically generate external names for
-rules."
-  (concat "phony_" (replace-regexp-in-string (rx (not alnum)) "_" (symbol-name symbol))))
+(defun phony--rule-external-name (rule-or-name)
+  "Return the speech engine facing name for RULE-OR-NAME."
+  (let ((name (if (symbolp rule-or-name)
+                  rule-or-name
+                (phony--rule-name rule-or-name))))
+    (concat "phony_"
+            (replace-regexp-in-string
+             (rx (not alnum)) "_" (symbol-name name)))))
 
 (cl-defstruct (phony--grammar
                (:constructor phony--make-grammar)
@@ -369,9 +371,6 @@ Its value is nil if it was not evaluated from a file.")
 If none of the modes are active, this rule cannot be matched.  A
 special case is the \\='global symbol, which indicates that the rule
 should always be active.")
-  ( external-name nil
-    :type string
-    :documentation "The name this rule will have for the speech recognition engine.")
   ( contributes-to '()
     :type list
     :documentation "A list of open rules that this rule contributes to.
@@ -453,15 +452,10 @@ Constrain matching to the end of an utterance, like `$' in regex."))
                (:include phony--rule)
                (:constructor nil)
                (:constructor phony--make-dictionary))
-  "A dictionary mapping utterances to values.
-
-MAPING is an alist mapping utterances, given as strings, to values.
-
-FORMAT-RAW-P is t if this dictionary is intended to be used on the
-speech recognition side.  In that case, the mapping may only map to
-strings."
-  (format-raw-p nil :type boolean)
-  (mapping nil :type list))
+  "A dictionary mapping utterances to values."
+  ( mapping nil
+    :type list
+    :documentation "An alist mapping utterances, strings, to values."))
 
 (cl-defstruct (phony--interface-rule
                (:include phony--rule)
@@ -478,7 +472,6 @@ See documentation for `phony-define-interface'.")
   (setf (phony--rule-file-name target) (phony--rule-file-name source))
   (setf (phony--rule-modes target)
         (copy-sequence (phony--rule-modes source)))
-  (setf (phony--rule-external-name target) (phony--rule-external-name source))
   (setf (phony--rule-contributes-to target)
         (copy-sequence (phony--rule-contributes-to source)))
   (setf (phony--rule-virtual-p target) (phony--rule-virtual-p source))
@@ -509,7 +502,6 @@ See documentation for `phony-define-interface'.")
 (cl-defmethod phony--copy-rule ((rule phony--dictionary))
   "Return a deep copy of RULE."
   (let ((copy (phony--make-dictionary
-               :format-raw-p (phony--dictionary-format-raw-p rule)
                :mapping (copy-alist (phony--dictionary-mapping rule)))))
     (phony--copy-rule-base-inplace rule copy)))
 
@@ -728,12 +720,6 @@ interface sugar to the form used internally."
     (unless (symbolp module)
       (error ":module keyword argument must be a symbol")))
 
-  ;; TODO: Check if this can be handled directly in the constructor.
-  ;; I would guess that custom constructors are ignored when
-  ;; constructing substructs.
-  (with-memoization (map-elt parameters :external-name)
-    (phony--to-python-identifier (map-elt parameters :name)))
-
   (phony--add-rule (apply constructor parameters)))
 
 (defun phony-dictionary-get (utterance dictionary)
@@ -798,11 +784,9 @@ recognition engine."
 
 When evaluating the returned string from emacsclient, this performs
 the lookup."
-  (if (phony--dictionary-format-raw-p dictionary)
-      (cdr entry)
-    (format "(%s \"%s\")"
-            (phony--dictionary-name dictionary)
-            (car entry))))
+  (format "(%s \"%s\")"
+          (phony--dictionary-name dictionary)
+          (car entry)))
 
 (defun phony--prepare-dictionary-for-serialization (dictionary)
   "Return DICTIONARY as an entry for `json-serialize'.
@@ -874,11 +858,6 @@ See documentation of `phony-define-dictionary' for more information."
       (error "The keys of %s must be strings, but %S is not a string"
              name (car non-string-key))))
 
-  (when (plist-member arguments :format-raw)
-    (setf (plist-get arguments :format-raw-p)
-          (plist-member arguments :format-raw))
-    (cl-remf arguments :format-raw))
-
   (phony--add-new-rule #'phony--make-dictionary arguments)
 
   (if (or (map-elt arguments :contributes-to)
@@ -912,13 +891,6 @@ ALIST is an alist mapping utterances to values.  An utterance is a
 string containing the spoken form for referencing the value.  The
 defined rule matches on any of the keys and evaluates to the
 corresponding value.
-
-Optional arguments are given as named arguments before ALIST.  The
-following optional argument is unique to dictionaries:
-
-  :format-raw       Export values in a form usable by the engine,
-                    not Emacs.  This only works when the values are
-                    strings.
 
 See `phony-defun' for a list of optional arguments available across all
 rule types.
@@ -1420,9 +1392,6 @@ Optional keywords common to all rule types are:
                      rules that this procedure should contribute to.
                      See `phony-define-open-rule' for open rules.
                      Default is nil.
-  :external-name     If given, this rule will be given this name for
-                     the external speech engine.  Otherwise, it gets
-                     assigned an unspecified auto-generated name.
   :provides          An unquoted symbol of an interface rule that this
                      rule is a provider of.  See
                      `phony-define-interface' for interface rules.
