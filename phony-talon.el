@@ -136,7 +136,7 @@ RULE provides context for occurrence numbering."
                                (phony--external-name alternative)))
                      (gethash rule (phony--analysis-data-productions analysis-data)))
                     "\n        '| "))
-    "'<user.disabled_phony_rule>'"))
+    "'{user.phony_disabled_rule}'"))
 
 (cl-defmethod phony-talon--rule-match-string ((rule phony--dictionary) _analysis-data)
   "Return the full Talon rule pattern for RULE given ANALYSIS-DATA."
@@ -289,7 +289,7 @@ MATCH-ELEMENT among all of those `equal' to it."
 (defun phony-talon--insert-python-disabled (rule)
   "Insert a Python stub for disabled RULE returning False."
   (insert "# Disabled\n"
-          "@module.capture(rule='<user.disabled_phony_rule>')\n"
+          "@module.capture(rule='{user.phony_disabled_rule}')\n"
           "def " (phony--rule-external-name rule) "(m) -> str:\n"
           "    return False\n"))
 
@@ -320,18 +320,23 @@ between multiple captures of the same name in one pattern."
            (phony--procedure-rule-interactive-p rule))
       (phony-talon--speech-insert-rule rule))))
 
+(defun phony-talon--output-path (&rest components)
+  "Return output path for talon files.
+
+COMPONENTS are appended as components to the returned path."
+  (apply #'phony--output-directory "talon" components))
+
 (defun phony-talon--generate-configuration (analysis-data)
   ;; checkdoc-params: (analysis-data)
   "Generate all Talon files from the current phony grammar.
 
 This function creates .talon and .py files in the output directory."
-  (mkdir (phony--output-directory "talon") t)
+  (mkdir (phony-talon--output-path) t)
   (let ((rules (phony--get-rules)))
-    (with-temp-file (phony--output-directory "talon" "exported-rules.talon")
+    (with-temp-file (phony-talon--output-path "exported-rules.talon")
       (phony-talon--insert-exported-rules rules))
 
-    (with-temp-file (phony--output-directory
-                     "talon"
+    (with-temp-file (phony-talon--output-path
                      "read_dictionaries.py")
       (insert "from talon import Context, Module\n"
               "import talon, json, os.path\n"
@@ -351,8 +356,7 @@ This function creates .talon and .py files in the output directory."
               "    load_lists(path, None)\n"
               "talon.fs.watch(path, load_lists)\n"))
 
-    (with-temp-file (phony--output-directory
-                     "talon"
+    (with-temp-file (phony-talon--output-path
                      "evaluate_elisp.py")
       (insert "from talon import Module\n"
               "import subprocess\n"
@@ -374,7 +378,7 @@ This function creates .talon and .py files in the output directory."
               "        'Evaluate an elisp expression'\n"
               "        evaluate_lisp(expression)\n"))
 
-    (with-temp-file (phony--output-directory "talon" "rules.py")
+    (with-temp-file (phony-talon--output-path "rules.py")
       (insert "import talon\n\n"
               "module = talon.Module()\n"
               ;; I heard you like escapes
@@ -406,7 +410,9 @@ This function creates .talon and .py files in the output directory."
               "            tag_context.tags = tags\n"
               "\n"
               "talon.fs.watch('" (phony--output-directory "active-rules") "',\n"
-              "        lambda x, y: update_active_tags())\n")
+              "        lambda x, y: update_active_tags())\n"
+              "\n"
+              "module.list(\"phony_disabled_rule\", desc=\"This cannot match\")\n")
       (seq-doseq (rule rules)
         (insert "\n")
         (unless (phony--rule-always-active-p
@@ -429,18 +435,9 @@ symlinks them into ~/.talon/user/."
   (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
     (if (or (not (file-exists-p link-path))
             (file-symlink-p link-path))
-        (make-symbolic-link (phony--output-directory "talon")
+        (make-symbolic-link (phony-talon--output-path)
                             link-path t)
       (warn "Path already exists and is not preexistent symlink: %S" link-path))))
-
-(phony-define-dictionary phony-talon--disabled-rule
-  "Empty list.
-
-This rule exists to provide a pattern for disabled rules.  In Talon,
-empty lists are never matched, so they are a way of providing a rule
-pattern that never matches without yielding an error."
-  :external-name "disabled_phony_rule"
-  '())
 
 (provide 'phony-talon)
 ;;; phony-talon.el ends here

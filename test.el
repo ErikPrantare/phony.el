@@ -196,8 +196,13 @@ If there is no parse, an error is thrown."
    (should-error (phony-test--evaluate "double three"))
    (should (= (phony-test--evaluate "double five") 10))))
 
-(ert-deftest phony-talon-can-export ()
-  "The talon exporter does not fail for valid grammars."
+(ert-deftest phony-talon-export ()
+  "The talon exporter exports with correct syntax."
+  (unless (executable-find "python")
+    (let ((message "Python is not installed in the environment"))
+      (if noninteractive
+          (error "%s" message)
+        (ert-skip message))))
   (phony-test
    (let* ((directory (make-temp-file "phony-talon-test" t))
           (phony-output-directory directory))
@@ -217,7 +222,13 @@ If there is no parse, an error is thrown."
              (* 2 number))
            (phony--export-all)
            (phony-talon--generate-configuration
-            (phony--grammar-analysis phony--exported-grammar)))
+            (phony--grammar-analysis phony--exported-grammar))
+           (with-temp-buffer
+             (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
+                                          (phony-talon--output-path "rules.py")
+                                          (phony-talon--output-path "evaluate_elisp.py")
+                                          (phony-talon--output-path "read_dictionaries.py")))
+               (error "Syntax error in python: %s" (buffer-string)))))
        (delete-directory directory t)))))
 
 ;;; test.el ends here
