@@ -34,7 +34,7 @@
 
 (cl-defmethod phony-talon--capture-name ((element phony--element-rule))
   "Return the Talon capture name for ELEMENT."
-  (phony--external-name
+  (phony--rule-external-name
    (phony--element-rule-name element)))
 
 (cl-defmethod phony-talon--capture-name ((element phony--element-external-rule))
@@ -58,9 +58,8 @@ RULE provides context for occurrence numbering."
 RULE provides context for occurrence numbering."
   (let* ((occurrence-number (phony-talon--occurrence-number element rule)))
     (format "<user.%s%s>"
-            (phony--external-name
-             (phony--get-rule
-              (phony--element-rule-name element)))
+            (phony--rule-external-name
+             (phony--element-rule-name element))
             (if (>= occurrence-number 1)
                 (format "_phony_clone%s"
                         (1- occurrence-number))
@@ -133,7 +132,7 @@ RULE provides context for occurrence numbering."
        (string-join (seq-map
                      (lambda (alternative)
                        (format "<user.%s>'"
-                               (phony--external-name alternative)))
+                               (phony--rule-external-name alternative)))
                      (gethash rule (phony--analysis-data-productions analysis-data)))
                     "\n        '| "))
     "'{user.phony_disabled_rule}'"))
@@ -239,7 +238,7 @@ MATCH-ELEMENT among all of those `equal' to it."
   (seq-doseq (argument (phony--procedure-rule-arglist rule))
     (let* ((argument-element
             (phony-talon--find-argument-element argument rule)))
-      (insert "    " (phony--external-name argument)
+      (insert "    " (phony--rule-external-name argument)
               " = ")
       (if (not argument-element)
           (insert "'nil'")
@@ -277,7 +276,7 @@ MATCH-ELEMENT among all of those `equal' to it."
            (symbol-name (phony--procedure-rule-name rule))
            (string-join
             (seq-map (lambda (argument)
-                       (format "{%s}" (phony--external-name argument)))
+                       (format "{%s}" (phony--rule-external-name argument)))
                      (phony--procedure-rule-arglist rule))
             " "))))
 
@@ -418,7 +417,7 @@ This function creates .talon and .py files in the output directory."
         (unless (phony--rule-always-active-p
                  rule (phony--analysis-data-grammar analysis-data))
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
-                          (phony--external-name rule))))
+                          (phony--rule-external-name rule))))
         (phony-talon--insert-capture-preamble rule analysis-data)
         (phony-talon--insert-python rule)
         (phony-talon--clone-rule

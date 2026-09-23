@@ -52,7 +52,7 @@
 (cl-defmethod phony-dragonfly--serialize-element ((dictionary phony--element-rule))
   "Convert DICTIONARY to a form serializable by `json-encode'."
   `((type . "rule")
-    (name . ,(phony--external-name
+    (name . ,(phony--rule-external-name
               (phony--element-rule-name dictionary)))))
 
 (cl-defmethod phony-dragonfly--serialize-element ((element phony--element-one-or-more))
@@ -92,7 +92,7 @@
 (cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--procedure-rule))
   "Convert RULE definition to a form serializable by `json-encode'."
   `((type . "procedure")
-    (name . ,(phony--external-name rule))
+    (name . ,(phony--rule-external-name rule))
     (rule-name . ,(symbol-name (phony--procedure-rule-name rule)))
     (element . ,(phony-dragonfly--serialize-element
                  (phony--procedure-rule-element rule)))
@@ -105,19 +105,19 @@
 (cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--open-rule))
   "Convert RULE definition to a form serializable by `json-encode'."
   `((type . "open")
-    (name . ,(phony--external-name rule))
-    (alternatives . ,(seq-into (seq-map #'phony--external-name
+    (name . ,(phony--rule-external-name rule))
+    (alternatives . ,(seq-into (seq-map #'phony--rule-external-name
                                         (phony--open-rule-alternatives rule))
                                'vector))))
 
 (cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--dictionary))
   "Convert RULE to a form serializable by `json-encode'."
   `((type . "dictionary")
-    (name . ,(phony--external-name rule))))
+    (name . ,(phony--rule-external-name rule))))
 
 (defun phony-dragonfly--serialize-rule (rule)
   "Convert RULE to a form serializable by `json-encode'."
-  `(,(make-symbol (phony--external-name rule))
+  `(,(make-symbol (phony--rule-external-name rule))
     . ,(phony-dragonfly--serialize-rule-definition rule)))
 
 (defun phony-dragonfly--serialize-rules (analysis-data)
@@ -126,7 +126,7 @@
   `((dependency-linear-extension
      . ,(apply #'vector
                (seq-map
-                (lambda (rule) (phony--external-name rule))
+                (lambda (rule) (phony--rule-external-name rule))
                 (phony--analysis-data-linear-extension analysis-data))))
     (rules
      . ,(seq-map #'phony-dragonfly--serialize-rule

@@ -121,7 +121,10 @@ If provided, COMPONENTS are appended as components in the returned path."
    components))
 
 (defun phony--rule-external-name (rule-or-name)
-  "Return the speech engine facing name for RULE-OR-NAME."
+  "Return the speech engine facing name for RULE-OR-NAME.
+
+The external name of a rule is a string, representing how the function
+is identified when exported to the speech engine."
   (let ((name (if (symbolp rule-or-name)
                   rule-or-name
                 (phony--rule-name rule-or-name))))
@@ -517,14 +520,6 @@ RULE-OR-NAME must be a `phony--rule' or a symbol naming a rule."
       (phony--get-rule rule-or-name)
     rule-or-name))
 
-(defun phony--external-name (rule-or-name)
-  "Return the external name for RULE-OR-NAME.
-
-The external name of a rule is a string, representing how the function
-is identified when exported to the speech engine."
-  (phony--rule-external-name
-   (phony--normalize-rule rule-or-name)))
-
 (defun phony--internalize-contributions (grammar)
   "Insert all contributions to open rules as alternatives.
 
@@ -793,7 +788,7 @@ the lookup."
 
 This represents one key-value pair, mapping the external dictionary name
 to its dictionary."
-  (cons (make-symbol (phony--external-name dictionary))
+  (cons (make-symbol (phony--rule-external-name dictionary))
         (mapcar (lambda (entry)
                   (cons
                    (make-symbol (car entry))
