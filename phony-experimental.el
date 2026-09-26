@@ -87,7 +87,8 @@ value."
 (defvar phony--font-lock-keywords
   `((,(rx "(" (or "phony-defun"
                   "phony-define-dictionary"
-                  "phony-define-open-rule")
+                  "phony-define-open-rule"
+                  "phony-define-interface")
           (+ blank)
           (group (+ (or (syntax word) (syntax symbol)))))
      1 'font-lock-function-name-face))
@@ -106,7 +107,8 @@ value."
   (re-search-forward
    (rx (seq (or "(phony-defun"
                 "(phony-define-dictionary"
-                "(phony-define-open-rule")
+                "(phony-define-open-rule"
+                "(phony-define-interface")
             (+ (not graphic))
             (group (literal (symbol-name name)))
             symbol-end))
