@@ -196,6 +196,28 @@ If there is no parse, an error is thrown."
    (should-error (phony-test--evaluate "double three"))
    (should (= (phony-test--evaluate "double five") 10))))
 
+(ert-deftest phony-interface-error-on-multiple-providers ()
+  "Interfaces can't resolve on multiple providers."
+  (phony-test
+   (phony-define-interface number)
+   (phony-define-module three)
+   (phony-define-module five)
+
+   (phony-defun three "three"
+     :module three
+     :provides number
+     3)
+   (phony-defun five "five"
+     :module five
+     :provides number
+     5)
+   (phony-defun double ("double" number)
+     (* 2 number))
+
+   (phony-enable-module 'five)
+   (phony-enable-module 'three)
+   (should-error (phony--export-all))))
+
 (ert-deftest phony-talon-export ()
   "The talon exporter exports with correct syntax."
   (unless (executable-find "python")

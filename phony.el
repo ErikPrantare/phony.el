@@ -572,6 +572,11 @@ This function assumes that contributions have been internalized.  See
   (seq-doseq (rule (map-values (phony--grammar-rules grammar)))
     (phony--substitute-in-rule rule from to)))
 
+(defun phony--replace-in-grammar (grammar from to)
+  "Remove FROM and change references to rule FROM to rule TO in GRAMMAR."
+  (phony--substitute-in-grammar grammar from to)
+  (remhash from (phony--grammar-rules grammar)))
+
 (defun phony--resolve-interfaces (grammar)
   "Replace interfaces in GRAMMAR with their providers.
 
@@ -584,15 +589,25 @@ applied to the grammar."
   (let* ((rules (phony--get-rules grammar))
          (providers
           (seq-filter #'phony--rule-provides rules))
+         (interfaces (seq-map
+                      #'phony--rule-name
+                      (seq-filter #'phony--interface-rule-p rules)))
          (interface-resolution-map
-          (seq-map (lambda (provider)
-                     (cons
-                      (phony--rule-provides provider)
-                      (phony--rule-name provider)))
-                   providers)))
-    (dolist (entry interface-resolution-map)
-      (phony--substitute-in-grammar grammar (car entry) (cdr entry))
-      (remhash (car entry) (phony--grammar-rules grammar)))))
+          (mapcar (lambda (provider)
+                    (cons
+                     (phony--rule-provides provider)
+                     (phony--rule-name provider)))
+                  providers)))
+    (dolist (interface interfaces)
+      (let ((providers (seq-keep (lambda (entry)
+                                   (and (eq (car entry) interface)
+                                        (cdr entry)))
+                                   interface-resolution-map)))
+        (when (> (length providers) 1)
+          (error "More than one enabled provider available for %s\nProviders: %s"
+                 interface
+                 (string-join (seq-map #'symbol-name providers) ", ")))
+        (phony--replace-in-grammar grammar interface (car providers))))))
 
 (defun phony--remove-disabled-rules (grammar)
   "Remove disabled rules from GRAMMAR.
@@ -655,23 +670,30 @@ This function must be invoked every time a rule is declared."
            rule
            (phony--grammar-rules grammar)))
 
-(defun phony-remove-rule (rule-name &optional grammar)
-  "Remove rule named RULE-NAME from GRAMMAR.
-If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
+(defun phony--normalize-rule-name (rule-or-name)
+  "Return the name of RULE-OR-NAME.
+
+If RULE-OR-NAME is a rule object, the name of that rule is returned.  If
+it is a symbol, RULE-OR-NAME is returned."
+  (if (symbolp rule-or-name)
+      rule-or-name
+    (phony--rule-name rule-or-name)))
+
+(defun phony-remove-rule (rule-name)
+  "Remove rule named RULE-NAME."
   (interactive (list
                 (intern (completing-read
                          "Remove rule: "
                          (hash-table-keys
                           (phony--grammar-rules phony--default-grammar))))))
-  (setq grammar (or grammar phony--default-grammar))
-  (remhash rule-name (phony--grammar-rules grammar))
-  (seq-doseq (open-rule (seq-filter
-                         #'phony--open-rule-p
-                         (phony--get-rules grammar)))
-    (setf (phony--open-rule-alternatives open-rule)
-          (remove rule-name (phony--open-rule-alternatives open-rule))))
-  (phony-request-export))
-
+  (let ((grammar phony--default-grammar))
+    (remhash rule-name (phony--grammar-rules grammar))
+    (seq-doseq (open-rule (seq-filter
+                           #'phony--open-rule-p
+                           (phony--get-rules grammar)))
+      (setf (phony--open-rule-alternatives open-rule)
+            (remove rule-name (phony--open-rule-alternatives open-rule))))
+    (phony-request-export)))
 
 (defun phony--add-new-rule (constructor parameters)
   "Add a new rule from CONSTRUCTOR with PARAMETERS.
