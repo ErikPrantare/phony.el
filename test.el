@@ -218,6 +218,69 @@ If there is no parse, an error is thrown."
    (phony-enable-module 'three)
    (should-error (phony--export-all))))
 
+(ert-deftest phony-interface-error-on-no-provider ()
+  "Reachable interfaces must have one active provider."
+  (phony-test
+   (phony-define-interface number)
+   (phony-define-module five)
+   (phony-define-module three)
+
+   (phony-defun three "three"
+     :module three
+     :provides number
+     3)
+   (phony-defun five "five"
+     :module five
+     :provides number
+     5)
+   (phony-defun double ("double" number)
+     (* 2 number))
+
+   (phony-disable-module 'five)
+   (phony-disable-module 'three)
+   (should-error (phony--export-all))))
+
+(ert-deftest phony-interface-elide-unused ()
+  "Interfaces with more or less than one provider is ok if unreachable."
+  (phony-test
+   (phony-define-interface number)
+   (phony-define-module three)
+   (phony-define-module five)
+
+   (phony-defun three "three"
+     :module three
+     :provides number
+     3)
+   (phony-defun five "five"
+     :module five
+     :provides number
+     5)
+   (phony-defun double ("double" "four")
+     (* 2 4))
+
+   (phony-enable-module 'five)
+   (phony-enable-module 'three)
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double four") 8))
+   (phony-disable-module 'five)
+   (phony-disable-module 'three)
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double four") 8))))
+
+(ert-deftest phony-interface-multiple-consumptions ()
+  "Interfaces may be consumed multiple times."
+  (phony-test
+   (phony-define-interface number)
+
+   (phony-defun three "three"
+     :provides number
+     3)
+   (phony-defun sum ("add" (x number) "and" (y number))
+     (+ x y))
+
+   (phony--export-all)
+   (should (= (phony-test--evaluate "add three and three") 6))))
+
 (ert-deftest phony-talon-export ()
   "The talon exporter exports with correct syntax."
   (unless (executable-find "python")
@@ -226,31 +289,31 @@ If there is no parse, an error is thrown."
           (error "%s" message)
         (ert-skip message))))
   (phony-test
-   (let* ((directory (make-temp-file "phony-talon-test" t))
-          (phony-output-directory directory))
-     (unwind-protect
-         (progn
-           (phony-define-open-rule number)
-           (phony-defun three "three"
-             :contributes-to number
-             3)
-           (phony-defun five "five"
-             :contributes-to number
-             3)
-           (phony-define-dictionary more-numbers
-             :contributes-to number
-             '(("pi" . 3.14) ("elite" . 1337)))
-           (phony-defun double ("double" number)
-             (* 2 number))
-           (phony--export-all)
-           (phony-talon--generate-configuration
-            (phony--grammar-analysis phony--exported-grammar))
-           (with-temp-buffer
-             (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
-                                          (phony-talon--output-path "rules.py")
-                                          (phony-talon--output-path "evaluate_elisp.py")
-                                          (phony-talon--output-path "read_dictionaries.py")))
-               (error "Syntax error in python: %s" (buffer-string)))))
-       (delete-directory directory t)))))
+    (let* ((directory (make-temp-file "phony-talon-test" t))
+           (phony-output-directory directory))
+      (unwind-protect
+          (progn
+            (phony-define-open-rule number)
+            (phony-defun three "three"
+              :contributes-to number
+              3)
+            (phony-defun five "five"
+              :contributes-to number
+              3)
+            (phony-define-dictionary more-numbers
+              :contributes-to number
+              '(("pi" . 3.14) ("elite" . 1337)))
+            (phony-defun double ("double" number)
+              (* 2 number))
+            (phony--export-all)
+            (phony-talon--generate-configuration
+             (phony--grammar-analysis phony--exported-grammar))
+            (with-temp-buffer
+              (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
+                                           (phony-talon--output-path "rules.py")
+                                           (phony-talon--output-path "evaluate_elisp.py")
+                                           (phony-talon--output-path "read_dictionaries.py")))
+                (error "Syntax error in python: %s" (buffer-string)))))
+        (delete-directory directory t)))))
 
 ;;; test.el ends here

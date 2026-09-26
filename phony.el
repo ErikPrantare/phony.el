@@ -577,37 +577,83 @@ This function assumes that contributions have been internalized.  See
   (phony--substitute-in-grammar grammar from to)
   (remhash from (phony--grammar-rules grammar)))
 
-(defun phony--resolve-interfaces (grammar)
-  "Replace interfaces in GRAMMAR with their providers.
+(defun phony--interactive-rules (grammar)
+  "Return the interactive rules of GRAMMAR."
+  (seq-filter
+   (lambda (rule) (and (phony--procedure-rule-p rule)
+                       (phony--procedure-rule-interactive-p rule)))
+   (phony--get-rules grammar)))
+
+(defun phony--products (rule)
+  "Return the names of the rules that may occur as submatches of RULE.
+
+This does not resolve interfaces nor contributions to open rules."
+  (cl-etypecase rule
+    (phony--procedure-rule
+     (seq-map #'phony--element-rule-name
+              (phony--collect #'phony--element-rule-p
+                              (phony--procedure-rule-element rule))))
+    (phony--open-rule
+     (phony--open-rule-alternatives rule))
+    (phony--dictionary
+     '())
+    (phony--interface-rule
+     '())))
+
+(defun phony--remove-unreachable-resolve-interfaces (grammar)
+  "Remove unreachable rules and replace interfaces with their providers.
 
 This mutates GRAMMAR so that references to an interface rule instead
 reference the provider of the interface.  The interface rules are
-removed from the grammar.
+removed from the grammar.  In addition, any rules that cannot be reached
+are removed.
 
 This function assumes `phony--internalize-contributions' has been
 applied to the grammar."
+  ;; Removing unreachables and resolving interfaces must be done as
+  ;; one, because we should only error on unresolved interfaces if
+  ;; they are reachable, but reachability in turn depends on interface
+  ;; resolution.
   (let* ((rules (phony--get-rules grammar))
          (providers
           (seq-filter #'phony--rule-provides rules))
-         (interfaces (seq-map
-                      #'phony--rule-name
-                      (seq-filter #'phony--interface-rule-p rules)))
          (interface-resolution-map
           (mapcar (lambda (provider)
                     (cons
                      (phony--rule-provides provider)
                      (phony--rule-name provider)))
-                  providers)))
-    (dolist (interface interfaces)
-      (let ((providers (seq-keep (lambda (entry)
-                                   (and (eq (car entry) interface)
-                                        (cdr entry)))
-                                   interface-resolution-map)))
-        (when (> (length providers) 1)
-          (error "More than one enabled provider available for %s\nProviders: %s"
-                 interface
-                 (string-join (seq-map #'symbol-name providers) ", ")))
-        (phony--replace-in-grammar grammar interface (car providers))))))
+                  providers))
+         (worklist (mapcar #'phony--rule-name
+                           (phony--interactive-rules grammar)))
+         (reachable (make-hash-table :test 'eq)))
+    (while worklist
+      (let* ((current (pop worklist)))
+        (unless (gethash current reachable)
+          (puthash current current reachable)
+          (dolist (task (phony--products (phony--get-rule current grammar)))
+            (unless (gethash task reachable)
+              (push task worklist)))
+          (when (phony--interface-rule-p
+                 (phony--get-rule current grammar))
+            (let ((providers (seq-keep (lambda (entry)
+                                         (and (eq (car entry) current)
+                                              (cdr entry)))
+                                       interface-resolution-map)))
+              (when (> (length providers) 1)
+                (error "More than one enabled provider available for %s\nProviders: %s"
+                       current
+                       (string-join (seq-map #'symbol-name providers) ", ")))
+              (when (= (length providers) 0)
+                ;; TODO: Hint about disabled providers
+                (error "No enabled provider available for %s"
+                       current))
+              (phony--replace-in-grammar grammar current (car providers))
+              (unless (gethash (car providers) reachable)
+                (push (car providers) worklist)))))))
+    (dolist (rule (phony--get-rules grammar))
+      (let ((name (phony--rule-name rule)))
+        (unless (gethash name reachable)
+          (remhash name (phony--grammar-rules grammar)))))))
 
 (defun phony--remove-disabled-rules (grammar)
   "Remove disabled rules from GRAMMAR.
@@ -629,7 +675,7 @@ The returned grammar must not be mutated."
   (let ((prepared (phony--copy-grammar grammar)))
     (phony--internalize-contributions prepared)
     (phony--remove-disabled-rules prepared)
-    (phony--resolve-interfaces prepared)
+    (phony--remove-unreachable-resolve-interfaces prepared)
     prepared))
 
 (defvar phony--exported-grammar (phony--make-grammar)
@@ -1014,29 +1060,8 @@ returned in the same order that they occur in ELEMENT."
 
 (defun phony--dependencies (rule-or-name)
   "Return list of names of the rules RULE-OR-NAME depends on."
-  (phony--dependencies-implementation
+  (phony--products
    (phony--normalize-rule rule-or-name)))
-
-(cl-defgeneric phony--dependencies-implementation (rule)
-  "Return list of rule names RULE depends on.")
-
-(cl-defmethod phony--dependencies-implementation ((rule phony--procedure-rule))
-  "Return list of rule names RULE depends on.
-
-Names in the returned list occur the same amount of times they are
-mentioned in RULE."
-  (seq-map #'phony--element-rule-name
-           (phony--collect
-            #'phony--element-rule-p
-            (phony--procedure-rule-element rule))))
-
-(cl-defmethod phony--dependencies-implementation ((rule phony--open-rule))
-  "Return names of the alternatives of RULE."
-  (phony--open-rule-alternatives rule))
-
-(cl-defmethod phony--dependencies-implementation ((_rule phony--dictionary))
-  "Return nil."
-  '())
 
 (cl-defgeneric phony--references (rule-or-name)
   "Return list of rules mentioned by RULE-OR-NAME in its declaration.
@@ -1346,7 +1371,8 @@ See `phony-defun' for more information."
                    (plist-get arguments :interactive))
              (cl-remf arguments :interactive))
     (setf (plist-get arguments :interactive-p)
-          (not (map-contains-key arguments :contributes-to))))
+          (and (not (map-contains-key arguments :contributes-to))
+               (not (map-contains-key arguments :provides)))))
   (when (plist-member arguments :anchor-beginning)
     (setf (plist-get arguments :anchor-beginning-p)
           (plist-get arguments :anchor-beginning))
@@ -1392,8 +1418,8 @@ Optional keywords unique to procedure rules are:
 
   :interactive       If nil, this rule cannot be spoken directly but may
                      occur as part of other rules.  Default is t unless
-                     `:contributes-to' is set, in which case the default
-                     is nil.
+                     `:contributes-to' or `:provides' is non-nil, in
+                     which case the default is nil.
   :anchor-beginning  If t, this rule must occur first in an utterance.
                      Default is nil.
   :anchor-end        If t, this rule must occur last in an utterance.
@@ -1462,6 +1488,11 @@ Optional keywords common to all rule types are:
   ;;   example, we know that function names cannot appear in the form,
   ;;   so those may be filtered out from completion and
   ;;   go-to-definition.
+  ;; - Default :interactive nil on :contributes-to/:provides non-nil:
+  ;;   In the common case, interactive rules are top-level.  Rarely
+  ;;   are they also used as building blocks for other rules as well.
+  ;;   A common mistake was therefore to forget to set :interactive to
+  ;;   nil, causing erroneous behaviour.
 
   ;; TODO: Move more of the logic to phony--define-procedure-rule:
   ;; - Implicit argument deduction
@@ -1503,8 +1534,6 @@ Optional keywords common to all rule types are:
      (t `(phony--define-procedure-rule
           (append
            (list :name ',name
-                 ;; Why the ensure-list?  Probably fine to just splice
-                 ;; doc...
                  :function (lambda ,arguments ,@(ensure-list doc) ,@body)
                  :arglist ',arguments
                  :element ,(phony--parse-speech-element expanded-pattern arguments)
