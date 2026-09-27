@@ -319,6 +319,19 @@ External rules cannot be parsed locally."
     (with-memoization (gethash name (phony-parser--rule-cache grammar))
       (phony-parser--from-rule (phony--get-rule name grammar) grammar))))
 
+(cl-defmethod phony-parser--from-element ((_ phony--element-builtin-word) _grammar)
+  "Return parser accepting an arbitrary word."
+  (phony-parser--any))
+
+(cl-defmethod phony-parser--from-element ((_ phony--element-builtin-phrase) _grammar)
+  "Return parser accepting an arbitrary sequence of words.
+
+The result is returned as one string, each word interspersed with a
+space."
+  (phony-parser--map
+   (lambda (strings) (string-join strings " "))
+   (phony-parser--one-or-more (phony-parser--any))))
+
 (cl-defgeneric phony-parser--from-rule (rule grammar)
   "Return a parser matching RULE and producing an AST.
 

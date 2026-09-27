@@ -108,6 +108,18 @@ RULE provides context for occurrence numbering."
                             (list (phony--element-external-rule-name element))))
                   ".")))
 
+(cl-defmethod phony-talon--element-match-string ((_element phony--element-builtin-word) _rule)
+  "Return the Talon pattern string for matching ELEMENT.
+
+RULE provides context for occurrence numbering."
+  "<word>")
+
+(cl-defmethod phony-talon--element-match-string ((_element phony--element-builtin-phrase) _rule)
+  "Return the Talon pattern string for matching ELEMENT.
+
+RULE provides context for occurrence numbering."
+  "<phrase>")
+
 (cl-defmethod phony-talon--element-match-string ((element phony--element-argument) rule)
   "Return the Talon pattern string for matching ELEMENT.
 

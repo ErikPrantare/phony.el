@@ -79,12 +79,24 @@ Currently only relevant for the talon exporter."
         :type symbol
         :documentation "Symbol naming the phony rule that this element matches."))
 
+(cl-defstruct (phony--element-builtin-word
+               (:constructor phony--make-element-builtin-word))
+  "Element matching any word.")
+
+(cl-defstruct (phony--element-builtin-phrase
+               (:constructor phony--make-element-builtin-phrase))
+  "Element matching any phrase.")
+
 (defun phony--parse-speech-value-element (element-form)
   "Parse ELEMENT-FORM into a valued element.
 
 Valued elements are those that get associated to a value when matched.
 Only these elements may be bound to arguments."
   (cond
+   ((eq element-form 'phony-builtin-word)
+    (phony--make-element-builtin-word))
+   ((eq element-form 'phony-builtin-phrase)
+    (phony--make-element-builtin-phrase))
    ((symbolp element-form)
     (make-phony--element-rule
      :name element-form))
@@ -179,7 +191,14 @@ This is required for recognizing if a form should bind turn argument."
     ((cl-struct phony--element-external-rule name namespace)
      (make-phony--element-external-rule
       :name name
-      :namespace namespace))))
+      :namespace namespace))
+    ((cl-struct phony--element-builtin-word)
+     (phony--make-element-builtin-word))
+    ((cl-struct phony--element-builtin-phrase)
+     (phony--make-element-builtin-phrase))
+    (_ (error "No case for element of type %s: %s"
+              (type-of element)
+              element))))
 
 (defun phony--element-transform (f element)
   "Recursively apply F to ELEMENT.
