@@ -299,6 +299,56 @@ If there is no parse, an error is thrown."
    (should (equal (phony-test--evaluate "abra ha da bruh")
                   "abra ha da bruh"))))
 
+(ert-deftest phony-disabled-rules-no-contribute-externally ()
+  "Disabled rules do not contribute to open rules outside module."
+  (phony-test
+   (phony-define-module x)
+   (phony-defun x "x"
+     :module x
+     :contributes-to z
+     5)
+   (phony-define-open-rule z)
+   (phony-defun y ("y" z)
+     (+ z 3))
+   (phony-enable-module 'x)
+   (phony--export-all)
+   (should (equal (phony-test--evaluate "y x") 8))
+   (phony-disable-module 'x)
+   (phony--export-all)
+   (should-error (phony-test--evaluate "y x"))))
+
+(ert-deftest phony-disabled-rules-contribute-internally ()
+  "Disabled rules do contribute to open rules inside module."
+  (phony-test
+   (phony-define-module x)
+   (phony-defun x "x"
+     :module x
+     :contributes-to z
+     5)
+   (phony-define-open-rule z
+     :module x)
+   (phony-defun y ("y" z)
+     (+ z 3))
+   (phony-enable-module 'x)
+   (phony--export-all)
+   (should (equal (phony-test--evaluate "y x") 8))
+   (phony-disable-module 'x)
+   (phony--export-all)
+   (should (equal (phony-test--evaluate "y x") 8))))
+
+(ert-deftest phony-disabled-rules-may-be-used-explicitly ()
+  "Disabled rules can still be used explicitly."
+  (phony-test
+   (phony-define-module x)
+   (phony-defun x "x"
+     :module x
+     5)
+   (phony-defun y ("y" x)
+     (+ x 3))
+   (phony-disable-module 'x)
+   (phony--export-all)
+   (should (equal (phony-test--evaluate "y x") 8))))
+
 (ert-deftest phony-talon-export ()
   "The talon exporter exports with correct syntax."
   (unless (executable-find "python")
@@ -311,9 +361,12 @@ If there is no parse, an error is thrown."
           (phony-output-directory directory))
      (unwind-protect
          (progn
+           (phony-define-module some-module)
+           (phony-enable-module 'some-module)
            (phony-define-open-rule number)
            (phony-defun three "three"
              :contributes-to number
+             :module some-module
              3)
            (phony-defun five "five"
              :contributes-to number

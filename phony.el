@@ -245,9 +245,15 @@ default for all rules defined in FILE."
 
 Rules can be associated to modules through the :module parameter.
 
-A module can be disabled or enabled.  If it is disabled, the rules
-associated to the module are not exported.  By default, newly defined
-modules are disabled.  To enable a module, use `phony-enable-module'.
+A module can be disabled or enabled.  While it is disabled, the rules
+associated to it are changed to not be interactive and contributions to
+rules outside the module are removed.  See the documentation of
+`phony-defun' for more information on interactivity and contributions.
+Disabled rules can still be referenced by other rules, and will partake
+in the grammar.
+
+By default, newly defined modules are disabled.  To enable a module, use
+`phony-enable-module'.
 
 If all the rules of a file are part of the same module, use
 `phony-module' instead of this macro.
@@ -260,11 +266,12 @@ to as an utterance."
   "Declare current file a phony module.
 
 This will define a new module named NAME.  Rules declared in the file
-that this form is evaluated in will be assigned to that module.
+that this form is evaluated in will be assigned to that module, unless
+the :module argument has been given for the rule.
 
-A module can be disabled or enabled.  If it is disabled, the rules
-belonging to the module are not exported.  By default, newly defined
-modules are disabled.  To enable a module, use `phony-enable-module'.
+A module can be disabled or enabled.  See the documentation of
+`phony-define-module' for information on this.  A module is disabled by
+default.
 
 If given, UTTERANCE is a string specifying how this module is referred
 to as an utterance."
@@ -284,24 +291,17 @@ If the currently loaded or visited file does not define a module with
                       (lambda (module)
                         (equal current-file
                                (phony--module-file-name module)))
-                      (phony--modules))))
+                      (phony--modules phony--default-grammar))))
     (phony--module-name module)))
 
-(defun phony--modules (&optional grammar)
-  "Return list of all modules in GRAMMAR.
+(defun phony--modules (grammar)
+  "Return list of all modules in GRAMMAR."
+  (map-values (phony--grammar-modules grammar)))
 
-If GRAMMAR is omitted, `phony--default-grammar' is used instead."
-  (map-values
-   (phony--grammar-modules
-    (or grammar phony--default-grammar))))
+(defun phony--get-module (name grammar)
+  "Return module with NAME in GRAMMAR.
 
-(defun phony--get-module (name &optional grammar)
-  "Return module with NAME.
-
-If no such module exists, this function returns nil.
-
-If given, the module is looked up in GRAMMAR.  Otherwise, it is looked
-up in `phony--default-grammar'."
+If no such module exists, this function returns nil."
   (seq-find (lambda (module) (eq (phony--module-name module) name))
             (phony--modules grammar)))
 
@@ -310,18 +310,19 @@ up in `phony--default-grammar'."
 
 If PERSIST is non-nil, the module will stay enabled across sessions.
 
-Unless a module is enabled, the rules belonging to it are not
-exported.  Rules not belonging to a module are always exported."
+Unless a module is enabled, the rules belonging to it are
+non-interactive and don't contribute to open rules."
   (interactive (let* ((name (intern (completing-read
                                      "Enable phony module: "
                                      (seq-map #'phony--module-name
                                               (seq-remove #'phony--module-enabled-p
-                                                          (phony--modules))))))
+                                                          (phony--modules
+                                                           phony--default-grammar))))))
                       (persist (y-or-n-p (format "Enable %s for future sessions? " name))))
                  (list name persist)))
-  (cl-assert (phony--get-module name) nil
+  (cl-assert (phony--get-module name phony--default-grammar) nil
              "No module named %s" name)
-  (setf (phony--module-enabled-p (phony--get-module name)) t)
+  (setf (phony--module-enabled-p (phony--get-module name phony--default-grammar)) t)
   (when persist
     (cl-pushnew name (multisession-value phony--enabled-modules)))
   (phony-request-export)
@@ -332,17 +333,21 @@ exported.  Rules not belonging to a module are always exported."
 
 If PERSIST is non-nil, the module will stay disabled across sessions.
 
-Rules belonging to disabled modules are never exported."
+Rules belonging to disabled modules are never interactive and never
+contribute to open rules."
   (interactive (let* ((name (intern (completing-read
                                      "Disable phony module: "
                                      (seq-map #'phony--module-name
                                               (seq-filter #'phony--module-enabled-p
-                                                          (phony--modules))))))
+                                                          (phony--modules
+                                                           phony--default-grammar))))))
                       (persist (y-or-n-p (format "Disable %s for future sessions? " name))))
                  (list name persist)))
-  (cl-assert (phony--get-module name) nil
+  (cl-assert (phony--get-module name phony--default-grammar) nil
              "No module named %s" name)
-  (setf (phony--module-enabled-p (phony--get-module name)) nil)
+  (setf (phony--module-enabled-p
+         (phony--get-module name phony--default-grammar))
+        nil)
   (when persist
     (setf (multisession-value phony--enabled-modules)
           (delq name (multisession-value phony--enabled-modules))))
@@ -389,32 +394,22 @@ See documentation for `phony-define-interface'.")
 (defun phony--rule-active-p (rule)
   "Return non-nil if RULE is active.
 
-A rule is inactive if it belongs to a disabled module or none of its
-modes are currently active."
-  (and
-   (let ((modes (phony--rule-modes rule)))
-     (or
-      (memq 'global modes)
-      (derived-mode-p modes)
-      (seq-some (lambda (mode)
-                  (or
-                   (memq mode local-minor-modes)
-                   (memq mode global-minor-modes)))
-                modes)))
-   (if-let* ((module (phony--rule-module rule)))
-       (phony--module-enabled-p (phony--get-module module))
-     t)))
+A rule is inactive if none of its modes are currently active."
+  (let ((modes (phony--rule-modes rule)))
+    (or
+     (memq 'global modes)
+     (derived-mode-p modes)
+     (seq-some (lambda (mode)
+                 (or
+                  (memq mode local-minor-modes)
+                  (memq mode global-minor-modes)))
+               modes))))
 
-(defun phony--rule-always-active-p (rule grammar)
+(defun phony--rule-always-active-p (rule _grammar)
   "Return non-nil if RULE is guaranteed to always be active in GRAMMAR.
 
-A rule is always active if it is global and is part of an enabled
-module (or no module)."
-  (and (memq 'global (phony--rule-modes rule))
-       (if-let* ((module (phony--rule-module rule)))
-           (phony--module-enabled-p
-            (phony--get-module module grammar))
-         t)))
+A rule is always active if it is global."
+  (memq 'global (phony--rule-modes rule)))
 
 (cl-defstruct (phony--procedure-rule
                (:include phony--rule)
@@ -618,11 +613,15 @@ applied to the grammar."
          (providers
           (seq-filter #'phony--rule-provides rules))
          (interface-resolution-map
-          (mapcar (lambda (provider)
-                    (cons
-                     (phony--rule-provides provider)
-                     (phony--rule-name provider)))
-                  providers))
+          (seq-keep (lambda (provider)
+                      (and (or (not (phony--rule-module provider))
+                               (phony--module-enabled-p
+                                (phony--get-module (phony--rule-module provider)
+                                                   grammar)))
+                           (cons
+                            (phony--rule-provides provider)
+                            (phony--rule-name provider))))
+                    providers))
          (worklist (mapcar #'phony--rule-name
                            (phony--interactive-rules grammar)))
          (reachable (make-hash-table :test 'eq)))
@@ -655,26 +654,33 @@ applied to the grammar."
         (unless (gethash name reachable)
           (remhash name (phony--grammar-rules grammar)))))))
 
-(defun phony--remove-disabled-rules (grammar)
-  "Remove disabled rules from GRAMMAR.
+(defun phony--seal-disabled-modules (grammar)
+  "Remove external impact of disabled modules in GRAMMAR.
 
-References to disabled rules are replaced with `phony--impossible'."
+This removes interactivity and contributions to rules external to the
+module from rules in disabled modules."
   (dolist (rule (phony--get-rules grammar))
     (when (and (phony--rule-module rule)
                (not (phony--module-enabled-p (phony--get-module
                                               (phony--rule-module rule)
                                               grammar))))
-      (phony--substitute-in-grammar
-       grammar (phony--rule-name rule) 'phony--impossible)
-      (remhash (phony--rule-name rule) (phony--grammar-rules grammar)))))
+      (setf (phony--rule-contributes-to rule)
+            (seq-filter (lambda (name)
+                          (eq
+                           (phony--rule-module rule)
+                           (phony--rule-module
+                            (phony--get-rule name grammar))))
+                        (phony--rule-contributes-to rule)))
+      (when (phony--procedure-rule-p rule)
+        (setf (phony--procedure-rule-interactive-p rule) nil)))))
 
 (defun phony--prepare-grammar (grammar)
   "Prepare GRAMMAR for export.
 
 The returned grammar must not be mutated."
   (let ((prepared (phony--copy-grammar grammar)))
+    (phony--seal-disabled-modules prepared)
     (phony--internalize-contributions prepared)
-    (phony--remove-disabled-rules prepared)
     (phony--remove-unreachable-resolve-interfaces prepared)
     prepared))
 
