@@ -674,6 +674,36 @@ module from rules in disabled modules."
       (when (phony--procedure-rule-p rule)
         (setf (phony--procedure-rule-interactive-p rule) nil)))))
 
+(define-error 'phony--interface-cycle "Cycle in providers")
+
+(defun phony--detect-interface-cycles (grammar)
+  "Error if there is a rule provision cycle in GRAMMAR."
+  (let* ((rules (phony--get-rules grammar))
+         (providers (seq-filter #'phony--rule-provides rules))
+         (provision-map
+          (map-into (seq-map (lambda (provider)
+                               (cons provider
+                                     (phony--get-rule
+                                      (phony--rule-provides provider)
+                                      grammar)))
+                             providers)
+                    '(hash-table :test eq))))
+    (dolist (provider providers)
+      (let ((current provider)
+            (cycle (list provider))
+            (visited (make-hash-table :test 'eq)))
+        (while current
+          (puthash current t visited)
+          (setq current (gethash current provision-map))
+          (push current cycle)
+          (when (gethash current visited)
+            (signal 'phony--interface-cycle
+                    (seq-map
+                     #'phony--rule-name
+                     ;; Emacs 31: drop-while
+                     (seq-drop-while (lambda (rule) (not (eq rule current)))
+                                     (nreverse cycle))))))))))
+
 (defun phony--prepare-grammar (grammar)
   "Prepare GRAMMAR for export.
 
@@ -681,6 +711,7 @@ The returned grammar must not be mutated."
   (let ((prepared (phony--copy-grammar grammar)))
     (phony--seal-disabled-modules prepared)
     (phony--internalize-contributions prepared)
+    (phony--detect-interface-cycles prepared)
     (phony--remove-unreachable-resolve-interfaces prepared)
     prepared))
 

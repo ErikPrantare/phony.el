@@ -166,6 +166,29 @@ If there is no parse, an error is thrown."
     (phony--export-all)
     (should (= (phony-test--evaluate "double three") 6))))
 
+(ert-deftest phony-interface-nestled ()
+  "Nestled interfaces resolve."
+  (phony-test
+   (phony-define-interface number)
+   (phony-define-interface real
+     :provides number)
+   (phony-define-dictionary natural
+     :provides real
+     '(("elite" . 1337)))
+   (phony-defun double ("double" number)
+     (* 2 number))
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double elite") 2674))))
+
+(ert-deftest phony-interface-cycle-detection ()
+  "Cyclic interfaces error."
+  (phony-test
+   (phony-define-interface number
+     :provides number)
+   (phony-defun double ("double" number)
+     (* 2 number))
+   (should-error (phony--export-all) :type 'phony--interface-cycle)))
+
 (ert-deftest phony-interface-uses-enabled-provider ()
   "Only the enabled provider is used for interface."
   (phony-test
