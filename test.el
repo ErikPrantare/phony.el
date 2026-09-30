@@ -189,104 +189,123 @@ If there is no parse, an error is thrown."
      (* 2 number))
    (should-error (phony--export-all) :type 'phony--interface-cycle)))
 
-(ert-deftest phony-interface-uses-enabled-provider ()
-  "Only the enabled provider is used for interface."
+(ert-deftest phony-interface-uses-selected-provider ()
+  "Only the selected provider is used for interface."
   (phony-test
-   (phony-define-interface number)
-   (phony-define-module three)
-   (phony-define-module five)
+   (phony-define-module number-module)
+   (phony-define-interface number
+     :module number-module)
+   (phony-define-module three-module)
+   (phony-define-module five-module)
 
    (phony-defun three "three"
-     :module three
+     :module three-module
      :provides number
      3)
    (phony-defun five "five"
-     :module five
+     :module five-module
      :provides number
      5)
    (phony-defun double ("double" number)
      (* 2 number))
 
-   (phony-disable-module 'five)
-   (phony-enable-module 'three)
+   (phony-provide-from number-module three-module)
    (phony--export-all)
    (should (= (phony-test--evaluate "double three") 6))
    (should-error (phony-test--evaluate "double five"))
 
-   (phony-enable-module 'five)
-   (phony-disable-module 'three)
+   (phony-provide-from number-module five-module)
    (phony--export-all)
    (should-error (phony-test--evaluate "double three"))
    (should (= (phony-test--evaluate "double five") 10))))
 
+(ert-deftest phony-interface-selects-user-provider ()
+  "No-module providers are preferred over module providers."
+  (phony-test
+   (phony-define-module number-module)
+   (phony-define-module some-module)
+   (phony-define-interface number
+     :module number-module)
+   (phony-defun my-number "three"
+     :provides number
+     3)
+   (phony-defun module-number "five"
+     :provides number
+     :module some-module)
+   (phony-defun double ("double" number)
+     (* 2 number))
+
+   (phony-provide-from number-module some-module)
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double three") 6))))
+
 (ert-deftest phony-interface-error-on-multiple-providers ()
   "Interfaces can't resolve on multiple providers."
   (phony-test
-   (phony-define-interface number)
-   (phony-define-module three)
-   (phony-define-module five)
+   (phony-define-module number-module)
+   (phony-define-interface number
+     :module number-module)
+   (phony-define-module my-numbers)
 
    (phony-defun three "three"
-     :module three
+     :module my-numbers
      :provides number
      3)
    (phony-defun five "five"
-     :module five
+     :module my-numbers
      :provides number
      5)
    (phony-defun double ("double" number)
      (* 2 number))
 
-   (phony-enable-module 'five)
-   (phony-enable-module 'three)
+   (phony-provide-from number-module my-numbers)
    (should-error (phony--export-all))))
 
-(ert-deftest phony-interface-error-on-no-provider ()
-  "Reachable interfaces must have one active provider."
+(ert-deftest phony-interface-error-on-no-selected-provider ()
+  "Reachable interfaces must have a selected provider."
   (phony-test
-   (phony-define-interface number)
-   (phony-define-module five)
-   (phony-define-module three)
+   (phony-define-module number-module)
+   (phony-define-interface number
+     :module number-module)
+   (phony-define-module three-module)
+   (phony-define-module five-module)
 
    (phony-defun three "three"
-     :module three
+     :module three-module
      :provides number
      3)
    (phony-defun five "five"
-     :module five
+     :module five-module
      :provides number
      5)
    (phony-defun double ("double" number)
      (* 2 number))
 
-   (phony-disable-module 'five)
-   (phony-disable-module 'three)
    (should-error (phony--export-all))))
 
 (ert-deftest phony-interface-elide-unused ()
   "Interfaces with more or less than one provider is ok if unreachable."
   (phony-test
-   (phony-define-interface number)
-   (phony-define-module three)
-   (phony-define-module five)
+   (phony-define-module number-module)
+   (phony-define-interface number
+     :module number-module)
+   (phony-define-module my-numbers)
 
    (phony-defun three "three"
-     :module three
+     :module my-numbers
      :provides number
      3)
    (phony-defun five "five"
-     :module five
+     :module my-numbers
      :provides number
      5)
    (phony-defun double ("double" "four")
      (* 2 4))
 
-   (phony-enable-module 'five)
-   (phony-enable-module 'three)
    (phony--export-all)
    (should (= (phony-test--evaluate "double four") 8))
-   (phony-disable-module 'five)
-   (phony-disable-module 'three)
+
+   (phony-provide-from number-module my-numbers)
    (phony--export-all)
    (should (= (phony-test--evaluate "double four") 8))))
 

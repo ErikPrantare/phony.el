@@ -136,12 +136,17 @@ is identified when exported to the speech engine."
                (:constructor phony--make-grammar)
                (:copier nil))
   "A collection of rules."
-  (rules (make-hash-table)
-         :type hash-table
-         :documentation "Hash table of rules, indexed by name.")
-  (modules (make-hash-table)
-           :type hash-table
-           :documentation "Hash table of modules, indexed by name."))
+  ( rules (make-hash-table)
+    :type hash-table
+    :documentation "Hash table of rules, indexed by name.")
+  ( modules (make-hash-table)
+    :type hash-table
+    :documentation "Hash table of modules, indexed by name.")
+  ( module-provision (make-hash-table)
+    :type hash-table
+    :documentation "Hash table mapping which modules resolve interfaces where.
+The key module will have its interfaces resolved in the module it maps
+to."))
 
 (defun phony--copy-grammar (grammar)
   "Return a deep copy of GRAMMAR."
@@ -158,7 +163,28 @@ is identified when exported to the speech engine."
 
     (phony--make-grammar
      :rules rules
-     :modules modules)))
+     :modules modules
+     :module-provision
+     (copy-hash-table
+      (phony--grammar-module-provision grammar)))))
+
+(defmacro phony-provide-from (interface-module provider-module)
+  "Set interfaces in INTERFACE-MODULE to find providers in PROVIDER-MODULE.
+
+Providers without a module take precedence over providers in
+PROVIDER-MODULE.
+
+See `phony-define-interface' for information on interfaces and
+providers."
+  `(puthash ',interface-module ',provider-module
+            (phony--grammar-module-provision phony--default-grammar)))
+
+(defun phony--provides-from-p (interface-module provider-module grammar)
+  "Return non-nil if PROVIDER-MODULE resolves INTERFACE-MODULE in GRAMMAR.
+
+PROVIDER-MODULE and INTERFACE-MODULE must be provided by name."
+  (eq (gethash interface-module (phony--grammar-module-provision grammar))
+      provider-module))
 
 (defvar phony--default-grammar (phony--make-grammar)
   "The current user specification of the grammar.")
@@ -595,6 +621,13 @@ This does not resolve interfaces nor contributions to open rules."
     (phony--interface-rule
      '())))
 
+(defun phony--user-rule-p (rule)
+  "Return non-nil if RULE is a user rule.
+
+A rule is a user rule when it is not part of a module.  This is
+interpreted as the rule being part of the user's personal configuration."
+  (not (phony--rule-module rule)))
+
 (defun phony--remove-unreachable-resolve-interfaces (grammar)
   "Remove unreachable rules and replace interfaces with their providers.
 
@@ -614,10 +647,14 @@ applied to the grammar."
           (seq-filter #'phony--rule-provides rules))
          (interface-resolution-map
           (seq-keep (lambda (provider)
-                      (and (or (not (phony--rule-module provider))
-                               (phony--module-enabled-p
-                                (phony--get-module (phony--rule-module provider)
-                                                   grammar)))
+                      (and (or (phony--user-rule-p provider)
+                               (let ((provider-module (phony--rule-module provider))
+                                     (interface-module (phony--rule-module
+                                                        (phony--get-rule
+                                                         (phony--rule-provides provider)
+                                                         grammar))))
+                                 (phony--provides-from-p
+                                  interface-module provider-module grammar)))
                            (cons
                             (phony--rule-provides provider)
                             (phony--rule-name provider))))
@@ -638,13 +675,21 @@ applied to the grammar."
                                          (and (eq (car entry) current)
                                               (cdr entry)))
                                        interface-resolution-map)))
+              ;; If rules in the user's configuration provide for the
+              ;; interface, they take precedence.
+              (when-let* ((user-providers
+                           (seq-filter (lambda (provider)
+                                         (phony--user-rule-p
+                                          (phony--get-rule provider grammar)))
+                                       providers)))
+                (setq providers user-providers))
               (when (> (length providers) 1)
-                (error "More than one enabled provider available for %s\nProviders: %s"
+                (error "More than one eligible provider available for %s\nProviders: %s"
                        current
                        (string-join (seq-map #'symbol-name providers) ", ")))
               (when (= (length providers) 0)
-                ;; TODO: Hint about disabled providers
-                (error "No enabled provider available for %s"
+                ;; TODO: Hint about providers in non-selected modules
+                (error "No eligible provider available for %s"
                        current))
               (phony--replace-in-grammar grammar current (car providers))
               (unless (gethash (car providers) reachable)
@@ -1065,10 +1110,13 @@ Interface rules do not carry a definition.  Instead, their behaviour is
 provided by other rules through the `:provides' keyword.  Such rules are
 providers of the interface.
 
-Only one provider may be enabled at a time.  If there are multiple
-providers defined, you may choose which to enable by invoking
-`phony-enable-module' or `phony-disable-module' on the module containing
-the provider.  See `phony-module' for more information on modules.
+The provider can be selected by applying `phony-provide-from' to the
+module of the interface and the module of the provider.  See
+`phony-module' for more information on modules.
+
+If a provider has no module, as is the usual case in a user's
+configuration, it is picked as the provider for the interface.  This has
+precedence over `phony-provide-from'.
 
 See `phony-defun' for a list of optional arguments available across all
 rule types.
