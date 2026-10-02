@@ -88,8 +88,7 @@ exporters do nothing, and export request debounce is turned off."
            (phony-export-function
             (lambda (_analysis-data) (cl-incf rule-export-count))))
       (phony-mode 1)
-      (cl-letf (((symbol-function 'server-running-p) #'always))
-        (phony-define-open-rule test-open-rule))
+      (phony-define-open-rule test-open-rule)
       (should (= rule-export-count 1)))))
 
 (ert-deftest phony-procedure-rule-definition-triggers-export ()
@@ -136,6 +135,23 @@ If there is no parse, an error is thrown."
     (unless parses
       (error "No parse available for '%s'" sentence))
     (phony--evaluate-ast (caar parses))))
+
+(ert-deftest phony-dictionary-modification-parses ()
+  "Changing a dictionary reflects immediately in the parser."
+  ;; We need to figure out how to test dictionary exports.  Currently
+  ;; everything is just ignored.
+  (ert-skip "Not implemented in testing")
+  (phony-test
+    (phony-mode 1)
+    (phony-define-dictionary lol
+      '(("lol" . 1337)))
+    (phony-defun somelol (lol)
+      lol)
+    (should (= (phony-test--evaluate "lol") 1337))
+    (should-error (phony-test--evaluate "lmao"))
+    (setf (phony-dictionary-get "lmao" 'lol) 42)
+    (should (= (phony-test--evaluate "lol") 1337))
+    (should (= (phony-test--evaluate "lmao") 42))))
 
 (ert-deftest phony-open-rule-contribution ()
   "Rule contributions work."
