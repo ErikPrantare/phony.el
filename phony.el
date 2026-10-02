@@ -132,6 +132,27 @@ is identified when exported to the speech engine."
             (replace-regexp-in-string
              (rx (not alnum)) "_" (symbol-name name)))))
 
+(cl-defstruct (phony--grammar-configuration
+               (:constructor phony--make-grammar-configuration)
+               (:copier nil))
+  "A configuration for a grammar."
+  ( modules '()
+    :type list
+    :documentation "List of names of modules to use.
+See `phony-define-module' for info on modules.")
+  ( enabled-modules '()
+    :type list
+    :documentation "List of names  of modules that are enabled.")
+  ( module-provision (make-hash-table :test 'eq)
+    :type hash-table
+    :documentation "Hash table mapping which modules resolve interfaces where.
+The key names the module whose interfaces are provided in the module
+named by the value name."))
+
+(defvar phony--default-grammar-configuration
+  (phony--make-grammar-configuration)
+  "The current user grammar configuration.")
+
 (cl-defstruct (phony--grammar
                (:constructor phony--make-grammar)
                (:copier nil))
@@ -176,8 +197,12 @@ PROVIDER-MODULE.
 
 See `phony-define-interface' for information on interfaces and
 providers."
-  `(puthash ',interface-module ',provider-module
-            (phony--grammar-module-provision phony--default-grammar)))
+  `(progn
+     (puthash ',interface-module ',provider-module
+              (phony--grammar-module-provision phony--default-grammar))
+     (puthash ',interface-module ',provider-module
+              (phony--grammar-configuration-module-provision
+               phony--default-grammar-configuration))))
 
 (defun phony--provides-from-p (interface-module provider-module grammar)
   "Return non-nil if PROVIDER-MODULE resolves INTERFACE-MODULE in GRAMMAR.
@@ -255,16 +280,26 @@ than one hardlink."
 UTTERANCE is a string specifying how this module is referred to as an
 utterance.  FILE, if specified, declares that this module should be the
 default for all rules defined in FILE."
-  (puthash name
-           (phony--make-module
-            :name name
-            :utterance utterance
-            :file-name file
-            :enabled-p (memq name (multisession-value phony--enabled-modules)))
-           (phony--grammar-modules phony--default-grammar))
-  (when utterance
-    (phony-dictionary-put utterance 'phony-module name))
-  name)
+  (let ((enabled (memq name (multisession-value phony--enabled-modules))))
+    (puthash name
+             (phony--make-module
+              :name name
+              :utterance utterance
+              :file-name file
+              :enabled-p enabled)
+             (phony--grammar-modules phony--default-grammar))
+    (cl-pushnew
+     name
+     (phony--grammar-configuration-modules
+      phony--default-grammar-configuration))
+    (when enabled
+      (cl-pushnew
+       name
+       (phony--grammar-configuration-enabled-modules
+        phony--default-grammar-configuration)))
+    (when utterance
+      (phony-dictionary-put utterance 'phony-module name))
+    name))
 
 (defmacro phony-define-module (name &optional utterance)
   "Define a module NAME.
@@ -349,6 +384,8 @@ non-interactive and don't contribute to open rules."
   (cl-assert (phony--get-module name phony--default-grammar) nil
              "No module named %s" name)
   (setf (phony--module-enabled-p (phony--get-module name phony--default-grammar)) t)
+  (cl-pushnew name (phony--grammar-configuration-enabled-modules
+                    phony--default-grammar-configuration))
   (when persist
     (cl-pushnew name (multisession-value phony--enabled-modules)))
   (phony-request-export)
@@ -374,6 +411,10 @@ contribute to open rules."
   (setf (phony--module-enabled-p
          (phony--get-module name phony--default-grammar))
         nil)
+  (setf (phony--grammar-configuration-enabled-modules
+         phony--default-grammar-configuration)
+        (delq name (phony--grammar-configuration-enabled-modules
+                    phony--default-grammar-configuration)))
   (when persist
     (setf (multisession-value phony--enabled-modules)
           (delq name (multisession-value phony--enabled-modules))))
