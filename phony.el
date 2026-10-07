@@ -1214,6 +1214,7 @@ returned in the same order that they occur in ELEMENT."
 
 (defun phony--dependencies (rule-or-name)
   "Return list of names of the rules RULE-OR-NAME depends on."
+  ;; TODO: Remove or pass grammar explicitly
   (phony--products
    (phony--normalize-rule rule-or-name)))
 

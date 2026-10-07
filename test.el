@@ -171,17 +171,36 @@ If there is no parse, an error is thrown."
     (should (= (phony-test--evaluate "add five and five") 10))
     (should (= (phony-test--evaluate "add three and three") 6))))
 
+(ert-deftest phony-open-rule-contribution-to-module ()
+  "Rule contributions work."
+  (phony-test
+   (phony-define-module module)
+   (phony-define-open-rule number
+     :module module)
+    (phony-defun three "three"
+      :contributes-to number
+      3)
+    (phony-defun five "five"
+      :contributes-to number
+      5)
+    (phony-defun add ("add" (first number) "and" (second number))
+      (+ first second))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "add five and three") 8))
+    (should (= (phony-test--evaluate "add five and five") 10))
+    (should (= (phony-test--evaluate "add three and three") 6))))
+
 (ert-deftest phony-interface-uses-provider ()
   "Providers are used in place of interfaces."
   (phony-test
-    (phony-define-interface number)
-    (phony-defun my-number "three"
-      :provides number
-      3)
-    (phony-defun double ("double" number)
-      (* 2 number))
-    (phony--export-all)
-    (should (= (phony-test--evaluate "double three") 6))))
+   (phony-define-interface number)
+   (phony-defun my-number "three"
+     :provides number
+     3)
+   (phony-defun double ("double" number)
+     (* 2 number))
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double three") 6))))
 
 (ert-deftest phony-interface-nestled ()
   "Nestled interfaces resolve."
