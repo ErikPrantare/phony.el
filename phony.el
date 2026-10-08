@@ -805,6 +805,20 @@ module from rules in disabled modules."
                      (seq-drop-while (lambda (rule) (not (eq rule current)))
                                      (nreverse cycle))))))))))
 
+(defun phony--canonicalize-grammar (grammar)
+  "Rewrite GRAMMAR into canonical form.
+
+In canonical form, all alternatives in open rules are order
+lexicographically on name."
+  (maphash
+   (lambda (_name rule)
+     (when (phony--open-rule-p rule)
+       (setf (phony--open-rule-alternatives rule)
+             (seq-sort-by
+              #'symbol-name #'string<
+              (phony--open-rule-alternatives rule)))))
+   (phony--grammar-rules grammar)))
+
 (defun phony--prepare-grammar (grammar)
   "Prepare GRAMMAR for export.
 
@@ -814,6 +828,7 @@ The returned grammar must not be mutated."
     (phony--internalize-contributions prepared)
     (phony--detect-interface-cycles prepared)
     (phony--remove-unreachable-resolve-interfaces prepared)
+    (phony--canonicalize-grammar prepared)
     prepared))
 
 (defvar phony--exported-grammar (phony--make-grammar)
