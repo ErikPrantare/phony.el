@@ -527,7 +527,12 @@ Constrain matching to the end of an utterance, like `$' in regex."))
                (:constructor phony--make-interface-rule))
   "An interface rule to be replaced by a provider.
 
-See documentation for `phony-define-interface'.")
+See documentation for `phony-define-interface'."
+  ( default nil
+    :type symbol
+    :documentation
+    "The default provider for this interface.
+If this is nil, there is no default provider."))
 
 (defun phony--copy-rule-base-inplace (source target)
   "Copy base `phony--rule' slots from SOURCE into TARGET."
@@ -572,7 +577,8 @@ See documentation for `phony-define-interface'.")
 
 (cl-defmethod phony--copy-rule ((rule phony--interface-rule))
   "Return a deep copy of RULE."
-  (let ((copy (phony--make-interface-rule)))
+  (let ((copy (phony--make-interface-rule
+               :default (phony--interface-rule-default rule))))
     (phony--copy-rule-base-inplace rule copy)))
 
 (defun phony--normalize-rule (rule-or-name)
@@ -724,6 +730,15 @@ applied to the grammar."
                                           (phony--get-rule provider grammar)))
                                        providers)))
                 (setq providers user-providers))
+              ;; :default provider has lowest priority
+              (unless providers
+                (when-let* ((default
+                             (phony--interface-rule-default
+                              (phony--get-rule current grammar))))
+                  (unless (phony--get-rule default grammar)
+                    (error "The default provider `%s' for interface %s is not defined"
+                           default current))
+                  (setq providers (list default))))
               (when (> (length providers) 1)
                 (error "More than one eligible provider available for %s\nProviders: %s"
                        current
@@ -1139,6 +1154,9 @@ rule types.
   "Define an interface rule from ARGUMENTS.
 
 See `phony-define-interface' for documentation on interface rules."
+  (when-let* ((default (map-elt arguments :default)))
+    (unless (symbolp default)
+      (error ":default keyword argument must be an unquoted symbol")))
   (phony--add-new-rule #'phony--make-interface-rule arguments)
   (phony-request-export)
   (map-elt arguments :name))
@@ -1151,13 +1169,23 @@ Interface rules do not carry a definition.  Instead, their behaviour is
 provided by other rules through the `:provides' keyword.  Such rules are
 providers of the interface.
 
-The provider can be selected by applying `phony-provide-from' to the
-module of the interface and the module of the provider.  See
-`phony-module' for more information on modules.
+Providers are looked up in the following order:
 
-If a provider has no module, as is the usual case in a user's
-configuration, it is picked as the provider for the interface.  This has
-precedence over `phony-provide-from'.
+- If there is a provider without a module, use that rule.  Such a
+  provider is called a user provider, and is assumed to be part of the
+  user's configuration.
+
+- Otherwise, if a module has been selected for provider lookup with
+  `phony-provide-from', use the provider from that module.
+
+- Otherwise, if the :default optional argument has been given to this
+  interface, use that provider.
+
+Optional arguments can be given with keyword arguments KEY and VALUE.
+Optional arguments are:
+
+  :default           The default provider for this interface.  Defaults
+                     to nil, which means no default.
 
 See `phony-defun' for a list of optional arguments available across all
 rule types.

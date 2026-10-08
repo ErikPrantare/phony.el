@@ -236,8 +236,8 @@ If there is no parse, an error is thrown."
    (should-error (phony-test--evaluate "double three"))
    (should (= (phony-test--evaluate "double five") 10))))
 
-(ert-deftest phony-interface-selects-user-provider ()
-  "No-module providers are preferred over module providers."
+(ert-deftest phony-interface-selected-vs-user-provider ()
+  "User providers are preferred over module providers."
   (phony-test
    (phony-define-module number-module)
    (phony-define-module some-module)
@@ -339,6 +339,80 @@ If there is no parse, an error is thrown."
 
    (phony--export-all)
    (should (= (phony-test--evaluate "add three and three") 6))))
+
+(ert-deftest phony-interface-default-provider ()
+  "Interface default providers are picked by default."
+  (phony-test
+   (phony-define-module interface-module)
+   (phony-define-module provider-module)
+   (phony-define-interface number
+     :default three
+     :module interface-module)
+
+   (phony-defun three "three"
+     :provides number
+     :module provider-module
+     3)
+   (phony-defun five "five"
+     :provides number
+     :module provider-module
+     5)
+
+   (phony-defun double ("double" number)
+     (* 2 number))
+
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double three") 6))
+   (should-error (phony-test--evaluate "double five"))))
+
+(ert-deftest phony-interface-default-provider-vs-selection ()
+  "Interface default providers are lower priority than user selections."
+  (phony-test
+   (phony-define-module interface-module)
+   (phony-define-module provider-module)
+   (phony-define-interface number
+     :default three
+     :module interface-module)
+
+   (phony-defun three "three"
+     :provides number
+     :module interface-module
+     3)
+   (phony-defun five "five"
+     :provides number
+     :module provider-module
+     5)
+
+   (phony-defun sum ("double" number)
+     (* 2 number))
+
+   (phony-provide-from interface-module provider-module)
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double five") 10))
+   (should-error (phony-test--evaluate "double three"))))
+
+(ert-deftest phony-interface-default-provider-vs-user-provider ()
+  "Interface default providers are lower priority than user providers."
+  (phony-test
+   (phony-define-module interface-module)
+   (phony-define-interface number
+     :default three
+     :module interface-module)
+
+   (phony-defun three "three"
+     :provides number
+     :module interface-module
+     3)
+   (phony-defun five "five"
+     :provides number
+     5)
+
+   (phony-defun sum ("double" number)
+     (* 2 number))
+
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double five") 10))
+   (should-error (phony-test--evaluate "double three"))))
 
 (ert-deftest phony-builtin-word ()
   "Word builtins parse."

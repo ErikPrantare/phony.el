@@ -1,4 +1,9 @@
 * NEXT
+- There is now a new interface rule type.  Interfaces are defined with
+  ~phony-define-interface~, and allow the user to choose between
+  different provider rules, or to provide their own, to customize the
+  implementation of parts of the grammar.  See the documentation of
+  ~phony-define-interface~ for more information.
 - Modules can now be defined without associating them to the rules of
   a file.  To define such a module, use ~phony-define-module~.  To put
   a rule in a specific module, you can use the ~:module~ argument for
