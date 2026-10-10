@@ -652,7 +652,7 @@ This function assumes that contributions have been internalized.  See
   "Return the names of the rules that may occur as submatches of RULE.
 
 This does not resolve interfaces nor contributions to open rules."
-  (cl-etypecase rule
+  (cl-typecase rule
     (phony--procedure-rule
      (seq-map #'phony--element-rule-name
               (phony--collect #'phony--element-rule-p
@@ -662,7 +662,10 @@ This does not resolve interfaces nor contributions to open rules."
     (phony--dictionary
      '())
     (phony--interface-rule
-     '())))
+     '())
+    (t
+     (error "Internal phony error, please submit a bug report: `phony--products' typecase failed for %s"
+            rule))))
 
 (defun phony--user-rule-p (rule)
   "Return non-nil if RULE is a user rule.
@@ -710,6 +713,9 @@ applied to the grammar."
         (unless (gethash current reachable)
           (puthash current current reachable)
           (dolist (task (phony--products (phony--get-rule current grammar)))
+            (unless (phony--get-rule task grammar)
+              (error "Rule `%s' references undefined rule `%s'"
+                     current task))
             (unless (gethash task reachable)
               (push task worklist)))
           (when (phony--interface-rule-p
@@ -815,12 +821,27 @@ lexicographically on name."
               (phony--open-rule-alternatives rule)))))
    (phony--grammar-rules grammar)))
 
+(defun phony--detect-non-open-contributions (grammar)
+  "Throw error if GRAMMAR contains rules who contribute to non-open rules.
+
+This function also checks for contributions to non-existent rules."
+  (dolist (rule (phony--get-rules grammar))
+    (dolist (contribution (phony--rule-contributes-to rule))
+      (let ((lookup (phony--get-rule contribution grammar)))
+        (unless lookup
+          (error "Rule `%s' contributes to undefined rule `%s'"
+                 (phony--rule-name rule) contribution))
+        (unless (phony--open-rule-p lookup)
+          (error "Rule `%s' contributes to non-open rule `%s'"
+                 (phony--rule-name rule) contribution))))))
+
 (defun phony--prepare-grammar (grammar)
   "Prepare GRAMMAR for export.
 
 The returned grammar must not be mutated."
   (let ((prepared (phony--copy-grammar grammar)))
     (phony--seal-disabled-modules prepared)
+    (phony--detect-non-open-contributions prepared)
     (phony--internalize-contributions prepared)
     (phony--detect-interface-cycles prepared)
     (phony--remove-unreachable-resolve-interfaces prepared)
@@ -934,13 +955,25 @@ interface sugar to the form used internally."
 
   (phony--add-rule (apply constructor parameters)))
 
+(defun phony--ensure-dictionary (dictionary)
+  "Return the dictionary rule named DICTIONARY in `phony--default-grammar'.
+
+If the rule does not exist or is not a dictionary, an error is
+signalled."
+  (let ((rule (phony--get-rule dictionary phony--default-grammar)))
+    (unless rule
+      (error "No rule named `%s'" dictionary))
+    (unless (phony--dictionary-p rule)
+      (error "Rule `%s' is not a dictionary" dictionary))
+    rule))
+
 (defun phony-dictionary-get (utterance dictionary)
   "Return the value corresponding to UTTERANCE in DICTIONARY.
 If no such value exists, return nil.
 
 DICTIONARY is the name of the dictionary to modify."
   (alist-get utterance
-             (phony--dictionary-mapping (phony--get-rule dictionary))
+             (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
              nil nil #'string-equal))
 
 (defun phony-dictionary-put (utterance dictionary value)
@@ -951,7 +984,7 @@ DICTIONARY is the name of the dictionary to modify.
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
   (setf (alist-get utterance
-                   (phony--dictionary-mapping (phony--get-rule dictionary))
+                   (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
                    nil nil #'string-equal)
         value)
   (phony--request-export-dictionaries))
@@ -964,7 +997,7 @@ DICTIONARY is the name of the dictionary to modify.
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
   (setf (alist-get utterance
-                   (phony--dictionary-mapping (phony--get-rule dictionary))
+                   (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
                    nil t #'string-equal)
         nil)
   (phony--request-export-dictionaries))
@@ -973,7 +1006,7 @@ recognition engine."
   "Return the mapping of DICTIONARY as an alist.
 
 DICTIONARY is the name of the dictionary to modify."
-  (phony--dictionary-mapping (phony--get-rule dictionary)))
+  (phony--dictionary-mapping (phony--ensure-dictionary dictionary)))
 
 (defun phony-set-dictionary-alist (dictionary alist)
   "Set the mapping of DICTIONARY to ALIST.
@@ -982,7 +1015,7 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (phony--dictionary-mapping (phony--get-rule dictionary)) alist)
+  (setf (phony--dictionary-mapping (phony--ensure-dictionary dictionary)) alist)
   (phony--request-export-dictionaries))
 
 (gv-define-setter phony-dictionary-get (value utterance dictionary)
