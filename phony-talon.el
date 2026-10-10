@@ -26,7 +26,7 @@
 
 ;;; Code:
 
-(require 'phony)
+(require 'phony-core)
 
 (cl-defgeneric phony-talon--capture-name (element)
   "Return the Talon capture name for ELEMENT."

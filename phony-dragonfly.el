@@ -26,7 +26,7 @@
 
 ;;; Code:
 
-(require 'phony)
+(require 'phony-core)
 (require 'dired-aux)
 (require 'json)
 (require 'python)

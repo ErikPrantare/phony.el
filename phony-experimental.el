@@ -25,7 +25,7 @@
 
 ;;; Code:
 
-(require 'phony)
+(require 'phony-core)
 (require 'xref)
 
 (defun phony--function-calls-at (&optional position)
