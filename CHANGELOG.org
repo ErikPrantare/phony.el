@@ -4,6 +4,16 @@
   different provider rules, or to provide their own, to customize the
   implementation of parts of the grammar.  See the documentation of
   ~phony-define-interface~ for more information.
+- Standard library added.  This defines the rules ~word~, ~phrase~,
+  ~digit~, ~number~, ~letter~, ~non-alphanumeric-character~, and
+  ~graphical-character~.  The standard library is loaded
+  automatically.
+  - To use the talon community implementations instead, you should add
+    #+begin_src elisp
+      (phony-provide-from phony-stdlib phony-stdlib-talon-community)
+    #+end_src
+    to your configuration.  The previous library named
+    ~phony-talon-community-bindings~ has been removed.
 - Modules can now be defined without associating them to the rules of
   a file.  To define such a module, use ~phony-define-module~.  To put
   a rule in a specific module, you can use the ~:module~ argument for

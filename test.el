@@ -539,4 +539,22 @@ If there is no parse, an error is thrown."
                (error "Syntax error in python: %s" (buffer-string)))))
        (delete-directory directory t)))))
 
+(ert-deftest phony-stdlib-number-parsing ()
+  "Numbers parse correctly."
+  ;; TODO: Test against utterances instead of number sequences
+  (should (equal (phony-stdlib--parse-number '(100 5 1000)) 105000))
+  (should (equal (phony-stdlib--parse-number '(1 1000000 5 100 1 1000)) 1501000))
+  (should (equal (phony-stdlib--parse-number '(1 1000000 5 100 1 1000 1 100 6)) 1501106))
+  (should (equal (phony-stdlib--parse-number '(1 2 3)) 123))
+  (should (equal (phony-stdlib--parse-number '(1 23)) 123))
+  (should (equal (phony-stdlib--parse-number '(10 4)) 104))
+  (should (equal (phony-stdlib--parse-number '(10 60 6)) 1066))
+  (should (equal (phony-stdlib--parse-number '(19 0 6)) 1906))
+  (should (equal (phony-stdlib--parse-number '(20 0 1)) 2001))
+  (should (equal (phony-stdlib--parse-number '(20 20)) 2020))
+  (should (equal (phony-stdlib--parse-number '(1 1000 1)) 1001))
+  (should (equal (phony-stdlib--parse-number '(1 1000 10)) 1010))
+  (should (equal (phony-stdlib--parse-number '(1 100 20 3 1000 4 100 50 6)) 123456))
+  (should (equal (phony-stdlib--parse-number '(1 20 3 1000 4 50 6)) 123456)))
+
 ;;; test.el ends here

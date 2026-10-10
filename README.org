@@ -31,7 +31,8 @@ With such a function defined, uttering "hello emacs" will display
   - [[#procedure-rules][Procedure rules]]
   - [[#dictionaries][Dictionaries]]
   - [[#open-rule][Open rule]]
-- [[#bindings-for-talon-community-rules][Bindings for talon community rules]]
+- [[#standard-library][Standard library]]
+  - [[#overrides-for-talon-community-rules][Overrides for talon community rules]]
 - [[#pre-defined-rulesets][Pre-defined rulesets]]
 - [[#versioning-system][Versioning system]]
 :END:
@@ -190,18 +191,36 @@ is provided.
 For more information on open rules, read the function documentation
 for ~phony-define-open-rule~.
 
-* Bindings for talon community rules
+* Standard library
 :PROPERTIES:
-:CUSTOM_ID: bindings-for-talon-community-rules
+:CUSTOM_ID: standard-library
 :END:
-If you're using talon community, some basic bindings are given in
-~phony-talon-community-bindings.el~.  Add
+The standard library provides some basic rules that can be useful for
+defining commands.
+
+- ~word~, ~phrase~ matches a word or a sequence of words,
+  respectively.  Both return a string.
+- ~digit~ matches a digit, e.g. "one", "eight" and "zero".
+- ~number~ matches a number.  Examples of numbers are "five" (5)
+  "twelve" (12), "one hundred one" (101), "five zero five" (505),
+  "thousand three hundred thirty seven" (1337) and "one thousand and
+  three hundred and thirty seven" (1337).
+- ~letter~ matches a letter.
+- ~non-alphanumeric-character~ matches a graphical character that is
+  not a letter or digit.
+- ~graphical-character~ matches a graphical character (letters,
+  digits, and other visual characters).
+
+** Overrides for talon community rules
+:PROPERTIES:
+:CUSTOM_ID: overrides-for-talon-community-rules
+:END:
+If you're using talon community and want to use their captures in
+place of the above, add the following to your configuration:
 
 #+begin_src elisp
-  (use-package phony-talon-community-bindings)
+  (phony-provide-from phony-stdlib phony-stdlib-talon-community)
 #+end_src
-
-to your configuration to import them.
 
 * Pre-defined rulesets
 :PROPERTIES:
@@ -209,7 +228,7 @@ to your configuration to import them.
 :END:
 - [[https://github.com/ErikPrantare/cursorfree.el][cursorfree.el]]: Defines a command language for editing and
   navigation.
-- Have a published ruleset?  Open a pull request to add it here.
+- Have a published ruleset?  Open a pull request to add it here!
 
 * Versioning system
 :PROPERTIES:
