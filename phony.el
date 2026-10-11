@@ -6,7 +6,7 @@
 ;; Keywords: files
 ;; Version: 1.0.1
 ;; Homepage: https://github.com/ErikPrantare/phony.el
-;; Package-Requires: ((emacs "29.1") (simulacrum "1.0.0"))
+;; Package-Requires: ((emacs "29.1") (simulacrum "2.0.0"))
 ;; Created: 13 Jul 2024
 
 ;; This program is free software; you can redistribute it and/or

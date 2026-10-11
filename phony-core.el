@@ -80,6 +80,10 @@ representing the recognized utterance."
 
 (simulacrum-define-event-type phony-command)
 
+(simulacrum-define-command phony--evaluate-ast-command (ast)
+  "Evaluate AST."
+  (phony--evaluate-ast ast))
+
 ;;;###autoload
 (define-minor-mode phony-mode
   "Toggle phony mode.
@@ -91,8 +95,7 @@ recognition backend."
   (if phony-mode
       (progn
         (phony-request-export)
-        (keymap-global-set "<phony-command>"
-                           (simulacrum-command #'phony--evaluate-ast)))
+        (keymap-global-set "<phony-command>" #'phony--evaluate-ast-command))
     (keymap-global-unset "<phony-command>" t)))
 
 (defun phony-generate-event (ast)
