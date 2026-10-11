@@ -130,7 +130,7 @@
                 (phony--analysis-data-linear-extension analysis-data))))
     (rules
      . ,(seq-map #'phony-dragonfly--serialize-rule
-                 (phony--get-rules)))))
+                 (phony--get-rules (phony--analysis-data-grammar analysis-data))))))
 
 (defun phony-dragonfly-export (analysis-data)
   ;; checkdoc-params: (analysis-data)

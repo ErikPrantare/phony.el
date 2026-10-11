@@ -577,13 +577,6 @@ If this is nil, there is no default provider."))
                :default (phony--interface-rule-default rule))))
     (phony--copy-rule-base-inplace rule copy)))
 
-(defun phony--normalize-rule (rule-or-name)
-  "Return rule specified by RULE-OR-NAME.
-RULE-OR-NAME must be a `phony--rule' or a symbol naming a rule."
-  (if (symbolp rule-or-name)
-      (phony--get-rule rule-or-name)
-    rule-or-name))
-
 (defun phony--internalize-contributions (grammar)
   "Insert all contributions to open rules as alternatives.
 
@@ -854,46 +847,29 @@ The returned grammar must not be mutated."
 This is `phony--default-grammar' after going through preparation.  The
 grammar object should never be mutated.")
 
-(defun phony--get-rules (&optional grammar)
-  "Return a list containing the rules of GRAMMAR.
-
-If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
-  (setq grammar (or grammar phony--default-grammar))
+(defun phony--get-rules (grammar)
+  "Return a list containing the rules of GRAMMAR."
   (hash-table-values (phony--grammar-rules grammar)))
 
-(defun phony--get-rule (name &optional grammar)
+(defun phony--get-rule (name grammar)
   "Return the rule named NAME in GRAMMAR.
-Return nil if no such rule exists.
-
-If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'."
-  (setq grammar (or grammar phony--default-grammar))
+Return nil if no such rule exists."
   (gethash name (phony--grammar-rules grammar)))
 
-(defun phony--add-rule (rule &optional grammar)
+(defun phony--add-rule (rule grammar)
   "Add RULE to GRAMMAR.
 
-If GRAMMAR is omitted or nil, it defaults to `phony--default-grammar'.
 If the module of RULE is nil but is declared in a file with a
 `phony-module' declaration, then the module of RULE is set to that
 module.
 
 This function must be invoked every time a rule is declared."
-  (setq grammar (or grammar phony--default-grammar))
   (unless (phony--rule-module rule)
     (setf (phony--rule-module rule) (phony--current-module)))
   (setf (phony--rule-file-name rule) (phony--current-file-name))
   (puthash (phony--rule-name rule)
            rule
            (phony--grammar-rules grammar)))
-
-(defun phony--normalize-rule-name (rule-or-name)
-  "Return the name of RULE-OR-NAME.
-
-If RULE-OR-NAME is a rule object, the name of that rule is returned.  If
-it is a symbol, RULE-OR-NAME is returned."
-  (if (symbolp rule-or-name)
-      rule-or-name
-    (phony--rule-name rule-or-name)))
 
 (defun phony-remove-rule (rule-name)
   "Remove rule named RULE-NAME."
@@ -953,7 +929,8 @@ interface sugar to the form used internally."
     (unless (symbolp module)
       (error ":module keyword argument must be a symbol")))
 
-  (phony--add-rule (apply constructor parameters)))
+  (phony--add-rule (apply constructor parameters)
+                   phony--default-grammar))
 
 (defun phony--ensure-dictionary (dictionary)
   "Return the dictionary rule named DICTIONARY in `phony--default-grammar'.
@@ -1058,7 +1035,8 @@ dictionaries."
   (with-temp-file (phony--output-directory "dictionaries.json")
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
-             (seq-filter #'phony--dictionary-p (phony--get-rules))))))
+             (seq-filter #'phony--dictionary-p
+                         (phony--get-rules phony--default-grammar))))))
 
 (defvar phony--dictionary-export-function #'phony--write-dictionaries-to-file
   "Function called to export dictionaries.")
@@ -1151,15 +1129,6 @@ rule types.
                       :documentation ,documentation
                       :mapping ,mapping)
                 ',optional-arguments)))))
-
-(defun phony--add-alternative (alternative open-rule-name)
-  "Add rule ALTERNATIVE as an alternative for open rule OPEN-RULE-NAME."
-  (let ((rule (phony--get-rule open-rule-name)))
-    (unless rule
-      (error "No rule %s defined" open-rule-name))
-    (unless (phony--open-rule-p rule)
-      (error "No open rule %s defined" open-rule-name))
-    (cl-pushnew alternative (phony--open-rule-alternatives rule))))
 
 (cl-defun phony--define-open-rule (arguments)
   "Define an open rule from ARGUMENTS.
@@ -1256,38 +1225,10 @@ returned in the same order that they occur in ELEMENT."
         (cons element collected-children)
       collected-children)))
 
-(defun phony--dependencies (rule-or-name)
-  "Return list of names of the rules RULE-OR-NAME depends on."
-  ;; TODO: Remove or pass grammar explicitly
-  (phony--products
-   (phony--normalize-rule rule-or-name)))
-
-(cl-defgeneric phony--references (rule-or-name)
-  "Return list of rules mentioned by RULE-OR-NAME in its declaration.
-
-Each element of the list is a cons cell (NAME . IS-PRODUCER).  NAME is
-the name of the mentioned rule.  If IS-PRODUCER is nil, NAME is a
-production of RULE-OR-NAME, otherwise it is a producer of it."
-  (let ((rule (phony--normalize-rule rule-or-name)))
-    (append (seq-map (lambda (reference) (cons reference nil))
-                     (phony--dependencies rule))
-            (seq-map (lambda (reference) (cons reference t))
-                     (phony--rule-contributes-to rule)))))
-
 (cl-defstruct (phony--analysis-data
                (:constructor nil)
                (:constructor phony--make-analysis-data))
   "Storage struct for results of statically analyzing the grammar."
-  (mentions
-   (make-hash-table)
-   :type hash-table
-   :documentation "Hash table mapping a rule to a list of rules it names in its declaration.
-If a rule is mentioned multiple times, it is duplicated.")
-  (mentioners
-   (make-hash-table)
-   :type hash-table
-   :documentation "Hash table mapping a rule to a list of rules that name it in their declaration.
-If a rule mentions this rule multiple times, it is duplicated.")
   (productions
    (make-hash-table)
    :type hash-table
@@ -1320,41 +1261,21 @@ are guaranteed to only depend on preceding rules.")
    :type phony--grammar
    :documentation "The grammar that was analyzed."))
 
-(defun phony--get-mentions (analysis-data rule-or-name)
+(defun phony--get-productions (analysis-data rule)
   ;; checkdoc-params: (analysis-data)
-  "Get list of rules mentioned by RULE-OR-NAME in its declaration.
-
-If a rule is mentioned multiple times, it will also occur as many times
-in the returned list."
-  (gethash (phony--normalize-rule rule-or-name)
-           (phony--analysis-data-mentions analysis-data)))
-
-(defun phony--get-mentioners (analysis-data rule-or-name)
-  ;; checkdoc-params: (analysis-data)
-  "Get list of rules that mention RULE-OR-NAME in their declaration.
-
-If a rule mentions RULE-OR-NAME multiple times, it will also occur as
-many times in the returned list."
-  (gethash (phony--normalize-rule rule-or-name)
-           (phony--analysis-data-mentioners analysis-data)))
-
-(defun phony--get-productions (analysis-data rule-or-name)
-  ;; checkdoc-params: (analysis-data)
-  "Get list of rules that are submatches of RULE-OR-NAME.
+  "Get list of rules that are submatches of RULE.
 
 If a rule is a submatch multiple times, it will also occur as many times
 in the returned list."
-  (gethash (phony--normalize-rule rule-or-name)
-           (phony--analysis-data-productions analysis-data)))
+  (gethash rule (phony--analysis-data-productions analysis-data)))
 
-(defun phony--get-producers (analysis-data rule-or-name)
+(defun phony--get-producers (analysis-data rule)
   ;; checkdoc-params: (analysis-data)
-  "Get list of rules whose match includes RULE-OR-NAME as a submatch.
+  "Get list of rules whose match includes RULE as a submatch.
 
-If a rule includes RULE-OR-NAME multiple times, it will also occur as
-many times in the returned list."
-  (gethash (phony--normalize-rule rule-or-name)
-           (phony--analysis-data-producers analysis-data)))
+If a rule includes RULE multiple times, it will also occur as many times
+in the returned list."
+  (gethash rule (phony--analysis-data-producers analysis-data)))
 
 (defun phony--maximum-producer-multiplicity (analysis-data rule)
   ;; checkdoc-params: (analysis-data)
@@ -1374,40 +1295,28 @@ many times in the returned list."
 
 If an undefined rule is mentioned in some element, a warning will be
 emitted and `phony--analysis-data-contains-errors' will be set to t."
-  (let ((mentions (make-hash-table))
-        (mentioners (make-hash-table))
-        (productions (make-hash-table))
+  (let ((productions (make-hash-table))
         (producers (make-hash-table))
         (undefined-references (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
-      (puthash rule '() mentions)
-      (puthash rule '() mentioners)
       (puthash rule '() productions)
       (puthash rule '() producers))
     (seq-doseq (rule (phony--get-rules grammar))
-      (seq-doseq (reference (phony--references rule))
-        (if-let* ((reference-rule (phony--get-rule (car reference) grammar)))
+      (seq-doseq (reference (phony--products rule))
+        (if-let* ((reference-rule (phony--get-rule reference grammar)))
             (progn
-              (push reference-rule (gethash rule mentions))
-              (push rule (gethash reference-rule mentioners))
-              (if (cdr reference)
-                  (progn
-                    (push rule (gethash reference-rule productions))
-                    (push reference-rule (gethash rule producers)))
-                (push reference-rule (gethash rule productions))
-                (push rule (gethash reference-rule producers))))
+              (push reference-rule (gethash rule productions))
+              (push rule (gethash reference-rule producers)))
           (cl-pushnew (phony--rule-name rule)
-                      (gethash (car reference) undefined-references))
-          (oset analysis-data contains-errors t)))
-      (oset analysis-data mentions mentions)
-      (oset analysis-data mentioners mentioners)
-      (oset analysis-data productions productions)
-      (oset analysis-data producers producers))
+                      (gethash reference undefined-references))
+          (oset analysis-data contains-errors t))))
+    (oset analysis-data productions productions)
+    (oset analysis-data producers producers)
     (maphash
      (lambda (name mentioner-names)
        (display-warning
         'phony
-        (format "Rule %S is not defined (mentioned in %s)"
+        (format "Rule %S is not defined (required by %s)"
                 name
                 (mapconcat (lambda (n) (format "%S" n))
                            mentioner-names ", "))))
@@ -1499,17 +1408,6 @@ results of the analysis."
   "Return the analysis data for GRAMMAR."
   (phony--analyze-grammar grammar))
 
-(defun phony--producers (rule-or-name)
-  "Return producers of RULE-OR-NAME.
-
-Producers are rules whose match includes RULE-OR-NAME as a submatch.
-
-This function depends on `phony--last-analysis'.  If an analysis has not
-been performed, the returned value may be out of date."
-  (gethash
-   (phony--normalize-rule rule-or-name)
-   (phony--analysis-data-producers phony--last-analysis)))
-
 (defcustom phony-export-function 'phony-talon-export
   "Function to be used for exporting spoken rules."
   ;; Using radio instead of choice did not display :tag
@@ -1527,7 +1425,7 @@ been performed, the returned value may be out of date."
 If any errors are detected in the grammar, the rules are not exported.
 
 If no rules are defined, this function does nothing."
-  (when (phony--get-rules)
+  (when (phony--get-rules phony--default-grammar)
     (let* ((prepared-grammar (phony--prepare-grammar phony--default-grammar))
            (analysis-data (phony--analyze-grammar prepared-grammar))
            (phony--default-grammar prepared-grammar))
@@ -1815,12 +1713,14 @@ If MODULE is not given, prompt for it before disabling it."
               "\n"))))
 
 (defun phony--evaluate-ast (ast)
-  "Evaluate AST constructed from an utterance."
+  "Evaluate AST constructed from an utterance.
+
+Evaluation is done with reference to `phony--exported-grammar'."
   (if (atom ast)
       ast
     (let* ((type (car ast))
            (arguments (cdr ast))
-           (rule (phony--get-rule type)))
+           (rule (phony--get-rule type phony--exported-grammar)))
       (cond
        ((eq type 'list)
         (seq-map #'phony--evaluate-ast

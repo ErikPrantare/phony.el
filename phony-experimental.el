@@ -69,7 +69,8 @@ value."
        (and-let* ((bounds (bounds-of-thing-at-point 'symbol)))
          (list (car bounds)
                (cdr bounds)
-               (seq-map #'phony--rule-name (phony--get-rules))
+               (seq-map #'phony--rule-name
+                        (phony--get-rules phony--default-grammar))
                :exclusive 'yes))))
 
 (defun phony--enable-capf ()
@@ -119,7 +120,7 @@ value."
 (cl-defmethod xref-backend-definitions ((_backend (eql 'phony)) identifier)
   "Return list of `xref-item' for definitions of phony rule IDENTIFIER."
   (and-let* ((rule-name (intern-soft identifier))
-             (rule (phony--get-rule rule-name))
+             (rule (phony--get-rule rule-name phony--default-grammar))
              (file-name (phony--rule-file-name rule))
              (location (find-function-search-for-symbol
                         rule-name

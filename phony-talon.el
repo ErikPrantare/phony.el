@@ -343,7 +343,8 @@ COMPONENTS are appended as components to the returned path."
 
 This function creates .talon and .py files in the output directory."
   (mkdir (phony-talon--output-path) t)
-  (let ((rules (phony--get-rules)))
+  (let* ((grammar (phony--analysis-data-grammar analysis-data))
+         (rules (phony--get-rules grammar)))
     (with-temp-file (phony-talon--output-path "exported-rules.talon")
       (phony-talon--insert-exported-rules rules))
 
