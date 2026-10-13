@@ -1,6 +1,6 @@
 ;;; phony.el --- Define voice commands           -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024, 2025, 2026 Erik Präntare
+;; Copyright (C) 2026 Erik Präntare
 
 ;; Author: Erik Präntare <erik@prantare.xyz>
 ;; Keywords: files
