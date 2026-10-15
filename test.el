@@ -435,21 +435,23 @@ If there is no parse, an error is thrown."
 
 (ert-deftest phony-builtin-word ()
   "Word builtins parse."
+  ;; TODO: Check against phony-stdlib-word instead
   (phony-test
-   (phony-defun some-word (phony-builtin-word)
-     phony-builtin-word)
-   (phony--export-all)
-   (should (equal (phony-test--evaluate "cwambabala")
-                  "cwambabala"))))
+    (phony-defun some-word ((word phony--builtin-word))
+      word)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "cwambabala")
+                   "cwambabala"))))
 
 (ert-deftest phony-builtin-phrase ()
   "Phrase builtins parse."
+  ;; TODO: Check against phony-stdlib-phrase instead.
   (phony-test
-   (phony-defun some-phrase (phony-builtin-phrase)
-     phony-builtin-phrase)
-   (phony--export-all)
-   (should (equal (phony-test--evaluate "abra ha da bruh")
-                  "abra ha da bruh"))))
+    (phony-defun some-phrase ((phrase phony--builtin-phrase))
+      phrase)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "abra ha da bruh")
+                   "abra ha da bruh"))))
 
 (ert-deftest phony-disabled-rules-no-contribute-externally ()
   "Disabled rules do not contribute to open rules outside module."
@@ -528,6 +530,10 @@ If there is no parse, an error is thrown."
              '(("pi" . 3.14) ("elite" . 1337)))
            (phony-defun double ("double" number)
              (* 2 number))
+           (phony-defun insert-word ("insert" (word phony--builtin-word))
+             (insert word))
+           (phony-defun insert-phrase ("insert" (phrase phony--builtin-phrase))
+             (insert phrase))
            (phony--export-all)
            (phony-talon--generate-configuration
             (phony--grammar-analysis phony--exported-grammar))

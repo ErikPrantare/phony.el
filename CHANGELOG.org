@@ -18,9 +18,6 @@
   a file.  To define such a module, use ~phony-define-module~.  To put
   a rule in a specific module, you can use the ~:module~ argument for
   rules.
-- There are now two builtins that can be matched in a phony-defun:
-  ~phony-builtin-word~ and ~phony-builtin-phrase~, for matching a word
-  or a phrase, respectively.
 - ~:external-name~ parameter has been removed from rules, as ensuring
   its contract was becoming too fragile as the grammar compilation
   pipeline is becoming more complex.

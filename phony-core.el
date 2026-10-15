@@ -1501,12 +1501,8 @@ An element can take the following forms:
 
   STRING           Match a literal STRING.
   RULE             Match a rule named RULE.
-  BUILTIN          Match a builtin named BUILTIN.  BUILTIN may be the
-                   symbol `phony-builtin-word' to match a word, or
-                   `phony-builtin-phrase' to match a phrase.
   (ARG RULE)       Match RULE, bind its value to argument ARG when
                    evaluating BODY.
-  (ARG BUILTIN)    Like (ARG RULE) but for builtins.
   (seq ELEMS...)   Match elements ELEMS in sequence.
   (? ELEMS...)     Optionally match elements ELEMS.
   (* ELEMS...)     Match elements ELEMS zero or more times.

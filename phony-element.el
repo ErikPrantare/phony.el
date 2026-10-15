@@ -93,9 +93,9 @@ Currently only relevant for the talon exporter."
 Valued elements are those that get associated to a value when matched.
 Only these elements may be bound to arguments."
   (cond
-   ((eq element-form 'phony-builtin-word)
+   ((eq element-form 'phony--builtin-word)
     (phony--make-element-builtin-word))
-   ((eq element-form 'phony-builtin-phrase)
+   ((eq element-form 'phony--builtin-phrase)
     (phony--make-element-builtin-phrase))
    ((symbolp element-form)
     (make-phony--element-rule

@@ -56,7 +56,7 @@ This rule intends to capture parts of sentences."
   "A graphical character that is not alphanumeric."
   :default phony-stdlib-non-alphanumeric-character)
 
-(phony-defun phony-stdlib-word ((word phony-builtin-word))
+(phony-defun phony-stdlib-word ((word phony--builtin-word))
   "A word.
 
 Returns WORD directly."
@@ -64,7 +64,7 @@ Returns WORD directly."
   :provides word
   word)
 
-(phony-defun phony-stdlib-phrase ((phrase phony-builtin-phrase))
+(phony-defun phony-stdlib-phrase ((phrase phony--builtin-phrase))
   "A phrase.
 
 Returns PHRASE directly."

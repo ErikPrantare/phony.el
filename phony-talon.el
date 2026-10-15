@@ -30,7 +30,8 @@
 
 (cl-defgeneric phony-talon--capture-name (element)
   "Return the Talon capture name for ELEMENT."
-  (error "No talon name for element %S" element))
+  (error "Internal error, please report a bug: No talon name for element %S"
+         element))
 
 (cl-defmethod phony-talon--capture-name ((element phony--element-rule))
   "Return the Talon capture name for ELEMENT."
@@ -40,6 +41,14 @@
 (cl-defmethod phony-talon--capture-name ((element phony--element-external-rule))
   "Return the Talon capture name for ELEMENT."
   (phony--element-external-rule-name element))
+
+(cl-defmethod phony-talon--capture-name ((_element phony--element-builtin-word))
+  "Return the Talon capture name for ELEMENT."
+  "word")
+
+(cl-defmethod phony-talon--capture-name ((_element phony--element-builtin-phrase))
+  "Return the Talon capture name for ELEMENT."
+  "phrase")
 
 (cl-defgeneric phony-talon--element-match-string (element rule)
   "Return the Talon pattern string for matching ELEMENT.
@@ -101,6 +110,8 @@ RULE provides context for occurrence numbering."
   "Return the Talon pattern string for matching ELEMENT.
 
 RULE provides context for occurrence numbering."
+  ;; External rules may only occur once in a rule (internal
+  ;; constraint).  So no need to worry about rule multiplicity.
   (format "<%s>" (string-join
                   (seq-map #'symbol-name
                            (append
@@ -268,7 +279,9 @@ MATCH-ELEMENT among all of those `equal' to it."
                                                  (1- rule-occurrence-number)))))
           (when (eq argument-context 'repeat)
             (setq attribute-name (concat attribute-name "_list")))
-          (if (phony--element-external-rule-p match-form)
+          (if (or (phony--element-external-rule-p match-form)
+                  (phony--element-builtin-word-p match-form)
+                  (phony--element-builtin-phrase-p match-form))
               (insert (format "from_talon_capture(m.%1$s) if hasattr(m,'%1$s') else 'nil'"
                               attribute-name))
             (pcase argument-context
