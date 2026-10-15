@@ -321,5 +321,13 @@ This rule is obsolete.  Use `graphical-character' instead."
   ;; TODO: Mark :obsolete when added to phony.
   phony-stdlib--graphical-character)
 
+(phony-defun symbol-key (non-alphanumeric-character)
+  "A graphical character that is not alphanumeric.
+
+This rule is obsolete.  Use `non-alphanumeric-character' instead."
+  :interactive nil
+  ;; TODO: Mark :obsolete when added to phony.
+  non-alphanumeric-character)
+
 (provide 'phony-stdlib)
 ;;; phony-stdlib.el ends here
