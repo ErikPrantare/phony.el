@@ -22,6 +22,8 @@
   its contract was becoming too fragile as the grammar compilation
   pipeline is becoming more complex.
 - ~:format-raw~ has been removed from dictionaries.
+- The speech rules for ~phony-enable-module~ and
+  ~phony-disable-module~ have been removed.
 
 * 1.0.1 [2026-06-30 Tue]
 - Got rid of warnings in talon's log.

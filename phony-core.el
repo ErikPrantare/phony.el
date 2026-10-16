@@ -1675,24 +1675,6 @@ Whenever a module is defined with `phony-module', it is added to this
 dictionary."
   '())
 
-(phony-defun phony-enable-module ("phony enable" (? (module phony-module)))
-  "Enable MODULE.
-If MODULE is not given, prompt for it before enabling it."
-  (if module
-      (phony-enable-module
-       module
-       (y-or-n-p (format "Enable %s for future sessions? " module)))
-    (call-interactively #'phony-enable-module)))
-
-(phony-defun phony-disable-module ("phony disable" (? (module phony-module)))
-  "Disable MODULE.
-If MODULE is not given, prompt for it before disabling it."
-  (if module
-      (phony-disable-module
-       module
-       (y-or-n-p (format "Disable %s for future sessions? " module)))
-    (call-interactively #'phony-disable-module)))
-
 (defun phony--sync-state ()
   "Export information about which rules are currently active."
   ;; We must filter the enabled rules before doing with-temp-file, as
