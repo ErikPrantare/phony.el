@@ -1,4 +1,4 @@
-;;; phony-element-syntax.el --- Element parsing logic  -*- lexical-binding: t; -*-
+;;; phony-element.el --- Elements of procedure rules -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025, 2026  Erik Präntare
 
@@ -79,12 +79,24 @@ Currently only relevant for the talon exporter."
         :type symbol
         :documentation "Symbol naming the phony rule that this element matches."))
 
+(cl-defstruct (phony--element-builtin-word
+               (:constructor phony--make-element-builtin-word))
+  "Element matching any word.")
+
+(cl-defstruct (phony--element-builtin-phrase
+               (:constructor phony--make-element-builtin-phrase))
+  "Element matching any phrase.")
+
 (defun phony--parse-speech-value-element (element-form)
   "Parse ELEMENT-FORM into a valued element.
 
 Valued elements are those that get associated to a value when matched.
 Only these elements may be bound to arguments."
   (cond
+   ((eq element-form 'phony--builtin-word)
+    (phony--make-element-builtin-word))
+   ((eq element-form 'phony--builtin-phrase)
+    (phony--make-element-builtin-phrase))
    ((symbolp element-form)
     (make-phony--element-rule
      :name element-form))
@@ -153,5 +165,60 @@ This is required for recognizing if a form should bind turn argument."
       (cdr element-form))))
    (t (phony--parse-speech-value-element element-form))))
 
-(provide 'phony-element-syntax)
-;;; phony-element-syntax.el ends here
+(defun phony--element-map-children (f element)
+  "Return a copy of ELEMENT with F applied to each of its children."
+  (pcase element
+    ((cl-struct phony--element-sequence elements)
+     (make-phony--element-sequence
+      :elements (seq-map f elements)))
+    ((cl-struct phony--element-optional (element child))
+     (make-phony--element-optional
+      :element (funcall f child)))
+    ((cl-struct phony--element-one-or-more (element child))
+     (make-phony--element-one-or-more
+      :element (funcall f child)))
+    ((cl-struct phony--element-zero-or-more (element child))
+     (make-phony--element-zero-or-more
+      :element (funcall f child)))
+    ((cl-struct phony--element-argument name (element child))
+     (make-phony--element-argument
+      :name name
+      :element (funcall f child)))
+    ((cl-struct phony--element-literal string)
+     (make-phony--element-literal :string string))
+    ((cl-struct phony--element-rule name)
+     (make-phony--element-rule :name name))
+    ((cl-struct phony--element-external-rule name namespace)
+     (make-phony--element-external-rule
+      :name name
+      :namespace namespace))
+    ((cl-struct phony--element-builtin-word)
+     (phony--make-element-builtin-word))
+    ((cl-struct phony--element-builtin-phrase)
+     (phony--make-element-builtin-phrase))
+    (_ (error "No case for element of type %s: %s"
+              (type-of element)
+              element))))
+
+(defun phony--element-transform (f element)
+  "Recursively apply F to ELEMENT.
+
+F is applied to a copy of ELEMENT with children transformed by F."
+  (funcall f (phony--element-map-children
+              (lambda (child) (phony--element-transform f child))
+              element)))
+
+(defun phony--copy-element (element)
+  "Return a deep copy of ELEMENT."
+  (phony--element-transform #'identity element))
+
+(defun phony--element-children (element)
+  "Return all direct sub-elements of ELEMENT."
+  (let ((children '()))
+    (phony--element-map-children
+     (lambda (child) (push child children))
+     element)
+    (nreverse children)))
+
+(provide 'phony-element)
+;;; phony-element.el ends here

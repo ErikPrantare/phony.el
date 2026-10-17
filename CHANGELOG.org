@@ -1,3 +1,30 @@
+* 2.0.0 [2026-10-17 Sat]
+- There is now a new interface rule type.  Interfaces are defined with
+  ~phony-define-interface~, and allow the user to choose between
+  different provider rules, or to provide their own, to customize the
+  implementation of parts of the grammar.  See the documentation of
+  ~phony-define-interface~ for more information.
+- Standard library added.  This defines the rules ~word~, ~phrase~,
+  ~digit~, ~number~, ~letter~, ~non-alphanumeric-character~, and
+  ~graphical-character~.  The standard library is loaded
+  automatically.
+  - To use the talon community implementations instead, you should add
+    #+begin_src elisp
+      (phony-provide-from phony-stdlib phony-stdlib-talon-community)
+    #+end_src
+    to your configuration.  The previous library named
+    ~phony-talon-community-bindings~ has been removed.
+- Modules can now be defined without associating them to the rules of
+  a file.  To define such a module, use ~phony-define-module~.  To put
+  a rule in a specific module, you can use the ~:module~ argument for
+  rules.
+- ~:external-name~ parameter has been removed from rules, as ensuring
+  its contract was becoming too fragile as the grammar compilation
+  pipeline is becoming more complex.
+- ~:format-raw~ has been removed from dictionaries.
+- The speech rules for ~phony-enable-module~ and
+  ~phony-disable-module~ have been removed.
+
 * 1.0.1 [2026-06-30 Tue]
 - Got rid of warnings in talon's log.
 - Added missing ~(require 'multisession)~.

@@ -25,7 +25,7 @@
 
 ;;; Code:
 
-(require 'phony)
+(require 'phony-core)
 (require 'xref)
 
 (defun phony--function-calls-at (&optional position)
@@ -69,7 +69,8 @@ value."
        (and-let* ((bounds (bounds-of-thing-at-point 'symbol)))
          (list (car bounds)
                (cdr bounds)
-               (seq-map #'phony--rule-name (phony--get-rules))
+               (seq-map #'phony--rule-name
+                        (phony--get-rules phony--default-grammar))
                :exclusive 'yes))))
 
 (defun phony--enable-capf ()
@@ -87,7 +88,8 @@ value."
 (defvar phony--font-lock-keywords
   `((,(rx "(" (or "phony-defun"
                   "phony-define-dictionary"
-                  "phony-define-open-rule")
+                  "phony-define-open-rule"
+                  "phony-define-interface")
           (+ blank)
           (group (+ (or (syntax word) (syntax symbol)))))
      1 'font-lock-function-name-face))
@@ -106,7 +108,8 @@ value."
   (re-search-forward
    (rx (seq (or "(phony-defun"
                 "(phony-define-dictionary"
-                "(phony-define-open-rule")
+                "(phony-define-open-rule"
+                "(phony-define-interface")
             (+ (not graphic))
             (group (literal (symbol-name name)))
             symbol-end))
@@ -117,7 +120,7 @@ value."
 (cl-defmethod xref-backend-definitions ((_backend (eql 'phony)) identifier)
   "Return list of `xref-item' for definitions of phony rule IDENTIFIER."
   (and-let* ((rule-name (intern-soft identifier))
-             (rule (phony--get-rule rule-name))
+             (rule (phony--get-rule rule-name phony--default-grammar))
              (file-name (phony--rule-file-name rule))
              (location (find-function-search-for-symbol
                         rule-name
