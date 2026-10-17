@@ -222,9 +222,12 @@ See `phony-define-module' for information on modules."
     "Filename of the file defining this module.
 If nil it is not associated to a particular file.")
   ( enabled-p nil
+    ;; TODO: This should really be called sealed, not disabled.  The
+    ;; rules still exist.
     :type boolean
     :documentation
-    "Whether the rules of this module should be exported."))
+    "Whether the rules of this module should impact the utterance grammar.
+See `phony-enable-module' for information on module enablement."))
 
 (defvar phony--modules-by-name (make-hash-table :test #'equal)
   "All modules, keyed by their name.")
