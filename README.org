@@ -33,6 +33,9 @@ With such a function defined, uttering "hello emacs" will display
   - [[#open-rule][Open rule]]
 - [[#standard-library][Standard library]]
   - [[#overrides-for-talon-community-rules][Overrides for talon community rules]]
+- [[#authoring-libraries][Authoring libraries]]
+  - [[#modules][Modules]]
+  - [[#interface-rules][Interface rules]]
 - [[#pre-defined-rulesets][Pre-defined rulesets]]
 - [[#versioning-system][Versioning system]]
 :END:
@@ -67,9 +70,8 @@ This package is on MELPA as [[https://melpa.org/#/phony][phony]].  After install
 :PROPERTIES:
 :CUSTOM_ID: usage
 :END:
-There are three types of rules: procedure rules, open rules, and
-dictionaries.  They are different ways of specifying how utterances
-should produce values and side effects.
+A language is specified through /rules/.  A rule specifies how
+utterances should be interpreted.  There are different types of rules.
 
 ** Procedure rules
 :PROPERTIES:
@@ -221,6 +223,48 @@ place of the above, add the following to your configuration:
 #+begin_src elisp
   (phony-provide-from phony-stdlib phony-stdlib-talon-community)
 #+end_src
+
+* Authoring libraries
+:PROPERTIES:
+:CUSTOM_ID: authoring-libraries
+:END:
+** Modules
+:PROPERTIES:
+:CUSTOM_ID: modules
+:END:
+Libraries defining phony rules for other users are organized in
+/modules/.
+
+By default, rules in modules are made non-interactive and do not
+contribute to open rules outside of the module.  For rules in modules
+to be interactive and to contribute to open rules, they have to
+explicitly be enabled with ~phony-enable-module~.  This ensures that
+library rules do not interfere with the spoken commands of the user
+unless they explicitly enable the library.  It is recommended for
+library authors to put ~phony-enable-module~ behind a global minor
+mode, so that enabling and disabling modules behave the same as
+enabling and disabling modes.  See the documentation of ~phony-module~
+and ~phony-define-module~ for more information on modules.
+
+** Interface rules
+:PROPERTIES:
+:CUSTOM_ID: interface-rules
+:END:
+Interface rules, or simply /interfaces/, allow users to override
+certain rule definitions, or to substitute your definitions for those
+in another module.  Interfaces are defined using
+~phony-define-interface~.  Interfaces are how the standard library
+allows users to switch out the standard implementation with the
+implementations in talon community by using ~phony-provide-from~.
+
+Rules that implement interfaces are called /providers/.  Providers are
+specified by using the ~:provides~ keyword argument in a rule.
+Providers that are not part of any module take precedence in interface
+resolution, so that the providers defined in the configuration of a
+user are selected automatically.
+
+See the documentation of ~phony-define-interface~ for details
+on interfaces.
 
 * Pre-defined rulesets
 :PROPERTIES:
