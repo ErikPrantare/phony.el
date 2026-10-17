@@ -1,7 +1,0 @@
-* TODO Add more sanity checks
-- Before talon export: Check that output directory is under the talon
-  user directory.
-- Before export: Check that directory is empty or owned by phony.
-
-* TODO Consider implementing a shortdoc analog for phony
-Perhaps shortdoc could be used as is.
