@@ -137,6 +137,15 @@ If there is no parse, an error is thrown."
       (error "No parse available for '%s'" sentence))
     (phony--evaluate-ast (caar parses))))
 
+(ert-deftest phony-multi-word-literal-in-procedure-rule ()
+  "Parser handles multi-word literals in `phony-defun'."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun multi-word ("one two three")
+      123)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "one two three") 123))))
+
 (ert-deftest phony-dictionary-modification-parses ()
   "Changing a dictionary reflects immediately in the parser."
   ;; We need to figure out how to test dictionary exports.  Currently

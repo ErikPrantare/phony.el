@@ -182,8 +182,18 @@ are run on subsequent tokens and their results collected."
   (phony-parser--guard (lambda () (phony--rule-active-p rule))))
 
 (defun phony-parser--literal (string)
-  "Return a parser that accepts a token equal to STRING."
-  (phony-parser--satisfy (apply-partially #'string-equal string)))
+  "Return a parser that accepts tokens matching STRING.
+
+STRING is split up into words.  The returned parser reads that many
+tokens before accepting, if the tokens correspond to the words.
+The result of a parse is the words joined together by space."
+  (let ((words (string-split string)))
+    (apply
+     #'phony-parser--lift
+     (lambda (&rest words) (string-join words " "))
+     (seq-map (lambda (word)
+                (phony-parser--satisfy (apply-partially #'string-equal word)))
+              words))))
 
 (defun phony-parser--optional (parser)
   "Return a parser that matches PARSER zero or one times."
