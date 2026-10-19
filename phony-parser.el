@@ -177,6 +177,17 @@ are run on subsequent tokens and their results collected."
          (phony-parser--return nil)
        (phony-parser--empty)))))
 
+(defun phony-parser--runtime-resolved (parser-factory)
+  "Return a parser behaving like PARSER-FACTORY invoked at runtime.
+
+Whenever the returned parser is used, PARSER-FACTORY is evaluated with
+no arguments to yield the actual parser to use."
+  (phony-parser--make
+   :parses-function
+   (lambda () (phony-parser--parses (funcall parser-factory)))
+   :step-function
+   (lambda (item) (phony-parser--step (funcall parser-factory) item))))
+
 (defun phony-parser--rule-active-guard (rule)
   "Return a parser that succeeds if RULE is currently active."
   (phony-parser--guard (lambda () (phony--rule-active-p rule))))
@@ -186,11 +197,11 @@ are run on subsequent tokens and their results collected."
 
 STRING is split up into words.  The returned parser reads that many
 tokens before accepting, if the tokens correspond to the words.
-The result of a parse is the words joined together by space."
+The result of a parse is STRING."
   (let ((words (string-split string)))
     (apply
      #'phony-parser--lift
-     (lambda (&rest words) (string-join words " "))
+     (lambda (&rest _words) string)
      (seq-map (lambda (word)
                 (phony-parser--satisfy (apply-partially #'string-equal word)))
               words))))
@@ -369,9 +380,11 @@ References to other rules are resolved through GRAMMAR.")
    (phony-parser--rule-active-guard rule)
    (phony-parser--map
     (lambda (utterance) `(,(phony--dictionary-name rule) ,utterance))
-    (phony-parser--satisfy
-     (lambda (token)
-       (map-elt (phony--dictionary-mapping rule) token))))))
+    (phony-parser--runtime-resolved
+     (lambda ()
+       (phony-parser--alternative
+        (seq-map #'phony-parser--literal
+                 (map-keys (phony--dictionary-mapping rule)))))))))
 
 (cl-defmethod phony-parser--from-rule ((rule phony--open-rule) grammar)
   ;; checkdoc-params: (grammar)

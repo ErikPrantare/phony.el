@@ -137,15 +137,6 @@ If there is no parse, an error is thrown."
       (error "No parse available for '%s'" sentence))
     (phony--evaluate-ast (caar parses))))
 
-(ert-deftest phony-multi-word-literal-in-procedure-rule ()
-  "Parser handles multi-word literals in `phony-defun'."
-  (phony-test
-    (phony-mode 1)
-    (phony-defun multi-word ("one two three")
-      123)
-    (phony--export-all)
-    (should (= (phony-test--evaluate "one two three") 123))))
-
 (ert-deftest phony-dictionary-modification-parses ()
   "Changing a dictionary reflects immediately in the parser."
   (phony-test
@@ -160,6 +151,35 @@ If there is no parse, an error is thrown."
     (setf (phony-dictionary-get "lmao" 'lol) 42)
     (should (= (phony-test--evaluate "lol") 1337))
     (should (= (phony-test--evaluate "lmao") 42))))
+
+(ert-deftest phony-multi-word-literal-in-procedure-rule ()
+  "Parser handles multi-word literals in `phony-defun'."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun multi-word ("one two three")
+      123)
+    (phony-defun multi-word-wild-whitespace ("  wild\nwhite\t\t   space")
+      42)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "one two three") 123))
+    (should (= (phony-test--evaluate "wild white space") 42))))
+
+(ert-deftest phony-multi-word-literal-in-dictionary ()
+  "Parser handles multi-word literals in `phony-define-dictionary'."
+  (phony-test
+    (phony-mode 1)
+    (phony-define-dictionary some-dictionary
+      '(("one" . 1)
+        ("one two" . 2)
+        ("one two three" . 3)
+        ("  wild\nwhite\t\t   space" . 42)))
+    (phony-defun some-rule ((v some-dictionary))
+      v)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "one") 1))
+    (should (= (phony-test--evaluate "one two") 2))
+    (should (= (phony-test--evaluate "one two three") 3))
+    (should (= (phony-test--evaluate "wild white space") 42))))
 
 (ert-deftest phony-open-rule-contribution ()
   "Rule contributions work."
