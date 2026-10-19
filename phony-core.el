@@ -486,14 +486,38 @@ Constrain matching to the end of an utterance, like `$' in regex."))
     :type (repeat symbol)
     :documentation "List of symbols naming the alternative rules."))
 
+(cl-defstruct (phony--dictionary-storage
+               (:constructor phony--make-dictionary-storage)
+               (:copier nil))
+  "The actual mapping for a `phony--dictionary'.
+To have runtime modification of dictionaries work, the exported grammar
+needs to share storage for dictionaries with the front-facing
+`phony--default-grammar'.  This indirection is for that."
+  ( mapping nil
+    :type list
+    :documentation "An alist mapping utterances, strings, to values."))
+
 (cl-defstruct (phony--dictionary
                (:include phony--rule)
                (:constructor nil)
                (:constructor phony--make-dictionary))
   "A dictionary mapping utterances to values."
-  ( mapping nil
-    :type list
-    :documentation "An alist mapping utterances, strings, to values."))
+  ( storage (phony--make-dictionary-storage)
+    :type phony--dictionary-storage
+    :documentation "The storage for the dictionary alist.
+This layer of indirection exists so that runtime changes to the
+dictionary are reflected to the corresponding dictionaries in the
+exported grammar."))
+
+(defun phony--dictionary-mapping (dictionary)
+  "Return the underlying alist of DICTIONARY."
+  (phony--dictionary-storage-mapping
+   (phony--dictionary-storage dictionary)))
+
+(gv-define-setter phony--dictionary-mapping (value dictionary)
+  `(setf (phony--dictionary-storage-mapping
+          (phony--dictionary-storage ,dictionary))
+         ,value))
 
 (cl-defstruct (phony--interface-rule
                (:include phony--rule)
@@ -543,9 +567,13 @@ If this is nil, there is no default provider."))
     (phony--copy-rule-base-inplace rule copy)))
 
 (cl-defmethod phony--copy-rule ((rule phony--dictionary))
-  "Return a deep copy of RULE."
+  "Return a deep copy of RULE.
+
+The copy will share a reference to the same mapping as RULE, so that
+runtime and modifications to the mapping are reflected in the exported
+grammar."
   (let ((copy (phony--make-dictionary
-               :mapping (copy-alist (phony--dictionary-mapping rule)))))
+               :storage (phony--dictionary-storage rule))))
     (phony--copy-rule-base-inplace rule copy)))
 
 (cl-defmethod phony--copy-rule ((rule phony--interface-rule))
@@ -875,7 +903,7 @@ interface sugar to the form used internally."
 
   ;; We will be destructively modifying the parameter list, so copy
   ;; it.  All modifications are shallow.
-  (setq parameters (apply #'list parameters))
+  (setq parameters (copy-sequence parameters))
 
   ;; NOTE: The external parameter is named :mode, but internally we
   ;; normalize it to a list :modes.
@@ -937,9 +965,10 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (alist-get utterance
-                   (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
-                   nil nil #'string-equal)
+  (setf (alist-get
+         utterance
+         (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
+         nil nil #'string-equal)
         value)
   (phony--request-export-dictionaries))
 
@@ -950,9 +979,10 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (alist-get utterance
-                   (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
-                   nil t #'string-equal)
+  (setf (alist-get
+         utterance
+         (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
+         nil t #'string-equal)
         nil)
   (phony--request-export-dictionaries))
 
@@ -969,7 +999,9 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (phony--dictionary-mapping (phony--ensure-dictionary dictionary)) alist)
+  (setf (phony--dictionary-mapping
+         (phony--ensure-dictionary dictionary))
+        alist)
   (phony--request-export-dictionaries))
 
 (gv-define-setter phony-dictionary-get (value utterance dictionary)
@@ -1040,6 +1072,7 @@ If `phony-mode' is disabled, this function does nothing."
   "Define a dictionary from ARGUMENTS.
 
 See documentation of `phony-define-dictionary' for more information."
+  (setq arguments (copy-sequence arguments))
   (let ((mapping (plist-get arguments :mapping))
         (name (plist-get arguments :name)))
     (unless (plist-member arguments :mapping)
@@ -1057,6 +1090,11 @@ See documentation of `phony-define-dictionary' for more information."
                                  mapping)))
       (error "The keys of %s must be strings, but %S is not a string"
              name (car non-string-key))))
+
+  (setf (map-elt arguments :storage)
+        (phony--make-dictionary-storage
+         :mapping (map-elt arguments :mapping)))
+  (cl-remf arguments :mapping)
 
   (phony--add-new-rule #'phony--make-dictionary arguments)
 

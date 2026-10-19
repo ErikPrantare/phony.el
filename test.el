@@ -148,15 +148,13 @@ If there is no parse, an error is thrown."
 
 (ert-deftest phony-dictionary-modification-parses ()
   "Changing a dictionary reflects immediately in the parser."
-  ;; We need to figure out how to test dictionary exports.  Currently
-  ;; everything is just ignored.
-  (ert-skip "Not implemented in testing")
   (phony-test
     (phony-mode 1)
     (phony-define-dictionary lol
       '(("lol" . 1337)))
     (phony-defun somelol (lol)
       lol)
+    (phony--export-all)
     (should (= (phony-test--evaluate "lol") 1337))
     (should-error (phony-test--evaluate "lmao"))
     (setf (phony-dictionary-get "lmao" 'lol) 42)
