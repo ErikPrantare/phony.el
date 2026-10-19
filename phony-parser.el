@@ -399,16 +399,46 @@ References to other rules are resolved through GRAMMAR.")
 
 (defun phony-parser--make-parser (grammar)
   "Build a parser matching all active interactive procedure rules of GRAMMAR."
-  (let ((rules (seq-filter
-                (lambda (rule)
-                  (and (phony--procedure-rule-p rule)
-                       (phony--procedure-rule-interactive-p rule)))
-                (phony--get-rules grammar))))
-    (phony-parser--one-or-more
-     (phony-parser--alternative
-      (seq-map (lambda (rule)
-                 (phony-parser--from-rule rule grammar))
-               rules)))))
+  (let* ((rules (seq-filter
+                 (lambda (rule)
+                   (and (phony--procedure-rule-p rule)
+                        (phony--procedure-rule-interactive-p rule)))
+                 (phony--get-rules grammar)))
+         (anchor-groups
+          (seq-group-by
+           (lambda (rule)
+             (cons (phony--procedure-rule-anchor-beginning-p rule)
+                   (phony--procedure-rule-anchor-end-p rule)))
+           rules))
+         (no-anchor (alist-get '(nil . nil) anchor-groups nil nil #'equal))
+         (first-anchor (alist-get '(t . nil) anchor-groups nil nil #'equal))
+         (last-anchor (alist-get '(nil . t) anchor-groups nil nil #'equal))
+         (lonely-anchor (alist-get '(t . t) anchor-groups nil nil #'equal)))
+    (cl-flet ((from-alternatives (rules)
+                (phony-parser--alternative
+                 (seq-map (lambda (rule)
+                            (phony-parser--from-rule rule grammar))
+                          rules))))
+      (phony-parser--alternative
+       (list
+        (phony-parser--map
+         #'list
+         (from-alternatives lonely-anchor))
+        (phony-parser--lift
+         #'append
+         (phony-parser--optional
+          (phony-parser--map
+           #'list
+           (from-alternatives first-anchor)))
+         (phony-parser--zero-or-more
+          (phony-parser--alternative
+           (seq-map (lambda (rule)
+                      (phony-parser--from-rule rule grammar))
+                    no-anchor)))
+         (phony-parser--optional
+          (phony-parser--map
+           #'list
+           (from-alternatives last-anchor)))))))))
 
 (phony--define-grammar-attribute phony-parser--get-parser (grammar)
   "Return a parser for matching GRAMMAR."

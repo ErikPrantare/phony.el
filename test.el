@@ -530,6 +530,31 @@ If there is no parse, an error is thrown."
    (phony--export-all)
    (should (equal (phony-test--evaluate "y x") 8))))
 
+(ert-deftest phony-anchors ()
+  "Anchors limit parses correctly."
+  (phony-test
+    (phony-defun x "x"
+      :anchor-beginning t
+      t)
+    (phony-defun y "y"
+      :anchor-end t
+      t)
+    (phony-defun z "z"
+      :anchor-end t
+      :anchor-beginning t
+      t)
+    (phony-defun w "w"
+      t)
+    (phony--export-all)
+    (should (phony-test--evaluate "x y"))
+    (should (phony-test--evaluate "x w w w y"))
+    (should (phony-test--evaluate "z"))
+
+    (should-error (phony-test--evaluate "y w"))
+    (should-error (phony-test--evaluate "w x"))
+    (should-error (phony-test--evaluate "z w"))
+    (should-error (phony-test--evaluate "w z"))))
+
 (ert-deftest phony-talon-export ()
   "The talon exporter exports with correct syntax."
   (unless (executable-find "python")
