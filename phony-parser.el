@@ -25,7 +25,7 @@
 
 (require 'cl-lib)
 (require 'map)
-(require 'phony-core)
+(require 'phony-model)
 (require 'seq)
 
 (cl-defstruct (phony-parser--parser
@@ -269,8 +269,9 @@ unspecified alternative is picked."
 Arguments occurring within ELEMENT are collected into list forms."
   (if (null match-tree)
       (make-list (seq-length arglist) nil)
-    (let ((occurring-arguments (seq-map #'phony--element-argument-name
-                                        (phony--collect #'phony--element-argument-p element))))
+    (let ((occurring-arguments
+           (seq-map #'phony--element-argument-name
+                    (phony--element-collect #'phony--element-argument-p element))))
       (seq-mapn (lambda (match-data argument)
                   (and (seq-contains-p occurring-arguments argument)
                        `(list ,@match-data)))

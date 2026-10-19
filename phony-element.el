@@ -220,5 +220,18 @@ F is applied to a copy of ELEMENT with children transformed by F."
      element)
     (nreverse children)))
 
+(defun phony--element-collect (predicate element)
+  "Return list of descendants of ELEMENT matching PREDICATE.
+
+If ELEMENT matches PREDICATE, it will be part of the list.  Matches are
+returned in the same order that they occur in ELEMENT."
+  (let ((collected-children
+         (seq-mapcat
+          (apply-partially #'phony--element-collect predicate)
+          (phony--element-children element))))
+    (if (funcall predicate element)
+        (cons element collected-children)
+      collected-children)))
+
 (provide 'phony-element)
 ;;; phony-element.el ends here
