@@ -235,6 +235,27 @@ interactive procedure rules, and evaluate them in order.
 
 ~phony-evaluate~ is unstable, and its behaviour may change in the
 future.
+* Customizing rules for matching
+:PROPERTIES:
+:CUSTOM_ID: customizing-rules-for-matching
+:END:
+
+You can change =phony-parser-literal-comparator= to a function that
+compares the input token with the token from the rule. For example,
+the following code ignores case and punctuation.
+
+#+begin_src emacs-lisp :results none
+(defun my-phony-parser--sanitize (s)
+  "Lowercase and remove punctuation."
+  (string-trim (replace-regexp-in-string "[-,\\.!?:]" "" (downcase s))))
+
+(defun my-phony-compare-literal (a b)
+	"Ignore case and ending punctuation."
+	(string= (my-phony-parser--sanitize a)
+					 (my-phony-parser--sanitize b)))
+
+(setq phony-parser-literal-comparator #'my-phony-compare-literal)
+#+end_src
 
 * Authoring libraries
 :PROPERTIES:
