@@ -236,7 +236,7 @@ if ARGUMENT is not found in ELEMENTS."
   "Find element matching ARGUMENT in RULE.
 Return nil if no such element exists."
   (car-safe
-   (phony--collect
+   (phony--element-collect
     (lambda (element)
       (and (phony--element-argument-p element)
            (eq (phony--element-argument-name element)
@@ -249,7 +249,7 @@ Return nil if no such element exists."
 This goes through all match elements of RULE and returns the index of
 MATCH-ELEMENT among all of those `equal' to it."
   (seq-position
-   (phony--collect
+   (phony--element-collect
     (apply-partially #'equal match-element)
     (phony--procedure-rule-element rule))
    match-element

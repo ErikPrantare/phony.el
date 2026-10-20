@@ -32,7 +32,6 @@ In the environment, `phony-mode' is disabled, no rules are bound,
 exporters do nothing, and export request debounce is turned off."
   (declare (indent 0))
   `(let ((phony--default-grammar (phony--make-grammar))
-         (phony--default-grammar-configuration (phony--make-grammar-configuration))
          (phony--exported-grammar (phony--make-grammar))
          (phony-export-function #'ignore)
          (phony--dictionary-export-function #'ignore)
@@ -132,27 +131,54 @@ exporters do nothing, and export request debounce is turned off."
 SENTENCE must parse unambiguously into a single command.
 
 If there is no parse, an error is thrown."
-  (let ((parses (phony-parser--parse-utterance sentence)))
-    (unless parses
+  (let ((result (phony-evaluate sentence 'NO-PARSE)))
+    (when (eq result 'NO-PARSE)
       (error "No parse available for '%s'" sentence))
-    (phony--evaluate-ast (caar parses))))
+    (car result)))
 
 (ert-deftest phony-dictionary-modification-parses ()
   "Changing a dictionary reflects immediately in the parser."
-  ;; We need to figure out how to test dictionary exports.  Currently
-  ;; everything is just ignored.
-  (ert-skip "Not implemented in testing")
   (phony-test
     (phony-mode 1)
     (phony-define-dictionary lol
       '(("lol" . 1337)))
     (phony-defun somelol (lol)
       lol)
+    (phony--export-all)
     (should (= (phony-test--evaluate "lol") 1337))
     (should-error (phony-test--evaluate "lmao"))
     (setf (phony-dictionary-get "lmao" 'lol) 42)
     (should (= (phony-test--evaluate "lol") 1337))
     (should (= (phony-test--evaluate "lmao") 42))))
+
+(ert-deftest phony-multi-word-literal-in-procedure-rule ()
+  "Parser handles multi-word literals in `phony-defun'."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun multi-word ("one two three")
+      123)
+    (phony-defun multi-word-wild-whitespace ("  wild\nwhite\t\t   space")
+      42)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "one two three") 123))
+    (should (= (phony-test--evaluate "wild white space") 42))))
+
+(ert-deftest phony-multi-word-literal-in-dictionary ()
+  "Parser handles multi-word literals in `phony-define-dictionary'."
+  (phony-test
+    (phony-mode 1)
+    (phony-define-dictionary some-dictionary
+      '(("one" . 1)
+        ("one two" . 2)
+        ("one two three" . 3)
+        ("  wild\nwhite\t\t   space" . 42)))
+    (phony-defun some-rule ((v some-dictionary))
+      v)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "one") 1))
+    (should (= (phony-test--evaluate "one two") 2))
+    (should (= (phony-test--evaluate "one two three") 3))
+    (should (= (phony-test--evaluate "wild white space") 42))))
 
 (ert-deftest phony-open-rule-contribution ()
   "Rule contributions work."
@@ -503,6 +529,31 @@ If there is no parse, an error is thrown."
    (phony--export-all)
    (should (equal (phony-test--evaluate "y x") 8))))
 
+(ert-deftest phony-anchors ()
+  "Anchors limit parses correctly."
+  (phony-test
+    (phony-defun x "x"
+      :anchor-beginning t
+      t)
+    (phony-defun y "y"
+      :anchor-end t
+      t)
+    (phony-defun z "z"
+      :anchor-end t
+      :anchor-beginning t
+      t)
+    (phony-defun w "w"
+      t)
+    (phony--export-all)
+    (should (phony-test--evaluate "x y"))
+    (should (phony-test--evaluate "x w w w y"))
+    (should (phony-test--evaluate "z"))
+
+    (should-error (phony-test--evaluate "y w"))
+    (should-error (phony-test--evaluate "w x"))
+    (should-error (phony-test--evaluate "z w"))
+    (should-error (phony-test--evaluate "w z"))))
+
 (ert-deftest phony-talon-export ()
   "The talon exporter exports with correct syntax."
   (unless (executable-find "python")
@@ -511,39 +562,39 @@ If there is no parse, an error is thrown."
           (error "%s" message)
         (ert-skip message))))
   (phony-test
-   (let* ((directory (make-temp-file "phony-talon-test" t))
-          (phony-output-directory directory))
-     (unwind-protect
-         (progn
-           (phony-define-module some-module)
-           (phony-enable-module 'some-module)
-           (phony-define-open-rule number)
-           (phony-defun three "three"
-             :contributes-to number
-             :module some-module
-             3)
-           (phony-defun five "five"
-             :contributes-to number
-             3)
-           (phony-define-dictionary more-numbers
-             :contributes-to number
-             '(("pi" . 3.14) ("elite" . 1337)))
-           (phony-defun double ("double" number)
-             (* 2 number))
-           (phony-defun insert-word ("insert" (word phony--builtin-word))
-             (insert word))
-           (phony-defun insert-phrase ("insert" (phrase phony--builtin-phrase))
-             (insert phrase))
-           (phony--export-all)
-           (phony-talon--generate-configuration
-            (phony--grammar-analysis phony--exported-grammar))
-           (with-temp-buffer
-             (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
-                                          (phony-talon--output-path "rules.py")
-                                          (phony-talon--output-path "evaluate_elisp.py")
-                                          (phony-talon--output-path "read_dictionaries.py")))
-               (error "Syntax error in python: %s" (buffer-string)))))
-       (delete-directory directory t)))))
+    (let* ((directory (make-temp-file "phony-talon-test" t))
+           (phony-output-directory directory))
+      (unwind-protect
+          (progn
+            (phony-define-module some-module)
+            (phony-enable-module 'some-module)
+            (phony-define-open-rule number)
+            (phony-defun three "three"
+              :contributes-to number
+              :module some-module
+              3)
+            (phony-defun five "five"
+              :contributes-to number
+              3)
+            (phony-define-dictionary more-numbers
+              :contributes-to number
+              '(("pi" . 3.14) ("elite" . 1337)))
+            (phony-defun double ("double" number)
+              (* 2 number))
+            (phony-defun insert-word ("insert" (word phony--builtin-word))
+              (insert word))
+            (phony-defun insert-phrase ("insert" (phrase phony--builtin-phrase))
+              (insert phrase))
+            (phony--export-all)
+            (phony-talon--generate-configuration
+             (phony--grammar-analysis phony--exported-grammar))
+            (with-temp-buffer
+              (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
+                                           (phony-talon--output-path "rules.py")
+                                           (phony-talon--output-path "evaluate_elisp.py")
+                                           (phony-talon--output-path "read_dictionaries.py")))
+                (error "Syntax error in python: %s" (buffer-string)))))
+        (delete-directory directory t)))))
 
 (ert-deftest phony-stdlib-number-parsing ()
   "Numbers parse correctly."

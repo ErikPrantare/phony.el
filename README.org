@@ -33,6 +33,7 @@ With such a function defined, uttering "hello emacs" will display
   - [[#open-rule][Open rule]]
 - [[#standard-library][Standard library]]
   - [[#overrides-for-talon-community-rules][Overrides for talon community rules]]
+- [[#evaluating-utterances-without-a-speech-recognition-engine][Evaluating utterances without a speech recognition engine]]
 - [[#authoring-libraries][Authoring libraries]]
   - [[#modules][Modules]]
   - [[#interface-rules][Interface rules]]
@@ -44,18 +45,18 @@ With such a function defined, uttering "hello emacs" will display
 :PROPERTIES:
 :CUSTOM_ID: supported-speech-recognition-backends
 :END:
-Phony currently only supports Talon.  If you want to help with adding
-support for Dragonfly with kaldi-active-grammar to allow this to be
-used with [[https://www.gnu.org/philosophy/free-sw.html][Free Software]], you can get in contact by opening an issue or
-sending a message in the dragonfly matrix room or the emacs channel on
-the talon slack.
+Phony currently only supports Talon for speech recognition.  If you
+want to help with adding support for a [[https://www.gnu.org/philosophy/free-sw.html][Free]] backend, get in contact
+through our matrix room [[https://matrix.to/#/#emacslisten:matrix.org][#emacslisten:matrix.org]].
 
 * Setup
 :PROPERTIES:
 :CUSTOM_ID: setup
 :END:
-This package assumes that you have Talon up and running.  See [[https://talon.wiki/Resource%20Hub/Talon%20Installation/installation_guide/][steps
-1-3 on their wiki]] for instructions.
+For speech recognition, this package assumes that you have Talon up
+and running.  See [[https://talon.wiki/Resource%20Hub/Talon%20Installation/installation_guide/][steps 1-3 on their wiki]] for instructions.  If you
+just want to try out phony without a speech recognition engine, see
+[[#evaluating-utterances-without-a-speech-recognition-engine][phony-evaluate]].
 
 This package is on MELPA as [[https://melpa.org/#/phony][phony]].  After installation, enable
 ~phony-mode~:
@@ -223,6 +224,17 @@ place of the above, add the following to your configuration:
 #+begin_src elisp
   (phony-provide-from phony-stdlib phony-stdlib-talon-community)
 #+end_src
+
+* Evaluating utterances without a speech recognition engine
+:PROPERTIES:
+:CUSTOM_ID: evaluating-utterances-without-a-speech-recognition-engine
+:END:
+Use the function ~phony-evaluate~ to evaluate an utterance, given as a
+string.  Phony will try to parse the utterance as a sequence of
+interactive procedure rules, and evaluate them in order.
+
+~phony-evaluate~ is unstable, and its behaviour may change in the
+future.
 
 * Authoring libraries
 :PROPERTIES:

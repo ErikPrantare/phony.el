@@ -1,3 +1,8 @@
+* 2.1.0 [2026-10-20 Tue]
+- Added function ~phony-evaluate~, which takes an utterance and parses
+  it against the grammar.  The function is unstable, so its behaviour
+  may change in the future.
+
 * 2.0.0 [2026-10-17 Sat]
 - There is now a new interface rule type.  Interfaces are defined with
   ~phony-define-interface~, and allow the user to choose between
