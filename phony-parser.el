@@ -192,18 +192,27 @@ no arguments to yield the actual parser to use."
   "Return a parser that succeeds if RULE is currently active."
   (phony-parser--guard (lambda () (phony--rule-active-p rule))))
 
+(defvar phony-parser-literal-comparator 'string=
+	"Comparator used for literal token parsing.
+Called with two string arguments.")
+
 (defun phony-parser--literal (string)
   "Return a parser that accepts tokens matching STRING.
 
 STRING is split up into words.  The returned parser reads that many
 tokens before accepting, if the tokens correspond to the words.
-The result of a parse is STRING."
+The result of a parse is STRING.
+
+Uses `phony-parser--literal-comparator'."
   (let ((words (string-split string)))
     (apply
      #'phony-parser--lift
      (lambda (&rest _words) string)
      (seq-map (lambda (word)
-                (phony-parser--satisfy (apply-partially #'string-equal word)))
+                (phony-parser--satisfy (apply-partially
+														(or phony-parser-literal-comparator
+																#'string-equal)
+														word)))
               words))))
 
 (defun phony-parser--optional (parser)
