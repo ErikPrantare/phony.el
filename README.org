@@ -45,10 +45,8 @@ With such a function defined, uttering "hello emacs" will display
 :CUSTOM_ID: supported-speech-recognition-backends
 :END:
 Phony currently only supports Talon.  If you want to help with adding
-support for Dragonfly with kaldi-active-grammar to allow this to be
-used with [[https://www.gnu.org/philosophy/free-sw.html][Free Software]], you can get in contact by opening an issue or
-sending a message in the dragonfly matrix room or the emacs channel on
-the talon slack.
+support a [[https://www.gnu.org/philosophy/free-sw.html][Free]] backend, get in contact through our matrix room
+[[https://matrix.to/#/#emacslisten:matrix.org][#emacslisten:matrix.org]].
 
 * Setup
 :PROPERTIES:
