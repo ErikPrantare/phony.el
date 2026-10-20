@@ -131,10 +131,10 @@ exporters do nothing, and export request debounce is turned off."
 SENTENCE must parse unambiguously into a single command.
 
 If there is no parse, an error is thrown."
-  (let ((parses (phony-parser--parse-utterance sentence)))
-    (unless parses
+  (let ((result (phony-evaluate sentence 'NO-PARSE)))
+    (when (eq result 'NO-PARSE)
       (error "No parse available for '%s'" sentence))
-    (phony--evaluate-ast (caar parses))))
+    (car result)))
 
 (ert-deftest phony-dictionary-modification-parses ()
   "Changing a dictionary reflects immediately in the parser."
