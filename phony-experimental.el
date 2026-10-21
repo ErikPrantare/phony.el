@@ -260,7 +260,7 @@ This includes `completion-at-point', `xref', and font-locking."
   (phony--uninstall-checkdoc))
 
 (defun phony-experimental-set-parser-literal-comparator (comparator)
-  "Set the COMPARATOR for literals for `phony-experimental-evaluate'.
+  "Set the COMPARATOR for literals used in `phony-experimental-evaluate'.
 
 By default, comparison of input words with grammar literals is done with
 `string-equal'.  This function overrides that default with COMPARATOR.
