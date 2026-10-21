@@ -4,7 +4,7 @@
 
 ;; Author: Erik Präntare <erik@prantare.xyz>
 ;; Keywords: files
-;; Version: 2.1.0
+;; Version: 2.2.0
 ;; Homepage: https://github.com/ErikPrantare/phony.el
 ;; Package-Requires: ((emacs "29.1") (simulacrum "2.0.0"))
 ;; Created: 13 Jul 2024

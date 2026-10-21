@@ -24,6 +24,7 @@
 (require 'phony)
 (require 'phony-parser)
 (require 'phony-talon)
+(require 'phony-experimental)
 
 (defmacro phony-test (&rest body)
   "Evaluate BODY in a fresh phony test environment.
@@ -37,7 +38,8 @@ exporters do nothing, and export request debounce is turned off."
          (phony--dictionary-export-function #'ignore)
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
-         (phony--last-analysis nil))
+         (phony--last-analysis nil)
+         (phony-parser--literal-comparator #'string-equal))
      (unwind-protect
          (progn
            (phony-mode 0)
@@ -131,7 +133,7 @@ exporters do nothing, and export request debounce is turned off."
 SENTENCE must parse unambiguously into a single command.
 
 If there is no parse, an error is thrown."
-  (let ((result (phony-evaluate sentence 'NO-PARSE)))
+  (let ((result (phony-experimental-evaluate sentence 'NO-PARSE)))
     (when (eq result 'NO-PARSE)
       (error "No parse available for '%s'" sentence))
     (car result)))
@@ -553,6 +555,21 @@ If there is no parse, an error is thrown."
     (should-error (phony-test--evaluate "w x"))
     (should-error (phony-test--evaluate "z w"))
     (should-error (phony-test--evaluate "w z"))))
+
+(ert-deftest phony-parser-literal-comparator ()
+  "`phony-experimental-set-parser-literal-comparator' works as advertised."
+  (phony-test
+    (phony-experimental-set-parser-literal-comparator
+     (lambda (token literal)
+       (= (length token) (length literal))))
+    (phony-defun x ("1234" (? "12") "123")
+      42)
+    (phony--export-all)
+    (should (phony-test--evaluate "abcd abc"))
+    (should (phony-test--evaluate "abcd ab abc"))
+
+    (should-error (phony-test--evaluate "abc abcd"))
+    (should-error (phony-test--evaluate "abcd a abc"))))
 
 (ert-deftest phony-talon-export ()
   "The talon exporter exports with correct syntax."
