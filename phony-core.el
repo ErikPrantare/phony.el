@@ -1395,8 +1395,5 @@ Evaluation is done with reference to `phony--exported-grammar'."
         (phony--evaluate-ast (cadr ast)))
        (t (error "Failed to evaluate AST: %S" ast))))))
 
-(define-obsolete-function-alias 'phony-evaluate 'phony-experimental-evaluate
-  "[2026-10-21 Wed]")
-
 (provide 'phony-core)
 ;;; phony-core.el ends here
