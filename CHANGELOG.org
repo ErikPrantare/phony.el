@@ -1,3 +1,8 @@
+* NEXT
+- Added experimental function
+  ~phony-experimental-set-parser-literal-comparison~, which configures
+  how ~phony-evaluate~ compares words to literals.
+
 * 2.1.0 [2026-10-20 Tue]
 - Added function ~phony-evaluate~, which takes an utterance and parses
   it against the grammar.  The function is unstable, so its behaviour

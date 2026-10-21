@@ -259,5 +259,14 @@ This includes `completion-at-point', `xref', and font-locking."
   (setf (alist-get 'phony find-function-regexp-alist nil t) nil)
   (phony--uninstall-checkdoc))
 
+(defun phony-experimental-set-parser-literal-comparison (comparator)
+  "Set the literal equality for `phony-evaluate' to COMPARATOR.
+
+By default, comparison of input words with grammar literals is done with
+`string-equal'.  This function overrides that default with COMPARATOR.
+COMPARATOR is a function of two parameters.  The first parameter is the
+utterance word, and the second is the word in the literal."
+  (setq phony-parser--literal-comparator comparator))
+
 (provide 'phony-experimental)
 ;;; phony-experimental.el ends here

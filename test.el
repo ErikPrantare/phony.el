@@ -24,6 +24,7 @@
 (require 'phony)
 (require 'phony-parser)
 (require 'phony-talon)
+(require 'phony-experimental)
 
 (defmacro phony-test (&rest body)
   "Evaluate BODY in a fresh phony test environment.
@@ -37,7 +38,8 @@ exporters do nothing, and export request debounce is turned off."
          (phony--dictionary-export-function #'ignore)
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
-         (phony--last-analysis nil))
+         (phony--last-analysis nil)
+         (phony-parser--literal-comparator #'string-equal))
      (unwind-protect
          (progn
            (phony-mode 0)
@@ -554,6 +556,21 @@ If there is no parse, an error is thrown."
     (should-error (phony-test--evaluate "z w"))
     (should-error (phony-test--evaluate "w z"))))
 
+(ert-deftest phony-parser-literal-comparator ()
+  "`phony-experimental-set-parser-literal-comparison' works as advertised."
+  (phony-test
+   (phony-experimental-set-parser-literal-comparison
+    (lambda (token literal)
+      (= (length token) (length literal))))
+   (phony-defun x ("1234" (? "12") "123")
+     42)
+   (phony--export-all)
+   (should (phony-test--evaluate "abcd abc"))
+   (should (phony-test--evaluate "abcd ab abc"))
+
+   (should-error (phony-test--evaluate "abc abcd"))
+   (should-error (phony-test--evaluate "abcd a abc"))))
+
 (ert-deftest phony-talon-export ()
   "The talon exporter exports with correct syntax."
   (unless (executable-find "python")
@@ -562,39 +579,39 @@ If there is no parse, an error is thrown."
           (error "%s" message)
         (ert-skip message))))
   (phony-test
-    (let* ((directory (make-temp-file "phony-talon-test" t))
-           (phony-output-directory directory))
-      (unwind-protect
-          (progn
-            (phony-define-module some-module)
-            (phony-enable-module 'some-module)
-            (phony-define-open-rule number)
-            (phony-defun three "three"
-              :contributes-to number
-              :module some-module
-              3)
-            (phony-defun five "five"
-              :contributes-to number
-              3)
-            (phony-define-dictionary more-numbers
-              :contributes-to number
-              '(("pi" . 3.14) ("elite" . 1337)))
-            (phony-defun double ("double" number)
-              (* 2 number))
-            (phony-defun insert-word ("insert" (word phony--builtin-word))
-              (insert word))
-            (phony-defun insert-phrase ("insert" (phrase phony--builtin-phrase))
-              (insert phrase))
-            (phony--export-all)
-            (phony-talon--generate-configuration
-             (phony--grammar-analysis phony--exported-grammar))
-            (with-temp-buffer
-              (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
-                                           (phony-talon--output-path "rules.py")
-                                           (phony-talon--output-path "evaluate_elisp.py")
-                                           (phony-talon--output-path "read_dictionaries.py")))
-                (error "Syntax error in python: %s" (buffer-string)))))
-        (delete-directory directory t)))))
+   (let* ((directory (make-temp-file "phony-talon-test" t))
+          (phony-output-directory directory))
+     (unwind-protect
+         (progn
+           (phony-define-module some-module)
+           (phony-enable-module 'some-module)
+           (phony-define-open-rule number)
+           (phony-defun three "three"
+             :contributes-to number
+             :module some-module
+             3)
+           (phony-defun five "five"
+             :contributes-to number
+             3)
+           (phony-define-dictionary more-numbers
+             :contributes-to number
+             '(("pi" . 3.14) ("elite" . 1337)))
+           (phony-defun double ("double" number)
+             (* 2 number))
+           (phony-defun insert-word ("insert" (word phony--builtin-word))
+             (insert word))
+           (phony-defun insert-phrase ("insert" (phrase phony--builtin-phrase))
+             (insert phrase))
+           (phony--export-all)
+           (phony-talon--generate-configuration
+            (phony--grammar-analysis phony--exported-grammar))
+           (with-temp-buffer
+             (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
+                                          (phony-talon--output-path "rules.py")
+                                          (phony-talon--output-path "evaluate_elisp.py")
+                                          (phony-talon--output-path "read_dictionaries.py")))
+               (error "Syntax error in python: %s" (buffer-string)))))
+       (delete-directory directory t)))))
 
 (ert-deftest phony-stdlib-number-parsing ()
   "Numbers parse correctly."
