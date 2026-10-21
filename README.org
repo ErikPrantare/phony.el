@@ -289,7 +289,7 @@ order.
 :CUSTOM_ID: customizing-rules-for-matching
 :END:
 
-You can use ~phony-experimental-set-parser-literal-comparison~ to set
+You can use ~phony-experimental-set-parser-literal-comparator~ to set
 the function that compares the input token with the token from the
 rule.  For example, the following code ignores case and punctuation.
 
@@ -303,7 +303,7 @@ rule.  For example, the following code ignores case and punctuation.
     (string-equal (my-phony-parser--sanitize a)
                   (my-phony-parser--sanitize b)))
 
-  (phony-experimental-set-parser-literal-comparison
+  (phony-experimental-set-parser-literal-comparator
    #'my-phony-compare-literal)
 #+end_src
 

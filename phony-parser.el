@@ -194,7 +194,7 @@ no arguments to yield the actual parser to use."
 
 (defvar phony-parser--literal-comparator 'string-equal
   "Comparator used for comparing tokens with literal words.
-Called with the token as the first paramater, and the literal word as
+Called with the token as the first parameter, and the literal word as
 the second parameter.")
 
 (defun phony-parser--literal (string)

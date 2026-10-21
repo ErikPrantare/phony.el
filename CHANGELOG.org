@@ -2,7 +2,7 @@
 - ~phony-evaluate~ has been renamed ~phony-experimental-evaluate~.
   Require ~phony-experimental~ to load it.
 - Added experimental function
-  ~phony-experimental-set-parser-literal-comparison~, which configures
+  ~phony-experimental-set-parser-literal-comparator~, which configures
   how ~phony-evaluate~ compares words to literals.
 
 * 2.1.0 [2026-10-20 Tue]
