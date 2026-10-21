@@ -33,10 +33,12 @@ With such a function defined, uttering "hello emacs" will display
   - [[#open-rule][Open rule]]
 - [[#standard-library][Standard library]]
   - [[#overrides-for-talon-community-rules][Overrides for talon community rules]]
-- [[#evaluating-utterances-without-a-speech-recognition-engine][Evaluating utterances without a speech recognition engine]]
 - [[#authoring-libraries][Authoring libraries]]
   - [[#modules][Modules]]
   - [[#interface-rules][Interface rules]]
+- [[#experimental-features][Experimental features]]
+  - [[#evaluating-utterances-without-a-speech-recognition-engine][Evaluating utterances without a speech recognition engine]]
+  - [[#customizing-rules-for-matching][Customizing rules for matching]]
 - [[#pre-defined-rulesets][Pre-defined rulesets]]
 - [[#versioning-system][Versioning system]]
 :END:
@@ -225,38 +227,6 @@ place of the above, add the following to your configuration:
   (phony-provide-from phony-stdlib phony-stdlib-talon-community)
 #+end_src
 
-* Evaluating utterances without a speech recognition engine
-:PROPERTIES:
-:CUSTOM_ID: evaluating-utterances-without-a-speech-recognition-engine
-:END:
-Use the function ~phony-evaluate~ to evaluate an utterance, given as a
-string.  Phony will try to parse the utterance as a sequence of
-interactive procedure rules, and evaluate them in order.
-
-~phony-evaluate~ is unstable, and its behaviour may change in the
-future.
-* Customizing rules for matching
-:PROPERTIES:
-:CUSTOM_ID: customizing-rules-for-matching
-:END:
-
-You can change =phony-parser-literal-comparator= to a function that
-compares the input token with the token from the rule. For example,
-the following code ignores case and punctuation.
-
-#+begin_src emacs-lisp :results none
-(defun my-phony-parser--sanitize (s)
-  "Lowercase and remove punctuation."
-  (string-trim (replace-regexp-in-string "[-,\\.!?:]" "" (downcase s))))
-
-(defun my-phony-compare-literal (a b)
-	"Ignore case and ending punctuation."
-	(string= (my-phony-parser--sanitize a)
-					 (my-phony-parser--sanitize b)))
-
-(setq phony-parser-literal-comparator #'my-phony-compare-literal)
-#+end_src
-
 * Authoring libraries
 :PROPERTIES:
 :CUSTOM_ID: authoring-libraries
@@ -298,6 +268,43 @@ user are selected automatically.
 
 See the documentation of ~phony-define-interface~ for details
 on interfaces.
+
+* Experimental features
+:PROPERTIES:
+:CUSTOM_ID: experimental-features
+:END:
+** Evaluating utterances without a speech recognition engine
+:PROPERTIES:
+:CUSTOM_ID: evaluating-utterances-without-a-speech-recognition-engine
+:END:
+Use the function ~phony-evaluate~ to evaluate an utterance, given as a
+string.  Phony will try to parse the utterance as a sequence of
+interactive procedure rules, and evaluate them in order.
+
+~phony-evaluate~ is unstable, and its behaviour may change in the
+future.
+
+** Customizing rules for matching
+:PROPERTIES:
+:CUSTOM_ID: customizing-rules-for-matching
+:END:
+
+You can change =phony-parser-literal-comparator= to a function that
+compares the input token with the token from the rule. For example,
+the following code ignores case and punctuation.
+
+#+begin_src emacs-lisp :results none
+  (defun my-phony-parser--sanitize (s)
+    "Lowercase and remove punctuation."
+    (string-trim (replace-regexp-in-string "[-,\\.!?:]" "" (downcase s))))
+
+  (defun my-phony-compare-literal (a b)
+    "Ignore case and ending punctuation."
+    (string= (my-phony-parser--sanitize a)
+  	   (my-phony-parser--sanitize b)))
+
+  (setq phony-parser-literal-comparator #'my-phony-compare-literal)
+#+end_src
 
 * Pre-defined rulesets
 :PROPERTIES:
