@@ -273,16 +273,16 @@ on interfaces.
 :PROPERTIES:
 :CUSTOM_ID: experimental-features
 :END:
+Experimental features are enabled by requiring ~phony-experimental~.
+
 ** Evaluating utterances without a speech recognition engine
 :PROPERTIES:
 :CUSTOM_ID: evaluating-utterances-without-a-speech-recognition-engine
 :END:
-Use the function ~phony-evaluate~ to evaluate an utterance, given as a
-string.  Phony will try to parse the utterance as a sequence of
-interactive procedure rules, and evaluate them in order.
-
-~phony-evaluate~ is unstable, and its behaviour may change in the
-future.
+Use the function ~phony-experimental-evaluate~ to evaluate an
+utterance, given as a string.  Phony will try to parse the utterance
+as a sequence of interactive procedure rules, and evaluate them in
+order.
 
 ** Customizing rules for matching
 :PROPERTIES:

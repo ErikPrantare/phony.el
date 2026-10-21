@@ -133,7 +133,7 @@ exporters do nothing, and export request debounce is turned off."
 SENTENCE must parse unambiguously into a single command.
 
 If there is no parse, an error is thrown."
-  (let ((result (phony-evaluate sentence 'NO-PARSE)))
+  (let ((result (phony-experimental-evaluate sentence 'NO-PARSE)))
     (when (eq result 'NO-PARSE)
       (error "No parse available for '%s'" sentence))
     (car result)))

@@ -1,4 +1,6 @@
 * NEXT
+- ~phony-evaluate~ has been renamed ~phony-experimental-evaluate~.
+  Require ~phony-experimental~ to load it.
 - Added experimental function
   ~phony-experimental-set-parser-literal-comparison~, which configures
   how ~phony-evaluate~ compares words to literals.
