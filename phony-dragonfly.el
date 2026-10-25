@@ -86,11 +86,11 @@
                    (phony--element-sequence-elements element))
                   'vector))))
 
-(cl-defgeneric phony-dragonfly--serialize-rule-definition (rule)
-  "Convert RULE definition to a form serializable by `json-encode'.")
+(cl-defgeneric phony-dragonfly--serialize-rule-definition (rule _grammar)
+  "Convert RULE definition in GRAMMAR to a form serializable by `json-encode'.")
 
-(cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--procedure-rule))
-  "Convert RULE definition to a form serializable by `json-encode'."
+(cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--procedure-rule) grammar)
+  "Convert RULE definition in GRAMMAR to a form serializable by `json-encode'."
   `((type . "procedure")
     (name . ,(phony--rule-external-name rule))
     (rule-name . ,(symbol-name (phony--procedure-rule-name rule)))
@@ -100,25 +100,26 @@
                        (seq-map #'symbol-name
                                 (phony--procedure-rule-arglist rule))
                        'vector))
-    (export . ,(if (phony--procedure-rule-interactive-p rule) t :false))))
+    (export . ,(if (phony--procedure-rule-interactive-p rule) t :false))
+    (always-active . ,(if (phony--rule-always-active-p rule grammar) t :false))))
 
-(cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--open-rule))
-  "Convert RULE definition to a form serializable by `json-encode'."
+(cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--open-rule) _grammar)
+  "Convert RULE definition in GRAMMAR to a form serializable by `json-encode'."
   `((type . "open")
     (name . ,(phony--rule-external-name rule))
     (alternatives . ,(seq-into (seq-map #'phony--rule-external-name
                                         (phony--open-rule-alternatives rule))
                                'vector))))
 
-(cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--dictionary))
-  "Convert RULE to a form serializable by `json-encode'."
+(cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--dictionary) _grammar)
+  "Convert RULE in GRAMMAR to a form serializable by `json-encode'."
   `((type . "dictionary")
     (name . ,(phony--rule-external-name rule))))
 
-(defun phony-dragonfly--serialize-rule (rule)
-  "Convert RULE to a form serializable by `json-encode'."
+(defun phony-dragonfly--serialize-rule (rule grammar)
+  "Convert RULE in GRAMMAR to a form serializable by `json-encode'."
   `(,(make-symbol (phony--rule-external-name rule))
-    . ,(phony-dragonfly--serialize-rule-definition rule)))
+    . ,(phony-dragonfly--serialize-rule-definition rule grammar)))
 
 (defun phony-dragonfly--serialize-rules (analysis-data)
   ;; checkdoc-params: (analysis-data)
@@ -129,8 +130,10 @@
                 (lambda (rule) (phony--rule-external-name rule))
                 (phony--analysis-data-linear-extension analysis-data))))
     (rules
-     . ,(seq-map #'phony-dragonfly--serialize-rule
-                 (phony--get-rules (phony--analysis-data-grammar analysis-data))))))
+     . ,(let ((grammar (phony--analysis-data-grammar analysis-data)))
+          (seq-map (lambda (rule)
+                     (phony-dragonfly--serialize-rule rule grammar))
+                   (phony--get-rules grammar))))))
 
 (defun phony-dragonfly-export (analysis-data)
   ;; checkdoc-params: (analysis-data)
