@@ -1357,18 +1357,17 @@ dictionary."
 
 (defun phony--sync-state ()
   "Export information about which rules are currently active."
-  ;; We must filter the enabled rules before doing with-temp-file, as
-  ;; that may otherwise influence which rules are enabled.
+  ;; We must filter the enabled rules /before/ doing with-temp-file,
+  ;; as the temporary buffer may influence which rules are enabled.
   (let ((active-rules (seq-filter #'phony--rule-active-p
                                   (phony--get-rules phony--exported-grammar))))
     (with-temp-file (phony--output-directory "active-rules")
-      (insert (string-join
-               (seq-map #'phony--rule-external-name
-                        (seq-remove
-                         (lambda (rule)
-                           (phony--rule-always-active-p
-                            rule phony--exported-grammar))
-                         active-rules))
+      (insert (mapconcat
+               #'phony--rule-external-name
+               (seq-remove (lambda (rule)
+                             (phony--rule-always-active-p
+                              rule phony--exported-grammar))
+                           active-rules)
                "\n")
               "\n"))))
 
