@@ -34,6 +34,7 @@
 
 (require 'phony-model)
 (require 'phony-parser)
+(require 'phony-ag)
 
 (defgroup phony nil
   "Functionality for defining speech bindings."
@@ -539,6 +540,7 @@ The returned grammar must not be mutated."
     (phony--detect-interface-cycles prepared)
     (phony--remove-unreachable-resolve-interfaces prepared)
     (phony--canonicalize-grammar prepared)
+    (phony-ag--initialize prepared)
     prepared))
 
 (defun phony--add-rule (rule grammar)

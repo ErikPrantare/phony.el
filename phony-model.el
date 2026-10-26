@@ -31,6 +31,7 @@
 (require 'subr-x)
 
 (require 'phony-element)
+(require 'phony-ag)
 
 (cl-defstruct (phony--grammar
                (:constructor phony--make-grammar)
@@ -312,6 +313,39 @@ A rule is inactive if none of its modes are currently active."
                   (memq mode local-minor-modes)
                   (memq mode global-minor-modes)))
                modes))))
+
+(cl-defmethod phony-ag--children ((grammar phony--grammar))
+  "Return the children of GRAMMAR."
+  (let ((children (cl-call-next-method)))
+    (maphash (lambda (name rule)
+               (push (cons (cons 'rule name) rule) children))
+             (phony--grammar-rules grammar))
+    (maphash (lambda (name rule)
+               (push (cons (cons 'module name) rule) children))
+             (phony--grammar-modules grammar))
+    children))
+
+(cl-defmethod phony-ag--children ((_dictionary phony--dictionary))
+  "Return the children of DICTIONARY.
+
+The underlying storage is excluded, as it is shared between different
+grammars."
+  (let ((children (cl-call-next-method)))
+    (setf (alist-get 'storage children nil t) nil)
+    children))
+
+(cl-defmethod phony-ag--children ((element phony--element-sequence))
+  "Return the children of ELEMENT."
+  (seq-map-indexed
+   (lambda (child index) (cons index child))
+   (phony--element-sequence-elements element)))
+
+(phony-ag--define-inherited phony--element-containing-rule (element)
+  "Return the procedure rule containing ELEMENT.")
+
+(phony-ag--define-equation phony--element-containing-rule
+    ((rule phony--procedure-rule) _)
+  rule)
 
 (provide 'phony-model)
 
