@@ -187,9 +187,7 @@ if ARGUMENT is not found in ELEMENTS."
 (defun phony-talon--insert-capture-preamble (rule analysis-data)
   ;; checkdoc-params: (analysis-data)
   "Insert the Python capture preamble for RULE."
-  (if (phony--rule-always-active-p
-       rule
-       (phony--analysis-data-grammar analysis-data))
+  (if (phony--rule-always-active-p rule)
       (insert "@module.capture(rule=" (phony-talon--rule-match-string rule analysis-data) ")\n")
     (insert "# Base case for when the rule is inactive\n")
     (phony-talon--insert-python-disabled rule)
@@ -416,8 +414,7 @@ This function creates .talon and .py files in the output directory."
               "module.list(\"phony_disabled_rule\", desc=\"This cannot match\")\n")
       (seq-doseq (rule rules)
         (insert "\n")
-        (unless (phony--rule-always-active-p
-                 rule (phony--analysis-data-grammar analysis-data))
+        (unless (phony--rule-always-active-p rule)
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
                           (phony--rule-external-name rule))))
         (phony-talon--insert-capture-preamble rule analysis-data)

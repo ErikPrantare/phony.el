@@ -271,8 +271,8 @@ contribute to open rules."
   (phony-request-export)
   (message "Disabled %s module" name))
 
-(defun phony--rule-always-active-p (rule _grammar)
-  "Return non-nil if RULE is guaranteed to always be active in GRAMMAR.
+(defun phony--rule-always-active-p (rule)
+  "Return non-nil if RULE is guaranteed to always be active.
 
 A rule is always active if it is global."
   (memq 'global (phony--rule-modes rule)))
@@ -1366,9 +1366,7 @@ dictionary."
     (with-temp-file (phony--output-directory "active-rules")
       (insert (mapconcat
                #'phony--rule-external-name
-               (seq-remove (lambda (rule)
-                             (phony--rule-always-active-p
-                              rule phony--exported-grammar))
+               (seq-remove #'phony--rule-always-active-p
                            active-rules)
                "\n")
               "\n"))))

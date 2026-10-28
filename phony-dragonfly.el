@@ -89,7 +89,7 @@
 (cl-defgeneric phony-dragonfly--serialize-rule-definition (rule _grammar)
   "Convert RULE definition in GRAMMAR to a form serializable by `json-encode'.")
 
-(cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--procedure-rule) grammar)
+(cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--procedure-rule) _grammar)
   "Convert RULE definition in GRAMMAR to a form serializable by `json-encode'."
   `((type . "procedure")
     (name . ,(phony--rule-external-name rule))
@@ -101,7 +101,7 @@
                                 (phony--procedure-rule-arglist rule))
                        'vector))
     (export . ,(if (phony--procedure-rule-interactive-p rule) t :false))
-    (always-active . ,(if (phony--rule-always-active-p rule grammar) t :false))))
+    (always-active . ,(if (phony--rule-always-active-p rule) t :false))))
 
 (cl-defmethod phony-dragonfly--serialize-rule-definition ((rule phony--open-rule) _grammar)
   "Convert RULE definition in GRAMMAR to a form serializable by `json-encode'."
