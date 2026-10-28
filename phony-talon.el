@@ -61,7 +61,7 @@
   "Return the Talon pattern string for matching ELEMENT."
   (let* ((occurrence-number
           (phony-talon--occurrence-number
-           element (phony--element-containing-rule element))))
+           element (phony--containing-rule element))))
     (format "<user.%s%s>"
             (phony--rule-external-name
              (phony--element-rule-name element))

@@ -340,10 +340,10 @@ grammars."
    (lambda (child index) (cons index child))
    (phony--element-sequence-elements element)))
 
-(phony-ag--define-inherited phony--element-containing-rule (element)
+(phony-ag--define-inherited phony--containing-rule (element)
   "Return the procedure rule containing ELEMENT.")
 
-(phony-ag--define-equation phony--element-containing-rule
+(phony-ag--define-equation phony--containing-rule
     ((rule phony--procedure-rule) _)
   rule)
 
