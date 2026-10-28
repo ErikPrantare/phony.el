@@ -347,6 +347,13 @@ grammars."
     ((rule phony--procedure-rule) _)
   rule)
 
+(phony-ag--define-inherited phony--containing-grammar (node)
+  "Return the grammar containing NODE.")
+
+(phony-ag--define-equation phony--containing-grammar
+    ((grammar phony--grammar) _)
+  grammar)
+
 (provide 'phony-model)
 
 ;;; phony-model.el ends here
