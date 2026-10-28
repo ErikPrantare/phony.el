@@ -53,7 +53,8 @@ Inherited attributes are defined by an ancestor of a node through
 
 For inherited attributes to work, call `phony-ag--initialize' on the
 root node first."
-  (declare (doc-string 3))
+  (declare (indent defun)
+           (doc-string 3))
   `(eval-and-compile
      (let ((phony-ag--cache (make-hash-table :test 'eq :weakness 'key)))
        (defun ,name (,node)
@@ -86,6 +87,7 @@ This defines the attribute declared by `phony-ag--define-inherited' for
 the descendants of NODE matching SLOT-DESCRIPTOR.  NODE and
 SLOT-DESCRIPTOR have the same form and meaning as parameters to
 `cl-defmethod'."
+  (declare (indent defun))
   `(cl-defmethod phony-ag--equation ((_attribute (eql ',attribute))
                                      ,node ,slot-descriptor)
      ,@body))

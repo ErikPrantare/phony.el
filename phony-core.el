@@ -118,11 +118,10 @@ providers."
               (phony--grammar-module-provision phony--default-grammar))))
 
 (defun phony--provides-from-p (interface-module provider-module grammar)
-  "Return non-nil if PROVIDER-MODULE resolves INTERFACE-MODULE in GRAMMAR.
-
-PROVIDER-MODULE and INTERFACE-MODULE must be provided by name."
-  (eq (gethash interface-module (phony--grammar-module-provision grammar))
-      provider-module))
+  "Return non-nil if PROVIDER-MODULE resolves INTERFACE-MODULE in GRAMMAR."
+  (eq (gethash (phony--module-name interface-module)
+               (phony--grammar-module-provision grammar))
+      (phony--module-name provider-module)))
 
 (defun phony--current-file-name ()
   "Return the filename of the current evaluation context.
@@ -382,24 +381,7 @@ applied to the grammar."
   ;; one, because we should only error on unresolved interfaces if
   ;; they are reachable, but reachability in turn depends on interface
   ;; resolution.
-  (let* ((rules (phony--get-rules grammar))
-         (providers
-          (seq-filter #'phony--rule-provides rules))
-         (interface-resolution-map
-          (seq-keep (lambda (provider)
-                      (and (or (phony--user-rule-p provider)
-                               (let ((provider-module (phony--rule-module provider))
-                                     (interface-module (phony--rule-module
-                                                        (phony--get-rule
-                                                         (phony--rule-provides provider)
-                                                         grammar))))
-                                 (phony--provides-from-p
-                                  interface-module provider-module grammar)))
-                           (cons
-                            (phony--rule-provides provider)
-                            (phony--rule-name provider))))
-                    providers))
-         (worklist (mapcar #'phony--rule-name
+  (let* ((worklist (mapcar #'phony--rule-name
                            (phony--interactive-rules grammar)))
          (reachable (make-hash-table :test 'eq)))
     (while worklist
@@ -412,44 +394,22 @@ applied to the grammar."
                      current task))
             (unless (gethash task reachable)
               (push task worklist)))
-          (when (phony--interface-rule-p
-                 (phony--get-rule current grammar))
-            (let ((providers (seq-keep (lambda (entry)
-                                         (and (eq (car entry) current)
-                                              (cdr entry)))
-                                       interface-resolution-map)))
-              ;; If rules in the user's configuration provide for the
-              ;; interface, they take precedence.
-              (when-let* ((user-providers
-                           (seq-filter (lambda (provider)
-                                         (phony--user-rule-p
-                                          (phony--get-rule provider grammar)))
-                                       providers)))
-                (setq providers user-providers))
-              ;; :default provider has lowest priority
-              (unless providers
-                (when-let* ((default
-                             (phony--interface-rule-default
-                              (phony--get-rule current grammar))))
-                  (unless (phony--get-rule default grammar)
-                    (error "The default provider `%s' for interface %s is not defined"
-                           default current))
-                  (setq providers (list default))))
-              (when (> (length providers) 1)
-                (error "More than one eligible provider available for %s\nProviders: %s"
-                       current
-                       (string-join (seq-map #'symbol-name providers) ", ")))
-              (when (= (length providers) 0)
-                ;; TODO: Hint about providers in non-selected modules
-                (error "No eligible provider available for %s"
-                       current))
-              (phony--replace-in-grammar grammar current (car providers))
-              (unless (gethash (car providers) reachable)
-                (push (car providers) worklist)))))))
+          (when (phony--interface-rule-p (phony--get-rule current grammar))
+            (when-let* ((provider (phony--interface-resolved-provider
+                                   (phony--get-rule current grammar))))
+              (unless (gethash (phony--rule-name provider) reachable)
+                (push (phony--rule-name provider) worklist)))))))
     (dolist (rule (phony--get-rules grammar))
       (let ((name (phony--rule-name rule)))
         (unless (gethash name reachable)
-          (remhash name (phony--grammar-rules grammar)))))))
+          (remhash name (phony--grammar-rules grammar)))))
+    (dolist (interface (seq-filter #'phony--interface-rule-p
+                                   (phony--get-rules grammar)))
+      (let ((provider (phony--interface-resolved-provider interface)))
+        (phony--replace-in-grammar
+         grammar
+         (phony--rule-name interface)
+         (phony--rule-name provider))))))
 
 (defun phony--seal-disabled-modules (grammar)
   "Remove external impact of disabled modules in GRAMMAR.
@@ -529,6 +489,84 @@ This function also checks for contributions to non-existent rules."
           (error "Rule `%s' contributes to non-open rule `%s'"
                  (phony--rule-name rule) contribution))))))
 
+(phony-ag--define-synthesized phony--provider-alist (grammar)
+  "Return alist from providers to their provided interfaces in GRAMMAR.
+
+Keys and values are rule objects."
+  (seq-keep
+   (lambda (rule)
+     (and (phony--rule-provides rule)
+          (cons rule (phony--get-rule (phony--rule-provides rule) grammar))))
+   (phony--get-rules grammar)))
+
+(phony-ag--define-synthesized phony--interface-candidate-alist (grammar)
+  "Return alist mapping interfaces to the providers of it in GRAMMAR."
+  (let* ((inverse-provider-alist
+          (seq-map (lambda (entry) (cons (cdr entry) (car entry)))
+                   (phony--provider-alist grammar)))
+         (grouped (seq-group-by #'car inverse-provider-alist)))
+    (seq-map (lambda (entry)
+               (cons (car entry) (seq-map #'cdr (cdr entry))))
+             grouped)))
+
+(phony-ag--define-synthesized phony--interface-candidates (interface)
+  "Return candidates for INTERFACE."
+  (seq-filter
+   (lambda (candidate)
+     (or (phony--user-rule-p candidate)
+         (phony--provides-from-p
+          (phony--containing-module interface)
+          (phony--containing-module candidate)
+          (phony--containing-grammar interface))))
+   (map-elt
+    (phony--interface-candidate-alist
+     (phony--containing-grammar interface))
+    interface)))
+
+(phony-ag--define-synthesized phony--interface-default-resolved (interface)
+  "Return resolved default for INTERFACE.
+
+If the resolution fails or there is no default, this returns nil."
+  (phony--get-rule (phony--interface-rule-default interface)
+                   (phony--containing-grammar interface)))
+
+(cl-defgeneric phony--resolved-rule (rule)
+  "Return resolution of RULE."
+  rule)
+
+(phony-ag--define-synthesized phony--interface-resolved-provider (interface)
+  "Return the resolved provider for INTERFACE."
+  (let ((providers (phony--interface-candidates interface)))
+    ;; If rules in the user's configuration provide for the
+    ;; interface, they take precedence.
+    (when-let* ((user-providers (seq-filter #'phony--user-rule-p providers)))
+      (setq providers user-providers))
+    ;; :default provider has lowest priority
+    (unless providers
+      (when-let* ((default-name (phony--interface-rule-default interface))
+                  (default (phony--interface-default-resolved interface)))
+        (unless default
+          ;; TODO: Factor out error reporting
+          (error "The default provider `%s' for interface %s is not defined"
+                 default-name (phony--rule-name interface)))
+        (setq providers (list default))))
+    (when (> (length providers) 1)
+      (error "More than one eligible provider available for %s\nProviders: %s"
+             (phony--rule-name interface)
+             (mapconcat
+              (lambda (provider) (symbol-name (phony--rule-name provider)))
+              providers
+              ", ")))
+    (when (= (length providers) 0)
+      ;; TODO: Hint about providers in non-selected modules
+      (error "No eligible provider available for %s"
+             (phony--rule-name interface)))
+    (phony--resolved-rule (car providers))))
+
+(cl-defmethod phony--resolved-rule ((interface phony--interface-rule))
+  "Return resolution of INTERFACE."
+  (phony--interface-resolved-provider interface))
+
 (defun phony--prepare-grammar (grammar)
   "Prepare GRAMMAR for export.
 
@@ -538,7 +576,11 @@ The returned grammar must not be mutated."
     (phony--detect-non-open-contributions prepared)
     (phony--internalize-contributions prepared)
     (phony--detect-interface-cycles prepared)
+    ;; HACK: This lil clone dance is necessary until we remove
+    ;; rewriting from reachability pruning.
+    (phony-ag--initialize prepared)
     (phony--remove-unreachable-resolve-interfaces prepared)
+    (setq prepared (phony--copy-grammar prepared))
     (phony--canonicalize-grammar prepared)
     (phony-ag--initialize prepared)
     prepared))

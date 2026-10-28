@@ -335,6 +335,17 @@ grammars."
     ((grammar phony--grammar) _)
   grammar)
 
+(phony-ag--define-inherited phony--containing-module (node)
+                            "Return the module containing NODE.")
+
+(phony-ag--define-equation phony--containing-module ((grammar phony--grammar)
+                                                     (rule-slot (head rule)))
+  (and-let* ((rule-name (cdr rule-slot))
+             (rule (phony--get-rule rule-name grammar))
+             (module-name (phony--rule-module rule))
+             (module (gethash module-name (phony--grammar-modules grammar))))
+    module))
+
 (phony-ag--define-synthesized phony--resolved-alternatives (open-rule)
   "Return alternatives of OPEN-RULE as a list of rules."
   (let ((grammar (phony--containing-grammar open-rule)))
