@@ -93,20 +93,26 @@ SLOT-DESCRIPTOR have the same form and meaning as parameters to
 (cl-defmacro phony-ag--define-synthesized (name (node) docstring &rest body)
   "Define a synthesized attribute NAME.
 
-This macro defines a function NAME for accessing the attribute of NODE.
-DOCSTRING supplies the documentation string of this accessor.  BODY
-computes the value for the attribute."
+This macro defines a generic function NAME for accessing the attribute
+of NODE.  DOCSTRING supplies the documentation string of this accessor.
+BODY optionally provides a default implementation for computing the
+attribute.  Use `cl-defmethod' to define special cases."
   (declare (doc-string 3) (indent defun))
   `(eval-and-compile
      (let ((phony-ag--cache (make-hash-table :test 'eq :weakness 'key)))
-       (defun ,name (,node)
-         ,docstring
+       (cl-defgeneric ,name (,node) ,docstring)
+       ;; HACK: If I put BODY in the generic, byte-compilation
+       ;; complains about undefined
+       ;; internal--with-suppressed-warnings.  I should investigate
+       ;; this and/or report upstream...
+       ,@(and body `((cl-defmethod ,name (,node) ,@body)))
+       (cl-defmethod ,name :around (,node)
          ;; We do not use with-memoization here, because nil is a legal
          ;; result, and with-memoization would interpret that as absence.
          (let ((cached-value (gethash ,node phony-ag--cache 'phony-ag--undefined)))
            (if (not (eq cached-value 'phony-ag--undefined))
                cached-value
-             (setf (gethash ,node phony-ag--cache) (progn ,@body))))))))
+             (setf (gethash ,node phony-ag--cache) (cl-call-next-method))))))))
 
 (cl-defgeneric phony-ag--children (node)
   "Return the children of NODE.
