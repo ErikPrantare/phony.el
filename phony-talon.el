@@ -60,8 +60,7 @@
 (cl-defmethod phony-talon--element-match-string ((element phony--element-rule))
   "Return the Talon pattern string for matching ELEMENT."
   (let* ((occurrence-number
-          (phony-talon--occurrence-number
-           element (phony--containing-rule element))))
+          (phony-talon--occurrence-number element)))
     (format "<user.%s%s>"
             (phony--rule-external-name
              (phony--element-rule-name element))
@@ -217,15 +216,15 @@ Return nil if no such element exists."
                argument)))
     (phony--procedure-rule-element rule))))
 
-(defun phony-talon--occurrence-number (match-element rule)
-  "Get index of occurence of MATCH-ELEMENT in procedure rule RULE.
+(defun phony-talon--occurrence-number (match-element)
+  "Get index of occurence of MATCH-ELEMENT in its containing rule.
 
-This goes through all match elements of RULE and returns the index of
-MATCH-ELEMENT among all of those `equal' to it."
+This goes through all match elements of the containing rule and returns
+the index of MATCH-ELEMENT among all of those `equal' to it."
   (seq-position
    (phony--element-collect
     (apply-partially #'equal match-element)
-    (phony--procedure-rule-element rule))
+    (phony--procedure-rule-element (phony--containing-rule match-element)))
    match-element
    #'eq))
 
@@ -241,7 +240,7 @@ MATCH-ELEMENT among all of those `equal' to it."
           (insert "'nil'")
         (let* ((match-form (phony--element-argument-element argument-element))
                (rule-occurrence-number
-                (phony-talon--occurrence-number match-form rule))
+                (phony-talon--occurrence-number match-form))
                (argument-context
                 (phony-talon--argument-multiplicity
                  argument-element
