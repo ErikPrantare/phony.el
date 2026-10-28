@@ -1088,7 +1088,7 @@ results of the analysis."
     (setf (phony--analysis-data-grammar analysis-data) grammar)
     analysis-data))
 
-(phony--define-grammar-attribute phony--grammar-analysis (grammar)
+(phony-ag--define-synthesized phony--grammar-analysis (grammar)
   "Return the analysis data for GRAMMAR."
   (phony--analyze-grammar grammar))
 

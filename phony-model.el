@@ -78,25 +78,6 @@ grammar object should never be mutated.")
      (copy-hash-table
       (phony--grammar-module-provision grammar)))))
 
-(defmacro phony--define-grammar-attribute (name args docstring &rest body)
-  "Define a lazily evaluated grammar attribute.
-
-Grammar attributes should only be used for prepared grammars (see
-`phony--prepare-grammar').
-
-This defines a function NAME for getting the attribute.  ARGS must
-be (grammar) unquoted.  DOCSTRING is the documentation for the attribute
-function and BODY defines how to compute the attribute."
-  (declare (indent defun)
-           (doc-string 3))
-  ;; TODO: Fix symbol generation
-  ;; TODO: Ensure args is just one parameter named grammar
-  `(let ((attribute (make-hash-table :weakness 'key)))
-     (defun ,name ,args
-       ,docstring
-       (with-memoization (map-elt attribute grammar)
-         ,@body))))
-
 (defun phony--get-rules (grammar)
   "Return a list containing the rules of GRAMMAR."
   (hash-table-values (phony--grammar-rules grammar)))
@@ -353,6 +334,12 @@ grammars."
 (phony-ag--define-equation phony--containing-grammar
     ((grammar phony--grammar) _)
   grammar)
+
+(phony-ag--define-synthesized phony--resolved-alternatives (open-rule)
+  "Return alternatives of OPEN-RULE as a list of rules."
+  (let ((grammar (phony--containing-grammar open-rule)))
+    (mapcar (lambda (name) (phony--get-rule name grammar))
+            (phony--open-rule-alternatives open-rule))))
 
 (provide 'phony-model)
 

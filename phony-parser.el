@@ -293,7 +293,7 @@ Arguments occurring within ELEMENT are collected into list forms."
                                 match-tree))
                 arglist))))
 
-(phony--define-grammar-attribute phony-parser--rule-cache (grammar)
+(phony-ag--define-synthesized phony-parser--rule-cache (grammar)
   "Return hash table mapping rule names to their parsers in GRAMMAR."
   (make-hash-table))
 (declare-function phony-parser--rule-cache nil)
@@ -387,13 +387,11 @@ space."
 
 (cl-defmethod phony-parser--from-rule ((rule phony--open-rule))
   "Return a parser matching any alternative of open RULE."
-  (let ((grammar (phony--containing-grammar rule)))
-    (phony-parser--then
-     (phony-parser--rule-active-guard rule)
-     (phony-parser--alternative
-      (seq-map (lambda (production)
-                 (phony-parser--from-rule (phony--get-rule production grammar)))
-               (phony--open-rule-alternatives rule))))))
+  (phony-parser--then
+   (phony-parser--rule-active-guard rule)
+   (phony-parser--alternative
+    (seq-map #'phony-parser--from-rule
+             (phony--resolved-alternatives rule)))))
 
 (defun phony-parser--make-parser (grammar)
   "Build a parser matching all active interactive procedure rules of GRAMMAR."
@@ -434,7 +432,7 @@ space."
            #'list
            (from-alternatives last-anchor)))))))))
 
-(phony--define-grammar-attribute phony-parser--get-parser (grammar)
+(phony-ag--define-synthesized phony-parser--get-parser (grammar)
   "Return a parser for matching GRAMMAR."
   (phony-parser--make-parser grammar))
 (declare-function phony-parser--get-parser nil)
