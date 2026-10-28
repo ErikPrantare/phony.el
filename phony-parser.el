@@ -25,8 +25,10 @@
 
 (require 'cl-lib)
 (require 'map)
-(require 'phony-model)
 (require 'seq)
+
+(require 'phony-model)
+(require 'phony-ag)
 
 (cl-defstruct (phony-parser--parser
                (:constructor phony-parser--make)
@@ -296,7 +298,6 @@ Arguments occurring within ELEMENT are collected into list forms."
 (phony-ag--define-synthesized phony-parser--rule-cache (grammar)
   "Return hash table mapping rule names to their parsers in GRAMMAR."
   (make-hash-table))
-(declare-function phony-parser--rule-cache nil)
 
 (cl-defgeneric phony-parser--from-element (element)
   "Build a parser from ELEMENT.")
