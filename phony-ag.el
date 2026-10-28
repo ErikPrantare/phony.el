@@ -64,23 +64,18 @@ root node first."
          (let ((cached-value (gethash ,node phony-ag--cache 'phony-ag--undefined)))
            (if (not (eq cached-value 'phony-ag--undefined))
                cached-value
-             (let ((current-node ,node)
-                   (equation-result 'phony-ag--undefined)
-                   parent-entry)
-               (while (progn
-                        (setq parent-entry
-                              (gethash current-node phony-ag--parent-map))
-                        (and parent-entry
-                             (eq equation-result 'phony-ag--undefined)))
-                 (setq equation-result
-                       (phony-ag--equation
-                        ',name (car parent-entry) (cdr parent-entry)))
-                 (setq current-node (car parent-entry)))
-               (when (eq equation-result 'phony-ag--undefined)
+             (let ((parent-entry (gethash ,node phony-ag--parent-map))
+                   result)
+               (if parent-entry
+                   (setq result
+                         (phony-ag--equation
+                          ',name (car parent-entry) (cdr parent-entry)))
                  (error "No definer for inherited attribute `%s' found"
                         ',name))
-               (setf (gethash ,node phony-ag--cache) equation-result)
-               equation-result)))))))
+               (when (eq result 'phony-ag--undefined)
+                 (setq result (,name (car parent-entry))))
+               (setf (gethash ,node phony-ag--cache) result)
+               result)))))))
 
 (cl-defmacro phony-ag--define-equation (attribute (node slot-descriptor) &rest body)
   "Define the implementation of inherited attribute ATTRIBUTE.
