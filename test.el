@@ -153,6 +153,19 @@ If there is no parse, an error is thrown."
     (should (= (phony-test--evaluate "lol") 1337))
     (should (= (phony-test--evaluate "lmao") 42))))
 
+(ert-deftest phony-dictionary-removal ()
+  "Removing an element from a dictionary reflects in the parser."
+  (phony-test
+    (phony-mode 1)
+    (phony-define-dictionary lol
+      '(("lol" . 1337)))
+    (phony-defun somelol (lol)
+      lol)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "lol") 1337))
+    (phony-dictionary-remove "lol" 'lol)
+    (should-error (phony-test--evaluate "lol"))))
+
 (ert-deftest phony-multi-word-literal-in-procedure-rule ()
   "Parser handles multi-word literals in `phony-defun'."
   (phony-test

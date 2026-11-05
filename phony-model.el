@@ -208,6 +208,8 @@ This layer of indirection exists so that runtime changes to the
 dictionary are reflected to the corresponding dictionaries in the
 exported grammar."))
 
+;; We could make dictionaries implement the full map.el interface if
+;; we end up adding more functions.
 (defun phony--dictionary-mapping (dictionary)
   "Return the underlying alist of DICTIONARY."
   (phony--dictionary-storage-mapping
@@ -217,6 +219,30 @@ exported grammar."))
   `(setf (phony--dictionary-storage-mapping
           (phony--dictionary-storage ,dictionary))
          ,value))
+
+(defun phony--dictionary-elt (dictionary utterance)
+  "Return the value of DICTIONARY at UTTERANCE."
+  (alist-get
+   utterance
+   (phony--dictionary-mapping dictionary)
+   nil nil #'equal))
+
+(gv-define-setter phony--dictionary-elt (value dictionary utterance)
+  `(setf (alist-get
+          ,utterance
+          (phony--dictionary-mapping ,dictionary)
+          nil nil #'equal)
+         ,value))
+
+(defun phony--dictionary-delete (dictionary utterance)
+  "Remove entry keyed by UTTERANCE from DICTIONARY."
+  (setf
+   (alist-get utterance
+              (phony--dictionary-mapping dictionary)
+              nil 'remove #'equal)
+   nil)
+  ;; Mirrors behaviour of `map-delete'
+  dictionary)
 
 (cl-defstruct (phony--interface-rule
                (:include phony--rule)

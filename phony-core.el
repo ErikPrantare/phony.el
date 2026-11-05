@@ -677,10 +677,8 @@ signalled."
   "Return the value corresponding to UTTERANCE in DICTIONARY.
 If no such value exists, return nil.
 
-DICTIONARY is the name of the dictionary to modify."
-  (alist-get utterance
-             (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
-             nil nil #'string-equal))
+DICTIONARY is the name of the dictionary."
+  (phony--dictionary-elt (phony--ensure-dictionary dictionary) utterance))
 
 (defun phony-dictionary-put (utterance dictionary value)
   "Set the value of UTTERANCE in DICTIONARY to VALUE.
@@ -689,10 +687,7 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (alist-get
-         utterance
-         (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
-         nil nil #'string-equal)
+  (setf (phony--dictionary-elt (phony--ensure-dictionary dictionary) utterance)
         value)
   (phony--request-export-dictionaries))
 
@@ -703,17 +698,13 @@ DICTIONARY is the name of the dictionary to modify.
 
 Invoking this function will resync the dictionary to the external speech
 recognition engine."
-  (setf (alist-get
-         utterance
-         (phony--dictionary-mapping (phony--ensure-dictionary dictionary))
-         nil t #'string-equal)
-        nil)
+  (phony--dictionary-delete (phony--ensure-dictionary dictionary) utterance)
   (phony--request-export-dictionaries))
 
 (defun phony-dictionary-alist (dictionary)
   "Return the mapping of DICTIONARY as an alist.
 
-DICTIONARY is the name of the dictionary to modify."
+DICTIONARY is the name of the dictionary."
   (phony--dictionary-mapping (phony--ensure-dictionary dictionary)))
 
 (defun phony-set-dictionary-alist (dictionary alist)
