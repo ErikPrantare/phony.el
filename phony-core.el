@@ -817,7 +817,9 @@ See documentation of `phony-define-dictionary' for more information."
           (and (map-elt arguments :mode)
                (not (memq 'global (ensure-list (map-elt arguments :mode))))))
       (phony-request-export)
-    (phony--request-export-dictionaries)))
+    (phony--request-export-dictionaries))
+
+  (plist-get arguments :name))
 
 (eval-and-compile
   ;; This function is used in the rule defining macros.  The byte
