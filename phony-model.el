@@ -194,7 +194,10 @@ needs to share storage for dictionaries with the front-facing
 `phony--default-grammar'.  This indirection is for that."
   ( mapping nil
     :type list
-    :documentation "An alist mapping utterances, strings, to values."))
+    :documentation "An alist mapping utterances, strings, to values.")
+  ( generation 0
+    :type integer
+    :documentation "Integer counting how many times the storage has been updated."))
 
 (cl-defstruct (phony--dictionary
                (:include phony--rule)
@@ -208,18 +211,36 @@ This layer of indirection exists so that runtime changes to the
 dictionary are reflected to the corresponding dictionaries in the
 exported grammar."))
 
-;; We could make dictionaries implement the full map.el interface if
-;; we end up adding more functions.
 (defun phony--dictionary-mapping (dictionary)
   "Return the underlying alist of DICTIONARY."
   (phony--dictionary-storage-mapping
    (phony--dictionary-storage dictionary)))
 
-(gv-define-setter phony--dictionary-mapping (value dictionary)
-  `(setf (phony--dictionary-storage-mapping
-          (phony--dictionary-storage ,dictionary))
-         ,value))
+(defun phony--dictionary-generation (dictionary)
+  "Return the generation of DICTIONARY."
+  (phony--dictionary-storage-generation
+   (phony--dictionary-storage dictionary)))
 
+(defun phony--dictionary-touch (dictionary)
+  "Mark DICTIONARY as updated.
+
+Do not call this directly.  Use `phony--dictionary-mapping' or
+`phony--dictionary-elt' generalized variables for changing the content,
+or `phony--dictionary-delete' for deletion."
+  (let ((storage (phony--dictionary-storage dictionary)))
+    (cl-incf (phony--dictionary-storage-generation storage))))
+
+(gv-define-setter phony--dictionary-mapping (value dictionary)
+  (macroexp-let2* nil (dictionary
+                       (storage `(phony--dictionary-storage ,dictionary))
+                       value)
+    `(progn
+       (setf (phony--dictionary-storage-mapping ,storage) ,value)
+       (phony--dictionary-touch ,dictionary)
+       ,value)))
+
+;; We could make dictionaries implement the full map.el interface if
+;; we end up adding more functions.
 (defun phony--dictionary-elt (dictionary utterance)
   "Return the value of DICTIONARY at UTTERANCE."
   (alist-get
@@ -228,19 +249,25 @@ exported grammar."))
    nil nil #'equal))
 
 (gv-define-setter phony--dictionary-elt (value dictionary utterance)
-  `(setf (alist-get
-          ,utterance
-          (phony--dictionary-mapping ,dictionary)
-          nil nil #'equal)
-         ,value))
+  (macroexp-let2* nil (dictionary
+                       (storage `(phony--dictionary-storage ,dictionary))
+                       value utterance)
+    `(progn
+       (setf (alist-get ,utterance
+                        (phony--dictionary-storage-mapping ,storage)
+                        nil nil #'equal)
+             ,value)
+       (phony--dictionary-touch ,dictionary)
+       ,value)))
 
 (defun phony--dictionary-delete (dictionary utterance)
   "Remove entry keyed by UTTERANCE from DICTIONARY."
-  (setf
-   (alist-get utterance
-              (phony--dictionary-mapping dictionary)
-              nil 'remove #'equal)
-   nil)
+  (let ((storage (phony--dictionary-storage dictionary)))
+    (setf (alist-get utterance
+                     (phony--dictionary-storage-mapping storage)
+                     nil 'remove #'equal)
+          nil)
+    (phony--dictionary-touch dictionary))
   ;; Mirrors behaviour of `map-delete'
   dictionary)
 

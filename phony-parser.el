@@ -190,6 +190,24 @@ no arguments to yield the actual parser to use."
    :step-function
    (lambda (item) (phony-parser--step (funcall parser-factory) item))))
 
+(defun phony-parser--runtime-resolved-cached (parser-factory generation-function)
+  "Return a parser behaving like PARSER-FACTORY invoked at runtime.
+
+The results are cached.  The cache is invalidated whenever the return
+value of GENERATION-FUNCTION changes.
+
+PARSER-FACTORY is invoked with no arguments to yield the parser to use."
+  (let ((generation (cons nil nil)) ; Fresh cons is never eql to value
+                                    ; of GENERATION-FUNCTION.
+        (parser nil))
+    (phony-parser--runtime-resolved
+     (lambda ()
+       (let ((current-generation (funcall generation-function)))
+         (unless (eql current-generation generation)
+           (setq parser (funcall parser-factory))
+           (setq generation current-generation)))
+       parser))))
+
 (defun phony-parser--rule-active-guard (rule)
   "Return a parser that succeeds if RULE is currently active."
   (phony-parser--guard (lambda () (phony--rule-active-p rule))))
@@ -376,11 +394,12 @@ space."
    (phony-parser--rule-active-guard rule)
    (phony-parser--map
     (lambda (utterance) `(,(phony--dictionary-name rule) ,utterance))
-    (phony-parser--runtime-resolved
+    (phony-parser--runtime-resolved-cached
      (lambda ()
        (phony-parser--alternative
         (seq-map #'phony-parser--literal
-                 (map-keys (phony--dictionary-mapping rule)))))))))
+                 (map-keys (phony--dictionary-mapping rule)))))
+     (lambda () (phony--dictionary-generation rule))))))
 
 (cl-defmethod phony-parser--parser ((rule phony--open-rule))
   "Return a parser matching any alternative of open RULE."
