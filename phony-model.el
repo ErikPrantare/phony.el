@@ -30,7 +30,7 @@
 (require 'cl-lib)
 (require 'subr-x)
 
-(require 'phony-element)
+(require 'phony-pattern)
 (require 'phony-ag)
 
 (cl-defstruct (phony--grammar

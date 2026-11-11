@@ -1,4 +1,4 @@
-;;; phony-element.el --- Patterns of procedure rules -*- lexical-binding: t; -*-
+;;; phony-pattern.el --- Patterns of procedure rules -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025, 2026  Erik Präntare
 
@@ -233,5 +233,5 @@ returned in the same order that they occur in PATTERN."
         (cons pattern collected-children)
       collected-children)))
 
-(provide 'phony-element)
-;;; phony-element.el ends here
+(provide 'phony-pattern)
+;;; phony-pattern.el ends here
