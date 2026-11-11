@@ -22,7 +22,7 @@
 ;;; Commentary:
 
 ;; This file defines structs for grammars, modules and rules.  The
-;; structs for elements are also included from phony-element.  There
+;; structs for patterns are also included from phony-pattern.  There
 ;; are also some helper functions and macros here.
 
 ;;; Code:
@@ -157,9 +157,9 @@ See documentation for `phony-define-interface'.")
   ( function '()
     :type function
     :documentation "Function to call when the utterance is matched.")
-  ( element nil
-    :type phony--element-sequence
-    :documentation "Parsed element tree for the utterance pattern.")
+  ( pattern nil
+    :type phony--pattern-sequence
+    :documentation "Parsed pattern tree for the utterance pattern.")
   ( arglist '()
     :type (repeat symbol)
     :documentation "List of argument symbols extracted from the pattern.")
@@ -304,7 +304,7 @@ If this is nil, there is no default provider."))
   "Return a deep copy of RULE."
   (let ((copy (phony--make-procedure-rule
                :function (phony--procedure-rule-function rule)
-               :element (phony--copy-element (phony--procedure-rule-element rule))
+               :pattern (phony--copy-pattern (phony--procedure-rule-pattern rule))
                :arglist (copy-sequence (phony--procedure-rule-arglist rule))
                :interactive-p (phony--procedure-rule-interactive-p rule)
                :anchor-beginning-p (phony--procedure-rule-anchor-beginning-p rule)
@@ -368,11 +368,11 @@ grammars."
     (setf (alist-get 'storage children nil t) nil)
     children))
 
-(cl-defmethod phony-ag--children ((element phony--element-sequence))
-  "Return the children of ELEMENT."
+(cl-defmethod phony-ag--children ((pattern phony--pattern-sequence))
+  "Return the children of PATTERN."
   (seq-map-indexed
    (lambda (child index) (cons index child))
-   (phony--element-sequence-elements element)))
+   (phony--pattern-sequence-patterns pattern)))
 
 (phony-ag--define-inherited phony--containing-rule (node)
   "Return the rule containing NODE.")

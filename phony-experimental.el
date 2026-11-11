@@ -48,7 +48,7 @@ POSITION defaults to `point' if nil or omitted."
             (backward-up-list))
         (error functions)))))
 
-(defun phony--in-element-form-p (&optional position)
+(defun phony--in-pattern-form-p (&optional position)
   "Return non-nil if POSITION is a place where rules are expected.
 
 Examples include the pattern for `phony-defun' and the :contributes-to
@@ -65,7 +65,7 @@ parameter."
 
 See `completion-at-point-functions' for documentation on the returned
 value."
-  (and (phony--in-element-form-p)
+  (and (phony--in-pattern-form-p)
        (and-let* ((bounds (bounds-of-thing-at-point 'symbol)))
          (list (car bounds)
                (cdr bounds)
@@ -144,8 +144,8 @@ value."
 (defun phony--xref-backend ()
   "Return the phony backend if in a phony rule context.
 
-This is checked with `phony--in-element-form-p'."
-  (and (phony--in-element-form-p) 'phony))
+This is checked with `phony--in-pattern-form-p'."
+  (and (phony--in-pattern-form-p) 'phony))
 
 (defun phony--enable-xref ()
   "Enable phony xref backend in the current buffer."

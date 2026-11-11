@@ -31,59 +31,59 @@
 (require 'json)
 (require 'python)
 
-(cl-defgeneric phony-dragonfly--serialize-element (_element)
-  "Convert ELEMENT to a form serializable by `json-encode'."
+(cl-defgeneric phony-dragonfly--serialize-pattern (_pattern)
+  "Convert PATTERN to a form serializable by `json-encode'."
   ;; TODO: Document structure.
   `((type . "undefined")))
 
-(cl-defmethod phony-dragonfly--serialize-element ((literal phony--element-literal))
+(cl-defmethod phony-dragonfly--serialize-pattern ((literal phony--pattern-literal))
   "Convert LITERAL to a form serializable by `json-encode'."
   `((type . "literal")
-    (utterance . ,(phony--element-literal-string literal))))
+    (utterance . ,(phony--pattern-literal-string literal))))
 
-(cl-defmethod phony-dragonfly--serialize-element ((argument phony--element-argument))
+(cl-defmethod phony-dragonfly--serialize-pattern ((argument phony--pattern-argument))
   "Convert ARGUMENT to a form serializable by `json-encode'."
   `((type . "argument")
     (name . ,(symbol-name
-              (phony--element-argument-name argument)))
-    (rule . ,(phony-dragonfly--serialize-element
-              (phony--element-argument-element argument)))))
+              (phony--pattern-argument-name argument)))
+    (rule . ,(phony-dragonfly--serialize-pattern
+              (phony--pattern-argument-pattern argument)))))
 
-(cl-defmethod phony-dragonfly--serialize-element ((dictionary phony--element-rule))
+(cl-defmethod phony-dragonfly--serialize-pattern ((dictionary phony--pattern-rule))
   "Convert DICTIONARY to a form serializable by `json-encode'."
   `((type . "rule")
     (name . ,(phony--rule-external-name
-              (phony--element-rule-name dictionary)))))
+              (phony--pattern-rule-name dictionary)))))
 
-(cl-defmethod phony-dragonfly--serialize-element ((element phony--element-one-or-more))
-  "Convert ELEMENT to a form serializable by `json-encode'."
+(cl-defmethod phony-dragonfly--serialize-pattern ((pattern phony--pattern-one-or-more))
+  "Convert PATTERN to a form serializable by `json-encode'."
   `((type . "one-or-more")
-    (element . ,(phony-dragonfly--serialize-element
-                 (phony--element-one-or-more-element element)))))
+    (pattern . ,(phony-dragonfly--serialize-pattern
+                 (phony--pattern-one-or-more-pattern pattern)))))
 
-(cl-defmethod phony-dragonfly--serialize-element ((element phony--element-zero-or-more))
-  "Convert ELEMENT to a form serializable by `json-encode'."
+(cl-defmethod phony-dragonfly--serialize-pattern ((pattern phony--pattern-zero-or-more))
+  "Convert PATTERN to a form serializable by `json-encode'."
   `((type . "zero-or-more")
-    (element . ,(phony-dragonfly--serialize-element
-                 (phony--element-zero-or-more-element element)))))
+    (pattern . ,(phony-dragonfly--serialize-pattern
+                 (phony--pattern-zero-or-more-pattern pattern)))))
 
-(cl-defmethod phony-dragonfly--serialize-element ((element phony--element-optional))
-  "Convert ELEMENT to a form serializable by `json-encode'."
+(cl-defmethod phony-dragonfly--serialize-pattern ((pattern phony--pattern-optional))
+  "Convert PATTERN to a form serializable by `json-encode'."
   `((type . "optional")
-    (element . ,(phony-dragonfly--serialize-element
-                 (phony--element-optional-element element)))))
+    (pattern . ,(phony-dragonfly--serialize-pattern
+                 (phony--pattern-optional-pattern pattern)))))
 
-(cl-defmethod phony-dragonfly--serialize-element ((_element phony--element-external-rule))
-  "Convert ELEMENT to a form serializable by `json-encode'."
+(cl-defmethod phony-dragonfly--serialize-pattern ((_pattern phony--pattern-external-rule))
+  "Convert PATTERN to a form serializable by `json-encode'."
   `((type . "impossible")))
 
-(cl-defmethod phony-dragonfly--serialize-element ((element phony--element-sequence))
-  "Convert ELEMENT to a form serializable by `json-encode'."
+(cl-defmethod phony-dragonfly--serialize-pattern ((pattern phony--pattern-sequence))
+  "Convert PATTERN to a form serializable by `json-encode'."
   `((type . "sequence")
-    (elements . ,(seq-into
+    (patterns . ,(seq-into
                   (seq-map
-                   #'phony-dragonfly--serialize-element
-                   (phony--element-sequence-elements element))
+                   #'phony-dragonfly--serialize-pattern
+                   (phony--pattern-sequence-patterns pattern))
                   'vector))))
 
 (cl-defgeneric phony-dragonfly--serialize-rule-definition (rule)
@@ -94,8 +94,8 @@
   `((type . "procedure")
     (name . ,(phony--rule-external-name rule))
     (rule-name . ,(symbol-name (phony--procedure-rule-name rule)))
-    (element . ,(phony-dragonfly--serialize-element
-                 (phony--procedure-rule-element rule)))
+    (pattern . ,(phony-dragonfly--serialize-pattern
+                 (phony--procedure-rule-pattern rule)))
     (argument-list . ,(seq-into
                        (seq-map #'symbol-name
                                 (phony--procedure-rule-arglist rule))

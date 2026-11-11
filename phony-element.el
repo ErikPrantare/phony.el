@@ -1,4 +1,4 @@
-;;; phony-element.el --- Elements of procedure rules -*- lexical-binding: t; -*-
+;;; phony-element.el --- Patterns of procedure rules -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025, 2026  Erik Präntare
 
@@ -27,210 +27,210 @@
 
 (require 'cl-lib)
 
-(cl-defstruct phony--element-literal
-  "Element matching a literal utterance."
+(cl-defstruct phony--pattern-literal
+  "Pattern matching a literal utterance."
   (string nil
           :type string
-          :documentation "Utterance that matches this element."))
+          :documentation "Utterance that matches this pattern."))
 
-(cl-defstruct phony--element-sequence
-  "Element matching a sequence of sub-elements."
-  (elements nil
-            :documentation "List of sub-elements that must match in sequence."))
+(cl-defstruct phony--pattern-sequence
+  "Pattern matching a sequence of sub-patterns."
+  (patterns nil
+            :documentation "List of sub-patterns that must match in sequence."))
 
-(cl-defstruct phony--element-optional
-  "Element matching ELEMENT zero or one times."
-  (element nil
-           :documentation "The element to match zero or one times."))
+(cl-defstruct phony--pattern-optional
+  "Pattern matching PATTERN zero or one times."
+  (pattern nil
+           :documentation "The pattern to match zero or one times."))
 
-(cl-defstruct phony--element-repeat
-  "Element that may match ELEMENT multiple times."
-  (element nil
-           :documentation "The element to match repeatedly."))
+(cl-defstruct phony--pattern-repeat
+  "Pattern that may match PATTERN multiple times."
+  (pattern nil
+           :documentation "The pattern to match repeatedly."))
 
-(cl-defstruct (phony--element-one-or-more
-               (:include phony--element-repeat))
-  "Element matching ELEMENT one or more times.")
+(cl-defstruct (phony--pattern-one-or-more
+               (:include phony--pattern-repeat))
+  "Pattern matching PATTERN one or more times.")
 
-(cl-defstruct (phony--element-zero-or-more
-               (:include phony--element-repeat))
-  "Element matching ELEMENT zero or more times.")
+(cl-defstruct (phony--pattern-zero-or-more
+               (:include phony--pattern-repeat))
+  "Pattern matching PATTERN zero or more times.")
 
-(cl-defstruct phony--element-argument
-  "Element matching FORM and binding it to function argument NAME."
+(cl-defstruct phony--pattern-argument
+  "Pattern matching FORM and binding it to function argument NAME."
   (name nil
         :type symbol
         :documentation "Symbol naming the argument that captures the value of the match.")
-  (element nil
+  (pattern nil
            :type sexp
-           :documentation "Element whose match will bind to the argument."))
+           :documentation "Pattern whose match will bind to the argument."))
 
-(cl-defstruct phony--element-external-rule
-  "Element matching some external rule.
+(cl-defstruct phony--pattern-external-rule
+  "Pattern matching some external rule.
 Currently only relevant for the talon exporter."
   (name nil
         :documentation "Symbol naming the external rule.")
   (namespace nil
              :documentation "List of symbols forming the namespace prefix."))
 
-(cl-defstruct phony--element-rule
-  "Element matching another rule."
+(cl-defstruct phony--pattern-rule
+  "Pattern matching another rule."
   (name nil
         :type symbol
-        :documentation "Symbol naming the phony rule that this element matches."))
+        :documentation "Symbol naming the phony rule that this pattern matches."))
 
-(cl-defstruct (phony--element-builtin-word
-               (:constructor phony--make-element-builtin-word))
-  "Element matching any word.")
+(cl-defstruct (phony--pattern-builtin-word
+               (:constructor phony--make-pattern-builtin-word))
+  "Pattern matching any word.")
 
-(cl-defstruct (phony--element-builtin-phrase
-               (:constructor phony--make-element-builtin-phrase))
-  "Element matching any phrase.")
+(cl-defstruct (phony--pattern-builtin-phrase
+               (:constructor phony--make-pattern-builtin-phrase))
+  "Pattern matching any phrase.")
 
-(defun phony--parse-speech-value-element (element-form)
-  "Parse ELEMENT-FORM into a valued element.
+(defun phony--parse-speech-value-pattern (pattern-form)
+  "Parse PATTERN-FORM into a valued pattern.
 
-Valued elements are those that get associated to a value when matched.
-Only these elements may be bound to arguments."
+Valued patterns are those that get associated to a value when matched.
+Only these patterns may be bound to arguments."
   (cond
-   ((eq element-form 'phony--builtin-word)
-    (phony--make-element-builtin-word))
-   ((eq element-form 'phony--builtin-phrase)
-    (phony--make-element-builtin-phrase))
-   ((symbolp element-form)
-    (make-phony--element-rule
-     :name element-form))
-   ((eq (car element-form) 'external-rule)
-    (make-phony--element-external-rule
-     :name (car (last (cdr element-form)))
-     :namespace (butlast (cdr element-form))))
-   ((symbolp (car element-form))
-    (error "Not an argument nor element type: `%S' in form `%S'"
-           (car element-form)
-           element-form))
-   (t (error "No parse for %S" element-form))))
+   ((eq pattern-form 'phony--builtin-word)
+    (phony--make-pattern-builtin-word))
+   ((eq pattern-form 'phony--builtin-phrase)
+    (phony--make-pattern-builtin-phrase))
+   ((symbolp pattern-form)
+    (make-phony--pattern-rule
+     :name pattern-form))
+   ((eq (car pattern-form) 'external-rule)
+    (make-phony--pattern-external-rule
+     :name (car (last (cdr pattern-form)))
+     :namespace (butlast (cdr pattern-form))))
+   ((symbolp (car pattern-form))
+    (error "Not an argument nor pattern type: `%S' in form `%S'"
+           (car pattern-form)
+           pattern-form))
+   (t (error "No parse for %S" pattern-form))))
 
-(defun phony--parse-speech-element (element-form arglist)
-  "Parse ELEMENT-FORM into an element.
+(defun phony--parse-speech-pattern (pattern-form arglist)
+  "Parse PATTERN-FORM into an pattern.
 
 ARGLIST is the list of argument names for the function being defined.
 This is required for recognizing if a form should bind turn argument."
   (cond
-   ((stringp element-form)
-    (make-phony--element-literal
-     :string element-form))
-   ((member (car-safe element-form) arglist)
-    (make-phony--element-argument
-     :name (car element-form)
-     :element (phony--parse-speech-value-element
-               (cadr element-form))))
+   ((stringp pattern-form)
+    (make-phony--pattern-literal
+     :string pattern-form))
+   ((member (car-safe pattern-form) arglist)
+    (make-phony--pattern-argument
+     :name (car pattern-form)
+     :pattern (phony--parse-speech-value-pattern
+               (cadr pattern-form))))
    ;; NOTE: The reader interprets ? as a character escape, so to use
    ;; it in the specification of the pattern we actually need to
    ;; match on the character after that, which we require to be
    ;; space.
-   ((eq (car-safe element-form) ?\s)
-    (make-phony--element-optional
-     :element
-     (make-phony--element-sequence
-      :elements (mapcar
-                 (lambda (subelement)
-                   (phony--parse-speech-element
-                    subelement arglist))
-                 (cdr element-form)))))
-   ((eq (car-safe element-form) '+)
-    (make-phony--element-one-or-more
-     :element
-     (make-phony--element-sequence
-      :elements (mapcar
-                 (lambda (subelement)
-                   (phony--parse-speech-element
-                    subelement arglist))
-                 (cdr element-form)))))
-   ((eq (car-safe element-form) '*)
-    (make-phony--element-zero-or-more
-     :element
-     (make-phony--element-sequence
-      :elements (mapcar
-                 (lambda (subelement)
-                   (phony--parse-speech-element
-                    subelement arglist))
-                 (cdr element-form)))))
-   ((eq (car-safe element-form) 'seq)
-    (make-phony--element-sequence
-     :elements
+   ((eq (car-safe pattern-form) ?\s)
+    (make-phony--pattern-optional
+     :pattern
+     (make-phony--pattern-sequence
+      :patterns (mapcar
+                 (lambda (subpattern)
+                   (phony--parse-speech-pattern
+                    subpattern arglist))
+                 (cdr pattern-form)))))
+   ((eq (car-safe pattern-form) '+)
+    (make-phony--pattern-one-or-more
+     :pattern
+     (make-phony--pattern-sequence
+      :patterns (mapcar
+                 (lambda (subpattern)
+                   (phony--parse-speech-pattern
+                    subpattern arglist))
+                 (cdr pattern-form)))))
+   ((eq (car-safe pattern-form) '*)
+    (make-phony--pattern-zero-or-more
+     :pattern
+     (make-phony--pattern-sequence
+      :patterns (mapcar
+                 (lambda (subpattern)
+                   (phony--parse-speech-pattern
+                    subpattern arglist))
+                 (cdr pattern-form)))))
+   ((eq (car-safe pattern-form) 'seq)
+    (make-phony--pattern-sequence
+     :patterns
      (mapcar
-      (lambda (subelement)
-        (phony--parse-speech-element
-         subelement arglist))
-      (cdr element-form))))
-   (t (phony--parse-speech-value-element element-form))))
+      (lambda (subpattern)
+        (phony--parse-speech-pattern
+         subpattern arglist))
+      (cdr pattern-form))))
+   (t (phony--parse-speech-value-pattern pattern-form))))
 
-(defun phony--element-map-children (f element)
-  "Return a copy of ELEMENT with F applied to each of its children."
-  (pcase element
-    ((cl-struct phony--element-sequence elements)
-     (make-phony--element-sequence
-      :elements (seq-map f elements)))
-    ((cl-struct phony--element-optional (element child))
-     (make-phony--element-optional
-      :element (funcall f child)))
-    ((cl-struct phony--element-one-or-more (element child))
-     (make-phony--element-one-or-more
-      :element (funcall f child)))
-    ((cl-struct phony--element-zero-or-more (element child))
-     (make-phony--element-zero-or-more
-      :element (funcall f child)))
-    ((cl-struct phony--element-argument name (element child))
-     (make-phony--element-argument
+(defun phony--pattern-map-children (f pattern)
+  "Return a copy of PATTERN with F applied to each of its children."
+  (pcase pattern
+    ((cl-struct phony--pattern-sequence patterns)
+     (make-phony--pattern-sequence
+      :patterns (seq-map f patterns)))
+    ((cl-struct phony--pattern-optional (pattern child))
+     (make-phony--pattern-optional
+      :pattern (funcall f child)))
+    ((cl-struct phony--pattern-one-or-more (pattern child))
+     (make-phony--pattern-one-or-more
+      :pattern (funcall f child)))
+    ((cl-struct phony--pattern-zero-or-more (pattern child))
+     (make-phony--pattern-zero-or-more
+      :pattern (funcall f child)))
+    ((cl-struct phony--pattern-argument name (pattern child))
+     (make-phony--pattern-argument
       :name name
-      :element (funcall f child)))
-    ((cl-struct phony--element-literal string)
-     (make-phony--element-literal :string string))
-    ((cl-struct phony--element-rule name)
-     (make-phony--element-rule :name name))
-    ((cl-struct phony--element-external-rule name namespace)
-     (make-phony--element-external-rule
+      :pattern (funcall f child)))
+    ((cl-struct phony--pattern-literal string)
+     (make-phony--pattern-literal :string string))
+    ((cl-struct phony--pattern-rule name)
+     (make-phony--pattern-rule :name name))
+    ((cl-struct phony--pattern-external-rule name namespace)
+     (make-phony--pattern-external-rule
       :name name
       :namespace namespace))
-    ((cl-struct phony--element-builtin-word)
-     (phony--make-element-builtin-word))
-    ((cl-struct phony--element-builtin-phrase)
-     (phony--make-element-builtin-phrase))
-    (_ (error "No case for element of type %s: %s"
-              (type-of element)
-              element))))
+    ((cl-struct phony--pattern-builtin-word)
+     (phony--make-pattern-builtin-word))
+    ((cl-struct phony--pattern-builtin-phrase)
+     (phony--make-pattern-builtin-phrase))
+    (_ (error "No case for pattern of type %s: %s"
+              (type-of pattern)
+              pattern))))
 
-(defun phony--element-transform (f element)
-  "Recursively apply F to ELEMENT.
+(defun phony--pattern-transform (f pattern)
+  "Recursively apply F to PATTERN.
 
-F is applied to a copy of ELEMENT with children transformed by F."
-  (funcall f (phony--element-map-children
-              (lambda (child) (phony--element-transform f child))
-              element)))
+F is applied to a copy of PATTERN with children transformed by F."
+  (funcall f (phony--pattern-map-children
+              (lambda (child) (phony--pattern-transform f child))
+              pattern)))
 
-(defun phony--copy-element (element)
-  "Return a deep copy of ELEMENT."
-  (phony--element-transform #'identity element))
+(defun phony--copy-pattern (pattern)
+  "Return a deep copy of PATTERN."
+  (phony--pattern-transform #'identity pattern))
 
-(defun phony--element-children (element)
-  "Return all direct sub-elements of ELEMENT."
+(defun phony--pattern-children (pattern)
+  "Return all direct sub-patterns of PATTERN."
   (let ((children '()))
-    (phony--element-map-children
+    (phony--pattern-map-children
      (lambda (child) (push child children))
-     element)
+     pattern)
     (nreverse children)))
 
-(defun phony--element-collect (predicate element)
-  "Return list of descendants of ELEMENT matching PREDICATE.
+(defun phony--pattern-collect (predicate pattern)
+  "Return list of descendants of PATTERN matching PREDICATE.
 
-If ELEMENT matches PREDICATE, it will be part of the list.  Matches are
-returned in the same order that they occur in ELEMENT."
+If PATTERN matches PREDICATE, it will be part of the list.  Matches are
+returned in the same order that they occur in PATTERN."
   (let ((collected-children
          (seq-mapcat
-          (apply-partially #'phony--element-collect predicate)
-          (phony--element-children element))))
-    (if (funcall predicate element)
-        (cons element collected-children)
+          (apply-partially #'phony--pattern-collect predicate)
+          (phony--pattern-children pattern))))
+    (if (funcall predicate pattern)
+        (cons pattern collected-children)
       collected-children)))
 
 (provide 'phony-element)

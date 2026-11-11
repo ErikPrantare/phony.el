@@ -310,14 +310,14 @@ This function assumes that contributions have been internalized.  See
 
 (cl-defmethod phony--substitute-in-rule ((rule phony--procedure-rule) from to)
   "Change references to rule FROM to rule TO in RULE."
-  (setf (phony--procedure-rule-element rule)
-        (phony--element-transform
-         (lambda (element)
-           (if (and (phony--element-rule-p element)
-                    (eq (phony--element-rule-name element) from))
-               (make-phony--element-rule :name to)
-             element))
-         (phony--procedure-rule-element rule))))
+  (setf (phony--procedure-rule-pattern rule)
+        (phony--pattern-transform
+         (lambda (pattern)
+           (if (and (phony--pattern-rule-p pattern)
+                    (eq (phony--pattern-rule-name pattern) from))
+               (make-phony--pattern-rule :name to)
+             pattern))
+         (phony--procedure-rule-pattern rule))))
 
 (cl-defmethod phony--substitute-in-rule ((rule phony--interface-rule) _from _to)
   "Change references to rule FROM to rule TO in RULE."
@@ -346,10 +346,10 @@ This function assumes that contributions have been internalized.  See
 This does not resolve interfaces nor contributions to open rules."
   (cl-typecase rule
     (phony--procedure-rule
-     (seq-map #'phony--element-rule-name
-              (phony--element-collect
-               #'phony--element-rule-p
-               (phony--procedure-rule-element rule))))
+     (seq-map #'phony--pattern-rule-name
+              (phony--pattern-collect
+               #'phony--pattern-rule-p
+               (phony--procedure-rule-pattern rule))))
     (phony--open-rule
      (phony--open-rule-alternatives rule))
     (phony--dictionary
@@ -1012,7 +1012,7 @@ in the returned list."
 (defun phony--populate-dependency-graph (analysis-data grammar)
   "Populate the dependency graph of ANALYSIS-DATA from GRAMMAR.
 
-If an undefined rule is mentioned in some element, a warning will be
+If an undefined rule is mentioned in some pattern, a warning will be
 emitted and `phony--analysis-data-contains-errors' will be set to t."
   (let ((productions (make-hash-table))
         (producers (make-hash-table))
@@ -1212,18 +1212,18 @@ actions through side effects, or to provide values for other rules.  The
 value of matching the procedure rule is the value returned by BODY.
 
 PATTERN is either a string literal, in which case the rule is matched
-when that string is uttered, or it is an unquoted list of elements.  In
-that case the rule is matched when each element is uttered in sequence.
-An element can take the following forms:
+when that string is uttered, or it is an unquoted list of patterns.  In
+that case the rule is matched when each pattern is uttered in sequence.
+An pattern can take the following forms:
 
   STRING           Match a literal STRING.
   RULE             Match a rule named RULE.
   (ARG RULE)       Match RULE, bind its value to argument ARG when
                    evaluating BODY.
-  (seq ELEMS...)   Match elements ELEMS in sequence.
-  (? ELEMS...)     Optionally match elements ELEMS.
-  (* ELEMS...)     Match elements ELEMS zero or more times.
-  (+ ELEMS...)     Match elements ELEMS one or more times.
+  (seq PATS...)    Match patterns PATS in sequence.
+  (? PATS...)      Optionally match patterns PATS in sequence.
+  (* PATS...)      Match patterns PATS in sequence zero or more times.
+  (+ PATS...)      Match patterns PATS in sequence one or more times.
 
 Optional argument DOCSTRING is a documentation string for the rule.
 
@@ -1295,7 +1295,7 @@ Optional keywords common to all rule types are:
   ;; - Name phony-defun: Chosen because of the similarity with defun.
   ;;   However, this could potentially give the impression that we are
   ;;   defining a function, something that may not be true in the future.
-  ;; - Implicit seq for sequence of elements: In practice, this is the
+  ;; - Implicit seq for sequence of patterns: In practice, this is the
   ;;   most common construction to use at the top level (perhaps
   ;;   excepts a single string literal, which is also covered by
   ;;   shorthand).  Might as well allow eliding it.
@@ -1352,7 +1352,7 @@ Optional keywords common to all rule types are:
            (list :name ',name
                  :function (lambda ,arguments ,@(ensure-list doc) ,@body)
                  :arglist ',arguments
-                 :element ,(phony--parse-speech-element expanded-pattern arguments)
+                 :pattern ,(phony--parse-speech-pattern expanded-pattern arguments)
                  :documentation ,doc)
            ',optional-arguments))))))
 
@@ -1361,29 +1361,29 @@ Optional keywords common to all rule types are:
   '())
 
 (eval-and-compile
-  (defun phony--expand-implicit-arguments (element-form)
-    "Expand implicit arguments in ELEMENT-FORM.
+  (defun phony--expand-implicit-arguments (pattern-form)
+    "Expand implicit arguments in PATTERN-FORM.
 
 A bare symbol `foo' is expanded to `(foo foo)', binding the rule's
 match value to an argument of the same name.  Recurses into `seq',
 `?', `+', `*' forms."
     (cond
-     ((and (listp element-form) (memq (car element-form) '(seq ? + *)))
-      `(,(car element-form)
-        ,@(seq-map #'phony--expand-implicit-arguments (cdr element-form))))
-     ((symbolp element-form)
-      `(,element-form ,element-form))
-     (t element-form)))
+     ((and (listp pattern-form) (memq (car pattern-form) '(seq ? + *)))
+      `(,(car pattern-form)
+        ,@(seq-map #'phony--expand-implicit-arguments (cdr pattern-form))))
+     ((symbolp pattern-form)
+      `(,pattern-form ,pattern-form))
+     (t pattern-form)))
 
-  (defun phony--collect-arguments (element-form)
-    "Collect argument names from ELEMENT-FORM.
+  (defun phony--collect-arguments (pattern-form)
+    "Collect argument names from PATTERN-FORM.
 Return a list of symbols, one per argument binding found in the
-element tree."
+pattern tree."
     (cond
-     ((and (listp element-form) (memq (car element-form) '(seq ? + *)))
-      (seq-mapcat #'phony--collect-arguments (cdr element-form)))
-     ((listp element-form)
-      (list (car element-form)))
+     ((and (listp pattern-form) (memq (car pattern-form) '(seq ? + *)))
+      (seq-mapcat #'phony--collect-arguments (cdr pattern-form)))
+     ((listp pattern-form)
+      (list (car pattern-form)))
      (t '()))))
 
 (phony-define-dictionary phony-module
