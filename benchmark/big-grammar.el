@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 ;; Erik Präntare's personal grammar [2026-11-12 Thu]
 ;; Generated with `phony--write-syntax-to-file'
 (phony-define-module cursorfree)
