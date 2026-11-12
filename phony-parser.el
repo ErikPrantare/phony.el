@@ -407,6 +407,46 @@ space."
            (phony--procedure-rule-arglist rule))))
     (phony-parser--parser (phony--procedure-rule-pattern rule)))))
 
+(defun phony-parser--trie-parser (entries)
+  "Make a parser for ENTRIES.
+
+ENTRIES is a list, each element of the form (LITERALS . VALUE).  This
+function returns a parser that matches a sequence of LITERALS, producing
+VALUE.
+
+The parser is constructed using a trie, so that parsing is linear with
+respect to the length of LITERALS, and constant with respect to the
+length of ENTRIES."
+  ;; NOTE: Potential blowup if a ENTRIES contains a large amount of
+  ;; long common prefixes.
+  (let ((child-parsers (make-hash-table :test 'equal))
+        (values nil))
+    (pcase-dolist (`(,literals . ,value) entries)
+      (if (not literals)
+          (push value values)
+        (puthash (car literals)
+                 (phony-parser--trie-parser
+                  (cl-loop for entry in entries
+                           when (equal (car literals) (caar entry))
+                           collect (cons (cdar entry) (cdr entry))))
+                 child-parsers)))
+    (phony-parser--make
+     :parses-function (lambda () values)
+     :step-function
+     (lambda (item)
+       (gethash (funcall phony-parser--literal-normalizer item)
+                child-parsers
+                (phony-parser--empty))))))
+
+(defun phony-parser--make-dictionary-parser (dictionary)
+  "Return parser unconditionally matching an entry of DICTIONARY."
+  (phony-parser--trie-parser
+   (mapcar (pcase-lambda (`(,utterance . _))
+             (cons (seq-map phony-parser--literal-normalizer
+                            (string-split utterance))
+                   utterance))
+           (phony--dictionary-mapping dictionary))))
+
 (cl-defmethod phony-parser--parser ((rule phony--dictionary))
   "Return a parser matching any entry of dictionary RULE."
   (phony-parser--then
@@ -414,10 +454,7 @@ space."
    (phony-parser--map
     (lambda (utterance) `(,(phony--dictionary-name rule) ,utterance))
     (phony-parser--runtime-resolved-cached
-     (lambda ()
-       (phony-parser--alternative
-        (seq-map #'phony-parser--literal
-                 (map-keys (phony--dictionary-mapping rule)))))
+     (lambda () (phony-parser--make-dictionary-parser rule))
      (lambda () (phony--dictionary-generation rule))))))
 
 (cl-defmethod phony-parser--parser ((rule phony--open-rule))
