@@ -41,7 +41,7 @@
 (defvar phony-parser--current-generation -1
   "The current generation of the parser.
 
-This is used to invalide the parses-cache of `phony-parser--parser'.
+This is used to invalidate the parses-cache of `phony-parser--parser'.
 The generation is the sum of the generations of all dictionaries.  Any
 other changes result in a full parser reconstruction, so they do not
 need invalidation.")
@@ -228,10 +228,10 @@ PARSER-FACTORY is invoked with no arguments to yield the parser to use."
   "Return a parser that succeeds if RULE is currently active."
   (phony-parser--guard (lambda () (phony--rule-active-p rule))))
 
-(defvar phony-parser--literal-comparator 'string-equal
-  "Comparator used for comparing tokens with literal words.
-Called with the token as the first parameter, and the literal word as
-the second parameter.")
+(defvar phony-parser--literal-normalizer #'identity
+  "Function for normalizing tokens and literals.
+
+Comparison is done on the normalized strings.")
 
 (defun phony-parser--literal (string)
   "Return a parser that accepts tokens matching STRING.
@@ -240,15 +240,18 @@ STRING is split up into words.  The returned parser reads that many
 tokens before accepting, if the tokens correspond to the words.
 The result of a parse is STRING.
 
-Uses `phony-parser--literal-comparator' for the comparison between token
-and literal."
+Uses `phony-parser--literal-normalizer' to normalize tokens and
+literals."
   (let ((words (string-split string)))
     (apply
      #'phony-parser--lift
      (lambda (&rest _words) string)
      (seq-map (lambda (word)
                 (phony-parser--satisfy
-                 (apply-partially phony-parser--literal-comparator word)))
+                 (lambda (token)
+                   (equal
+                    (funcall phony-parser--literal-normalizer word)
+                    (funcall phony-parser--literal-normalizer token)))))
               words))))
 
 (defun phony-parser--optional (parser)

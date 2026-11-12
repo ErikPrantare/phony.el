@@ -1,5 +1,7 @@
 * NEXT
 - Significantly improved performance of ~phony-experimental-evaluate~.
+- Removed ~phony-experimental-set-parser-literal-comparator~.  Use
+  ~phony-experimental-set-parser-literal-normalizer~ instead.
 
 * 2.2.0 [2026-10-21 Wed]
 - ~phony-evaluate~ has been renamed ~phony-experimental-evaluate~.

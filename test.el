@@ -584,12 +584,10 @@ If there is no parse, an error is thrown."
     (should-error (phony-test--evaluate "z w"))
     (should-error (phony-test--evaluate "w z"))))
 
-(ert-deftest phony-parser-literal-comparator ()
-  "`phony-experimental-set-parser-literal-comparator' works as advertised."
+(ert-deftest phony-parser-literal-normalizer ()
+  "`phony-experimental-set-parser-literal-normalizer' works as advertised."
   (phony-test
-    (phony-experimental-set-parser-literal-comparator
-     (lambda (token literal)
-       (= (length token) (length literal))))
+    (phony-experimental-set-parser-literal-normalizer #'length)
     (phony-defun x ("1234" (? "12") "123")
       42)
     (phony--export-all)
