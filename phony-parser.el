@@ -34,7 +34,17 @@
                (:constructor phony-parser--make)
                (:copier nil))
   "Step-based parser over token sequences."
-  parses-function step-function)
+  parses-function step-function parses-cache
+  ;; Fresh cons is always unequal to the actual generation.
+  (generation (cons nil nil)))
+
+(defvar phony-parser--current-generation -1
+  "The current generation of the parser.
+
+This is used to invalide the parses-cache of `phony-parser--parser'.
+The generation is the sum of the generations of all dictionaries.  Any
+other changes result in a full parser reconstruction, so they do not
+need invalidation.")
 
 (defvar phony-parser--empty-parser
   (phony-parser--make
@@ -48,7 +58,13 @@
 
 (defun phony-parser--parses (parser)
   "Return the completed results of PARSER."
-  (funcall (phony-parser--parser-parses-function parser)))
+  (unless (eql phony-parser--current-generation
+               (phony-parser--parser-generation parser))
+    (setf (phony-parser--parser-parses-cache parser)
+          (funcall (phony-parser--parser-parses-function parser)))
+    (setf (phony-parser--parser-generation parser)
+          phony-parser--current-generation))
+  (phony-parser--parser-parses-cache parser))
 
 (defun phony-parser--step (parser item)
   "Advance PARSER by one token ITEM and return the resulting parser."
@@ -453,9 +469,14 @@ space."
 
 Rules are taken from GRAMMAR or `phony--exported-grammar' if it is nil
 or not given.  GRAMMAR must be a prepared grammar."
-  (phony-parser--parse
-   (phony-parser--parser (or grammar phony--exported-grammar))
-   (string-split utterance)))
+  (setq grammar (or grammar phony--exported-grammar))
+  (let ((phony-parser--current-generation
+         (cl-loop for rule in (phony--get-rules grammar)
+                  when (phony--dictionary-p rule)
+                  sum (phony--dictionary-generation rule))))
+    (phony-parser--parse
+     (phony-parser--parser grammar)
+     (string-split utterance))))
 
 (provide 'phony-parser)
 ;;; phony-parser.el ends here
