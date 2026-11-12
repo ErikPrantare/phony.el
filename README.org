@@ -38,7 +38,7 @@ With such a function defined, uttering "hello emacs" will display
   - [[#interface-rules][Interface rules]]
 - [[#experimental-features][Experimental features]]
   - [[#evaluating-utterances-without-a-speech-recognition-engine][Evaluating utterances without a speech recognition engine]]
-  - [[#customizing-rules-for-matching][Customizing rules for matching]]
+  - [[#customizing-literal-and-token-normalization][Customizing literal and token normalization]]
 - [[#pre-defined-rulesets][Pre-defined rulesets]]
 - [[#versioning-system][Versioning system]]
 :END:
@@ -284,26 +284,23 @@ utterance, given as a string.  Phony will try to parse the utterance
 as a sequence of interactive procedure rules, and evaluate them in
 order.
 
-** Customizing rules for matching
+** Customizing literal and token normalization
 :PROPERTIES:
-:CUSTOM_ID: customizing-rules-for-matching
+:CUSTOM_ID: customizing-literal-and-token-normalization
 :END:
 
-You can use ~phony-experimental-set-parser-literal-comparator~ to set
-the function that compares the input token with the token from the
-rule.  For example, the following code ignores case and punctuation.
+You can use ~phony-experimental-set-parser-literal-normalizer~ to set
+the function that normalizes literals and parse tokens before
+comparison.  For example, the following code makes
+~phony-experimental-evaluate~ ignore casing and punctuation when
+parsing:
 
 #+begin_src emacs-lisp
   (defun my-phony-parser--sanitize (s)
     "Lowercase and remove punctuation."
     (string-trim (replace-regexp-in-string "[-,\\.!?:]" "" (downcase s))))
 
-  (defun my-phony-compare-literal (a b)
-    "Ignore case and ending punctuation."
-    (string-equal (my-phony-parser--sanitize a)
-                  (my-phony-parser--sanitize b)))
-
-  (phony-experimental-set-parser-literal-comparator
+  (phony-experimental-set-parser-literal-normalizer
    #'my-phony-compare-literal)
 #+end_src
 
