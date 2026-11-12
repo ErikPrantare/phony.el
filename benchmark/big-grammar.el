@@ -1,5 +1,5 @@
 ;; -*- lexical-binding: t; -*-
-;; Erik Präntare's personal grammar [2026-11-12 Thu]
+;; Erik Präntare's personal grammar [2026-11-14 Thu]
 ;; Generated with `phony--write-syntax-to-file'
 (phony-define-module cursorfree)
 (phony-define-module phony-stdlib)
@@ -25,7 +25,7 @@
 (phony-defun buff-rename ("buff rename") :interactive t (ignore))
 (phony-define-open-rule buffer-target)
 (phony-defun build-project ("build" (\? (seq (target cursorfree-target)))) :interactive t (ignore target))
-(phony-defun cancel-phrase ((_ text) "ignore that") :interactive t :anchor-end t (ignore _))
+(phony-defun cancel-phrase ((_ text) "ignore that") :interactive t :anchor-end t (ignore))
 (phony-defun clear-history ("command history clear") :interactive t (ignore))
 (phony-defun close-history ("command history close") :interactive t (ignore))
 (phony-defun co-absolute-scope-ordinal ((\? (seq (position ordinal))) "last") :interactive nil (ignore position))
@@ -153,7 +153,7 @@
 (phony-defun hide-all-outlines ("outline hide all") :interactive t :mode (outline-mode outline-minor-mode) (ignore))
 (phony-defun hide-histories ("hide history") :interactive t (ignore))
 (phony-defun hide-outline ("outline hide" (\? (seq (target cursorfree-target)))) :interactive t :mode (outline-mode outline-minor-mode) (ignore target))
-(phony-defun ignore-phrase ("ignore" (_ text)) :interactive t :anchor-end t (ignore _))
+(phony-defun ignore-phrase ("ignore" (_ text)) :interactive t :anchor-end t (ignore))
 (phony-defun increment-number ("increment" (target cursorfree-target)) :interactive t (ignore target))
 (phony-defun incremental-search ("search for" (needle text)) :interactive t :anchor-end t (ignore needle))
 (phony-defun incremental-search-backwards ("back search for" (needle text)) :interactive t :anchor-end t (ignore needle))

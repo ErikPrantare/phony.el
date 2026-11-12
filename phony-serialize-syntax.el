@@ -45,6 +45,7 @@ dictionary values or procedure rule definitions."
            (modules (map-values (phony--grammar-modules grammar))))
       (setq rules (seq-sort-by #'phony--rule-name #'string< rules))
       (setq modules (seq-sort-by #'phony--module-name #'string< modules))
+      (insert ";; -*- lexical-binding: t; -*-\n")
       (insert ";; Generated with `phony--write-syntax-to-file'\n")
       (dolist (module modules)
         (insert (format "%S\n" (phony--unparse module))))
@@ -117,7 +118,9 @@ syntax from untrusted sources!"
                  (phony--procedure-rule-pattern rule)))
      ,@(phony--rule-parameters rule)
      ;; Refer to args so as to not trigger unused argument warnings.
-     (ignore ,@(phony--procedure-rule-arglist rule))))
+     (ignore ,@(seq-remove (lambda (arg)
+                             (= ?_ (elt (symbol-name arg) 0)))
+                           (phony--procedure-rule-arglist rule)))))
 
 (cl-defmethod phony--unparse ((rule phony--dictionary))
   "Unparse RULE."
