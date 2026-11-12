@@ -39,7 +39,7 @@ exporters do nothing, and export request debounce is turned off."
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
          (phony--last-analysis nil)
-         (phony-parser--literal-comparator #'string-equal))
+         (phony-parser--literal-normalizer #'identity))
      (unwind-protect
          (progn
            (phony-mode 0)
