@@ -128,7 +128,8 @@ This is required for recognizing if a form should bind turn argument."
    ;; it in the specification of the pattern we actually need to
    ;; match on the character after that, which we require to be
    ;; space.
-   ((eq (car-safe pattern-form) ?\s)
+   ((or (eq (car-safe pattern-form) ?\s)
+        (eq (car-safe pattern-form) '\?))
     (make-phony--pattern-optional
      :pattern
      (make-phony--pattern-sequence

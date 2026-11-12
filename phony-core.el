@@ -1380,7 +1380,8 @@ match value to an argument of the same name.  Recurses into `seq',
 Return a list of symbols, one per argument binding found in the
 pattern tree."
     (cond
-     ((and (listp pattern-form) (memq (car pattern-form) '(seq ? + *)))
+     ;; ?\s is what ? followed by a space is read as.
+     ((and (listp pattern-form) (memq (car pattern-form) '(seq ?\s \? + *)))
       (seq-mapcat #'phony--collect-arguments (cdr pattern-form)))
      ((listp pattern-form)
       (list (car pattern-form)))
