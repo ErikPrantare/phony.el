@@ -750,8 +750,8 @@ to its dictionary."
                 (phony--dictionary-mapping dictionary))))
 
 ;; TODO: Handle IO errors
-(defun phony--write-dictionaries-to-file ()
-  "Write dictionaries to dictionaries.json.
+(defun phony--write-dictionaries-to-file (grammar)
+  "Write dictionaries in GRAMMAR to dictionaries.json.
 
 The speech recognition backend can read this file to register the
 dictionaries."
@@ -760,14 +760,19 @@ dictionaries."
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
              (seq-filter #'phony--dictionary-p
-                         (phony--get-rules phony--default-grammar))))))
+                         (phony--get-rules grammar))))))
 
 (defvar phony--dictionary-export-function #'phony--write-dictionaries-to-file
   "Function called to export dictionaries.")
 
-(defun phony--export-dictionaries ()
-  "Export dictionaries using `phony--dictionary-export-function'."
-  (funcall phony--dictionary-export-function))
+(defun phony--export-dictionaries (grammar)
+  "Export dictionaries in GRAMMAR.
+
+If omitted or nil, GRAMMAR defaults to `phony--exported-grammar'.
+
+This function uses `phony--dictionary-export-function' for export."
+  (setq grammar (or grammar phony--exported-grammar))
+  (funcall phony--dictionary-export-function grammar))
 
 (defvar phony--debounce-export-requests t
   "Non-nil to debounce export requests via idle timers.
@@ -780,8 +785,8 @@ If `phony-mode' is disabled, this function does nothing."
   (interactive)
   (when phony-mode
     (if phony--debounce-export-requests
-        (phony--debounce #'phony--export-dictionaries)
-      (phony--export-dictionaries))))
+        (phony--debounce #'phony--export-dictionaries phony--exported-grammar)
+      (phony--export-dictionaries phony--exported-grammar))))
 
 (cl-defun phony--define-dictionary (arguments)
   "Define a dictionary from ARGUMENTS.
@@ -1146,11 +1151,9 @@ If any errors are detected in the grammar, the rules are not exported.
 If no rules are defined, this function does nothing."
   (when (phony--get-rules phony--default-grammar)
     (let* ((prepared-grammar (phony--prepare-grammar phony--default-grammar))
-           (analysis-data (phony--analyze-grammar prepared-grammar))
-           (phony--default-grammar prepared-grammar))
+           (analysis-data (phony--analyze-grammar prepared-grammar)))
       (if (phony--analysis-data-contains-errors analysis-data)
           (display-warning 'phony "Grammar contains errors, not exporting")
-        (phony--export-dictionaries)
         (when (and (not noninteractive)
                    (not (server-running-p))
                    (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
@@ -1158,15 +1161,18 @@ If no rules are defined, this function does nothing."
         (cancel-function-timers #'phony--sync-state)
         (run-with-idle-timer 0.1 t #'phony--sync-state)
         (funcall phony-export-function analysis-data)
+        (phony--export-dictionaries prepared-grammar)
         (setq phony--exported-grammar prepared-grammar)))))
 
-(defun phony--debounce (f)
+(defun phony--debounce (f &rest args)
   "Debounce the invocation of F by waiting until next idle.
 
 Multiple invocations to F will collapse into one invocation upon idle
-timer activation."
+timer activation.
+
+ARGS are the parameters to pass F."
   (cancel-function-timers f)
-  (run-with-idle-timer 0.0 nil f))
+  (apply #'run-with-idle-timer 0.0 nil f args))
 
 (defun phony-request-export ()
   "Export all rules when next idle.

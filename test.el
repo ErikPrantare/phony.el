@@ -74,7 +74,7 @@ exporters do nothing, and export request debounce is turned off."
     (let* ((dictionary-export-count 0)
            (rule-export-count 0)
            (phony--dictionary-export-function
-            (lambda () (cl-incf dictionary-export-count)))
+            (lambda (_grammar) (cl-incf dictionary-export-count)))
            (phony-export-function
             (lambda (_analysis-data) (cl-incf rule-export-count))))
       (phony-mode 1)
@@ -114,7 +114,7 @@ exporters do nothing, and export request debounce is turned off."
     (let* ((dictionary-export-count 0)
            (rule-export-count 0)
            (phony--dictionary-export-function
-            (lambda () (cl-incf dictionary-export-count)))
+            (lambda (_grammar) (cl-incf dictionary-export-count)))
            (phony-export-function
             (lambda (_analysis-data) (cl-incf rule-export-count))))
       (phony-dictionary-put "beta" 'test-dict 2)
