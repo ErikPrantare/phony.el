@@ -1,6 +1,5 @@
 ;; -*- lexical-binding: t; -*-
 (require 'phony-serialize-syntax)
-(require 'phony-experimental)
 (require 'benchmark)
 
 (defun phony--run-benchmark ()
@@ -17,19 +16,19 @@
                        "swap air and boff and plex and yank outside to its outside outside")))
     ;; warm up
     (dolist (utterance utterances)
-      (phony-experimental-evaluate utterance))
+      (phony-evaluate utterance))
     ;; time benchmark
     (message "Time benchmark:")
     (dolist (utterance utterances)
       (message "%s: %s"
                utterance
                (benchmark-run 20
-                 (phony-experimental-evaluate utterance))))
+                 (phony-evaluate utterance))))
     ;; memory benchmark
     (message "Memory benchmark:")
     (let ((previous-memory-count (memory-use-counts)))
       (dolist (utterance utterances)
-        (phony-experimental-evaluate utterance)
+        (phony-evaluate utterance)
         (let ((memory-count (memory-use-counts)))
           (message "%s: %s"
                    utterance
