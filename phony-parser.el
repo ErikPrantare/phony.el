@@ -39,12 +39,7 @@
   (generation (cons nil nil)))
 
 (defvar phony-parser--current-generation -1
-  "The current generation of the parser.
-
-This is used to invalidate the parses-cache of `phony-parser--parser'.
-The generation is the sum of the generations of all dictionaries.  Any
-other changes result in a full parser reconstruction, so they do not
-need invalidation.")
+  "The current generation of parsing.  This is incremented each parse.")
 
 (defvar phony-parser--empty-parser
   (phony-parser--make
@@ -510,13 +505,10 @@ length of ENTRIES."
 Rules are taken from GRAMMAR or `phony--exported-grammar' if it is nil
 or not given.  GRAMMAR must be a prepared grammar."
   (setq grammar (or grammar phony--exported-grammar))
-  (let ((phony-parser--current-generation
-         (cl-loop for rule in (phony--get-rules grammar)
-                  when (phony--dictionary-p rule)
-                  sum (phony--dictionary-generation rule))))
-    (phony-parser--parse
-     (phony-parser--parser grammar)
-     (string-split utterance))))
+  (cl-incf phony-parser--current-generation)
+  (phony-parser--parse
+   (phony-parser--parser grammar)
+   (string-split utterance)))
 
 (provide 'phony-parser)
 ;;; phony-parser.el ends here

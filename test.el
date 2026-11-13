@@ -509,6 +509,19 @@ If there is no parse, an error is thrown."
     (should (equal (phony-test--evaluate "abra ha da bruh")
                    "abra ha da bruh"))))
 
+(ert-deftest phony-mode-deactivation ()
+  "Rules can be enabled with according to mode."
+  (phony-test
+    (phony-defun show-phrase ((phrase phony--builtin-phrase))
+      :mode text-mode
+      phrase)
+    (phony--export-all)
+    (should-error (phony-test--evaluate "abra ha da bruh"))
+    (with-temp-buffer
+      (text-mode)
+      (should (equal (phony-test--evaluate "abra ha da bruh")
+                     "abra ha da bruh")))))
+
 (ert-deftest phony-disabled-rules-no-contribute-externally ()
   "Disabled rules do not contribute to open rules outside module."
   (phony-test
