@@ -1,5 +1,9 @@
 * NEXT
-- Significantly improved performance of ~phony-experimental-evaluate~.
+- Added ~phony-evaluate-as-event~ for interactive evaluation of
+  utterances.
+- ~phony-experimental-evaluate~ is now obsolete.  Use
+  ~phony-evaluate~ instead.
+- Significantly improved performance of ~phony-evaluate~.
 - Removed ~phony-stdlib-talon-community~.
 - Removed ~phony-experimental-set-parser-literal-comparator~.  Use
   ~phony-experimental-set-parser-literal-normalizer~ instead.

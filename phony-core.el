@@ -1436,5 +1436,46 @@ Evaluation is done with reference to `phony--exported-grammar'."
         (phony--evaluate-ast (cadr ast)))
        (t (error "Failed to evaluate AST: %S" ast))))))
 
+(defun phony-evaluate (utterance &optional default)
+  "Evaluate UTTERANCE against the current grammar.
+
+The parser interprets UTTERANCE as a sequence of expressions of
+`phony-defun' rules that have `:interactive' set to t.  Each expression
+is evaluated in turn.  The return value of this function is a list
+containing the return values from evaluating the expressions.
+
+If the parsing of UTTERANCE is ambiguous, this function picks an
+arbitrary parse.
+
+If there is no possible parse of UTTERANCE then nil is returned, or
+DEFAULT if it is provided.
+
+If you're controlling this interactively through voice, you should
+probably use `phony-evaluate-as-event' instead."
+  (let ((parses (phony-parser--parse-utterance utterance)))
+    (if parses
+        (mapcar #'phony--evaluate-ast (car parses))
+      default)))
+
+(defun phony-evaluate-as-event (utterance)
+  "Evaluate UTTERANCE as an input event.
+
+This parses like `phony-evaluate', but does not evaluate immediately.
+Instead, each command is evaluated as if entered through regular input
+events.  This means that it will be evaluated the next time that Emacs
+processes inputs.
+
+This function should be preferred over `phony-evaluate' when controlled
+interactively by voice.  Going through the command loop means that
+things like undo history and keyboard macros will work with voice
+commands as well.
+
+If there is no possible parse for UTTERANCE, a `user-error' is
+signaled."
+  (let ((parses (phony-parser--parse-utterance utterance)))
+    (if parses
+        (mapcar #'phony--evaluate (car parses))
+      (user-error "No parse for utterance: %s" utterance))))
+
 (provide 'phony-core)
 ;;; phony-core.el ends here

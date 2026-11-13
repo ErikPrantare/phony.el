@@ -266,23 +266,10 @@ Literals are compared with tokens by first normalizing both with
 NORMALIZER."
   (setq phony-parser--literal-normalizer normalizer))
 
-(defun phony-experimental-evaluate (utterance &optional default)
-  "Evaluate UTTERANCE against the current grammar.
-
-The parser interprets UTTERANCE as a sequence of expressions of
-`phony-defun' rules that have `:interactive' set to t.  Each expression
-is evaluated in turn.  The return value of this function is a list
-containing the return values from evaluating the expressions.
-
-If the parsing of UTTERANCE is ambiguous, this function picks an
-arbitrary parse.
-
-If there is no possible parse of UTTERANCE then nil is returned, or
-DEFAULT if it is provided."
-  (let ((parses (phony-parser--parse-utterance utterance)))
-    (if parses
-        (mapcar #'phony--evaluate-ast (car parses))
-      default)))
+(define-obsolete-function-alias
+  'phony-experimental-evaluate
+  #'phony-evaluate
+  "2026-11-13")
 
 (provide 'phony-experimental)
 ;;; phony-experimental.el ends here

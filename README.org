@@ -35,8 +35,8 @@ With such a function defined, uttering "hello emacs" will display
 - [[#authoring-libraries][Authoring libraries]]
   - [[#modules][Modules]]
   - [[#interface-rules][Interface rules]]
+- [[#evaluating-utterances][Evaluating utterances]]
 - [[#experimental-features][Experimental features]]
-  - [[#evaluating-utterances-without-a-speech-recognition-engine][Evaluating utterances without a speech recognition engine]]
   - [[#customizing-literal-and-token-normalization][Customizing literal and token normalization]]
 - [[#pre-defined-rulesets][Pre-defined rulesets]]
 - [[#versioning-system][Versioning system]]
@@ -256,20 +256,23 @@ user are selected automatically.
 See the documentation of ~phony-define-interface~ for details
 on interfaces.
 
+* Evaluating utterances
+:PROPERTIES:
+:CUSTOM_ID: evaluating-utterances
+:END:
+Use the function ~phony-evaluate~ to evaluate an utterance, given as a
+string.  Phony will try to parse the utterance as a sequence of
+interactive procedure rules, and evaluate them in order.
+
+If the utterance comes from live speech recognition, use
+~phony-evaluate-as-event~ instead.  That will ensure that undo history
+and keyboard macros work the same way they do as for other input.
+
 * Experimental features
 :PROPERTIES:
 :CUSTOM_ID: experimental-features
 :END:
 Experimental features are enabled by requiring ~phony-experimental~.
-
-** Evaluating utterances without a speech recognition engine
-:PROPERTIES:
-:CUSTOM_ID: evaluating-utterances-without-a-speech-recognition-engine
-:END:
-Use the function ~phony-experimental-evaluate~ to evaluate an
-utterance, given as a string.  Phony will try to parse the utterance
-as a sequence of interactive procedure rules, and evaluate them in
-order.
 
 ** Customizing literal and token normalization
 :PROPERTIES:
