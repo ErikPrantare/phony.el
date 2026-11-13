@@ -30,13 +30,21 @@
 (require 'phony-model)
 (require 'phony-ag)
 
+(defvar phony-parser--wants-any-token 'phony-parser--wants-any-token
+  "Unique symbol indicating that the parser can match any token.")
+
 (cl-defstruct (phony-parser--parser
                (:constructor phony-parser--make)
                (:copier nil))
   "Step-based parser over token sequences."
-  parses-function step-function parses-cache
+  parses-function
+  wants-function
+  step-function
+  parses-cache
+  wants-cache
   ;; Fresh cons is always unequal to the actual generation.
-  (generation (cons nil nil)))
+  (parses-generation (cons nil nil))
+  (wants-generation (cons nil nil)))
 
 (defvar phony-parser--current-generation -1
   "The current generation of parsing.  This is incremented each parse.")
@@ -44,7 +52,8 @@
 (defvar phony-parser--empty-parser
   (phony-parser--make
    :parses-function (lambda () nil)
-   :step-function (lambda (_item) phony-parser--empty-parser))
+   :step-function (lambda (_item) phony-parser--empty-parser)
+   :wants-function (lambda () '()))
   "Parser that produces no results for any input.")
 
 (defun phony-parser--empty-p (parser)
@@ -54,16 +63,30 @@
 (defun phony-parser--parses (parser)
   "Return the completed results of PARSER."
   (unless (eql phony-parser--current-generation
-               (phony-parser--parser-generation parser))
+               (phony-parser--parser-parses-generation parser))
     (setf (phony-parser--parser-parses-cache parser)
           (funcall (phony-parser--parser-parses-function parser)))
-    (setf (phony-parser--parser-generation parser)
+    (setf (phony-parser--parser-parses-generation parser)
           phony-parser--current-generation))
   (phony-parser--parser-parses-cache parser))
 
 (defun phony-parser--step (parser item)
   "Advance PARSER by one token ITEM and return the resulting parser."
   (funcall (phony-parser--parser-step-function parser) item))
+
+(defun phony-parser--wants (parser)
+  "Return the next legal tokens of PARSER.
+
+If a token is the symbol `phony-parser--wants-any-token', the parser
+accepts any token."
+  (unless (eql phony-parser--current-generation
+               (phony-parser--parser-wants-generation parser))
+    (let ((wants (funcall (phony-parser--parser-wants-function parser))))
+      (setf (phony-parser--parser-wants-cache parser)
+            (seq-uniq wants))
+      (setf (phony-parser--parser-wants-generation parser)
+            phony-parser--current-generation)))
+  (phony-parser--parser-wants-cache parser))
 
 (defun phony-parser--input-step (input)
   "Return the next item and remaining input from INPUT, or nil."
@@ -85,7 +108,10 @@
    :parses-function (lambda () nil)
    :step-function
    (lambda (item)
-     (phony-parser--return item))))
+     (phony-parser--return item))
+   :wants-function
+   (lambda ()
+     (list phony-parser--wants-any-token))))
 
 (defun phony-parser--join (parser)
   "Flatten PARSER.
@@ -105,7 +131,13 @@ are run on subsequent tokens and their results collected."
          (phony-parser--join (phony-parser--step parser item))
          (seq-map (lambda (parse)
                     (phony-parser--step parse item))
-                  (phony-parser--parses parser))))))))
+                  (phony-parser--parses parser)))))
+     :wants-function
+     (lambda ()
+       (append
+        (phony-parser--wants parser)
+        (seq-mapcat #'phony-parser--wants
+                    (phony-parser--parses parser)))))))
 
 (defun phony-parser--map (f parser)
   "Return a parser applying F to each result of PARSER."
@@ -117,7 +149,10 @@ are run on subsequent tokens and their results collected."
        (seq-map f (phony-parser--parses parser)))
      :step-function
      (lambda (item)
-       (phony-parser--map f (phony-parser--step parser item))))))
+       (phony-parser--map f (phony-parser--step parser item)))
+     :wants-function
+     (lambda ()
+       (phony-parser--wants parser)))))
 
 (defun phony-parser--bind (parser f)
   "Return a parser that feeds each result of PARSER into F and flattens."
@@ -127,7 +162,8 @@ are run on subsequent tokens and their results collected."
   "Return a parser that succeeds immediately with X."
   (phony-parser--make
    :parses-function (lambda () (list x))
-   :step-function (lambda (_item) (phony-parser--empty))))
+   :step-function (lambda (_item) (phony-parser--empty))
+   :wants-function (lambda () '())))
 
 (defun phony-parser--empty ()
   "Return the empty parser."
@@ -146,21 +182,36 @@ are run on subsequent tokens and their results collected."
        :parses-function
        (lambda ()
          (seq-mapcat #'phony-parser--parses parsers))
-       :step-function (lambda (item)
-                        (phony-parser--alternative
-                         (seq-map
-                          (lambda (parser) (phony-parser--step parser item))
-                          parsers))))))))
+       :step-function
+       (lambda (item)
+         (phony-parser--alternative
+          (seq-map
+           (lambda (parser) (phony-parser--step parser item))
+           parsers)))
+       :wants-function
+       (lambda ()
+         (seq-mapcat #'phony-parser--wants parsers)))))))
 
-(defun phony-parser--satisfy (f)
-  "Return a parser that accepts a token satisfying F."
+(defvar phony-parser--literal-normalizer #'identity
+  "Function for normalizing tokens and literals.
+
+Comparison is done on the normalized strings.")
+
+(defun phony-parser--accept (item)
+  "Return a parser that only accepts ITEM.
+
+The parser normalizes ITEM and token input with
+`phony-parser--literal-normalizer' before comparing."
   (phony-parser--make
    :parses-function (lambda () nil)
    :step-function
    (lambda (token)
-     (if (funcall f token)
+     (if (equal (funcall phony-parser--literal-normalizer token)
+                (funcall phony-parser--literal-normalizer item))
          (phony-parser--return token)
-       (phony-parser--empty)))))
+       (phony-parser--empty)))
+   :wants-function
+   (lambda () (list (funcall phony-parser--literal-normalizer item)))))
 
 (defun phony-parser--then (parser1 parser2)
   "Return a parser that sequences PARSER1 then PARSER2, keeping PARSER2 results."
@@ -199,7 +250,9 @@ no arguments to yield the actual parser to use."
    :parses-function
    (lambda () (phony-parser--parses (funcall parser-factory)))
    :step-function
-   (lambda (item) (phony-parser--step (funcall parser-factory) item))))
+   (lambda (item) (phony-parser--step (funcall parser-factory) item))
+   :wants-function
+   (lambda () (phony-parser--wants (funcall parser-factory)))))
 
 (defun phony-parser--runtime-resolved-cached (parser-factory generation-function)
   "Return a parser behaving like PARSER-FACTORY invoked at runtime.
@@ -223,11 +276,6 @@ PARSER-FACTORY is invoked with no arguments to yield the parser to use."
   "Return a parser that succeeds if RULE is currently active."
   (phony-parser--guard (lambda () (phony--rule-active-p rule))))
 
-(defvar phony-parser--literal-normalizer #'identity
-  "Function for normalizing tokens and literals.
-
-Comparison is done on the normalized strings.")
-
 (defun phony-parser--literal (string)
   "Return a parser that accepts tokens matching STRING.
 
@@ -241,13 +289,7 @@ literals."
     (apply
      #'phony-parser--lift
      (lambda (&rest _words) string)
-     (seq-map (lambda (word)
-                (phony-parser--satisfy
-                 (lambda (token)
-                   (equal
-                    (funcall phony-parser--literal-normalizer word)
-                    (funcall phony-parser--literal-normalizer token)))))
-              words))))
+     (seq-map #'phony-parser--accept words))))
 
 (defun phony-parser--optional (parser)
   "Return a parser that matches PARSER zero or one times."
@@ -425,7 +467,9 @@ length of ENTRIES."
      (lambda (item)
        (gethash (funcall phony-parser--literal-normalizer item)
                 child-parsers
-                (phony-parser--empty))))))
+                (phony-parser--empty)))
+     :wants-function
+     (lambda () (mapcar #'car prefix-groups)))))
 
 (defun phony-parser--make-dictionary-parser (dictionary)
   "Return parser unconditionally matching an entry of DICTIONARY."
