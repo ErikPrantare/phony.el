@@ -37,15 +37,9 @@
 
 (cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-rule))
   "Return the Talon pattern string for matching PATTERN."
-  (let* ((occurrence-number
-          (phony-talon--occurrence-number pattern)))
-    (format "<user.%s%s>"
-            (phony--rule-external-name
-             (phony--pattern-rule-name pattern))
-            (if (>= occurrence-number 1)
-                (format "_phony_clone%s"
-                        (1- occurrence-number))
-              ""))))
+  (format "<user.%s>"
+          (phony--rule-external-name
+           (phony--pattern-rule-name pattern))))
 
 (cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-sequence))
   "Return the Talon pattern string for matching PATTERN."
@@ -70,8 +64,6 @@
 
 (cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-external-rule))
   "Return the Talon pattern string for matching PATTERN."
-  ;; External rules may only occur once in a rule (internal
-  ;; constraint).  So no need to worry about rule multiplicity.
   (format "<%s>" (string-join
                   (seq-map #'symbol-name
                            (append
@@ -149,18 +141,6 @@
            (phony--rule-external-name rule)
            "m[0]")))
 
-(defun phony-talon--occurrence-number (match-pattern)
-  "Get index of occurence of MATCH-PATTERN in its containing rule.
-
-This goes through all match patterns of the containing rule and returns
-the index of MATCH-PATTERN among all of those `equal' to it."
-  (seq-position
-   (phony--pattern-collect
-    (apply-partially #'equal match-pattern)
-    (phony--procedure-rule-pattern (phony--containing-rule match-pattern)))
-   match-pattern
-   #'eq))
-
 (cl-defmethod phony-talon--insert-python ((rule phony--procedure-rule))
   "Insert python code for capturing RULE."
   (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
@@ -182,18 +162,6 @@ the index of MATCH-PATTERN among all of those `equal' to it."
   "Whether to always listen for utterances, even if Emacs is not focused.
 
 If you are using EXWM, you probably want this to be t.")
-
-(defun phony-talon--clone-rule (rule times)
-  "Insert TIMES clone captures for RULE.
-
-Clone captures are needed because Talon does not differentiate
-between multiple captures of the same name in one pattern."
-  (dotimes (i times)
-    (insert (format "\n@module.capture(rule='<user.%s>')\n"
-                    (phony--rule-external-name rule)))
-    (insert
-     (format "def %s_phony_clone%s(m) -> str:\n    return m[0]\n"
-             (phony--rule-external-name rule) i))))
 
 (cl-defun phony-talon--insert-exported-rules (rules)
   "Insert .talon entries for all exported procedure rules in RULES."
@@ -305,10 +273,7 @@ This function creates .talon and .py files in the output directory."
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
                           (phony--rule-external-name rule))))
         (phony-talon--insert-capture-preamble rule analysis-data)
-        (phony-talon--insert-python rule)
-        (phony-talon--clone-rule
-         rule
-         (max 0 (1- (phony--maximum-producer-multiplicity analysis-data rule))))))))
+        (phony-talon--insert-python rule)))))
 
 (defun phony-talon-export (analysis-data)
   ;; checkdoc-params: (analysis-data)
