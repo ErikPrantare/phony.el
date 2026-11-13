@@ -62,7 +62,6 @@
 
 (require 'phony-core)
 (require 'phony-stdlib)
-(require 'phony-stdlib-talon-community)
 
 (autoload 'phony-experimental-mode "phony-experimental")
 (autoload 'phony-talon-export "phony-talon")

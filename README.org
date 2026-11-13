@@ -32,7 +32,6 @@ With such a function defined, uttering "hello emacs" will display
   - [[#dictionaries][Dictionaries]]
   - [[#open-rule][Open rule]]
 - [[#standard-library][Standard library]]
-  - [[#overrides-for-talon-community-rules][Overrides for talon community rules]]
 - [[#authoring-libraries][Authoring libraries]]
   - [[#modules][Modules]]
   - [[#interface-rules][Interface rules]]
@@ -216,17 +215,6 @@ defining commands.
 - ~graphical-character~ matches a graphical character (letters,
   digits, and other visual characters).
 
-** Overrides for talon community rules
-:PROPERTIES:
-:CUSTOM_ID: overrides-for-talon-community-rules
-:END:
-If you're using talon community and want to use their captures in
-place of the above, add the following to your configuration:
-
-#+begin_src elisp
-  (phony-provide-from phony-stdlib phony-stdlib-talon-community)
-#+end_src
-
 * Authoring libraries
 :PROPERTIES:
 :CUSTOM_ID: authoring-libraries
@@ -257,8 +245,7 @@ Interface rules, or simply /interfaces/, allow users to override
 certain rule definitions, or to substitute your definitions for those
 in another module.  Interfaces are defined using
 ~phony-define-interface~.  Interfaces are how the standard library
-allows users to switch out the standard implementation with the
-implementations in talon community by using ~phony-provide-from~.
+allows users to switch out the standard implementation with their own.
 
 Rules that implement interfaces are called /providers/.  Providers are
 specified by using the ~:provides~ keyword argument in a rule.
