@@ -364,12 +364,6 @@ each command in the uttered sequence.")
   "Return a parser matching the inner pattern of ARGUMENT."
   (phony-parser--parser (phony--pattern-argument-pattern argument)))
 
-(cl-defmethod phony-parser--parser ((_ phony--pattern-external-rule))
-  "Return the empty parser.
-
-External rules cannot be parsed locally."
-  (phony-parser--empty))
-
 (cl-defmethod phony-parser--parser ((rule phony--pattern-rule))
   "Return a parser matching the rule named by RULE."
   (let ((grammar (phony--containing-grammar rule))

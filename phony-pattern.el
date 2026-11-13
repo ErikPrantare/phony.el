@@ -65,14 +65,6 @@
            :type sexp
            :documentation "Pattern whose match will bind to the argument."))
 
-(cl-defstruct phony--pattern-external-rule
-  "Pattern matching some external rule.
-Currently only relevant for the talon exporter."
-  (name nil
-        :documentation "Symbol naming the external rule.")
-  (namespace nil
-             :documentation "List of symbols forming the namespace prefix."))
-
 (cl-defstruct phony--pattern-rule
   "Pattern matching another rule."
   (name nil
@@ -100,10 +92,6 @@ Only these patterns may be bound to arguments."
    ((symbolp pattern-form)
     (make-phony--pattern-rule
      :name pattern-form))
-   ((eq (car pattern-form) 'external-rule)
-    (make-phony--pattern-external-rule
-     :name (car (last (cdr pattern-form)))
-     :namespace (butlast (cdr pattern-form))))
    ((symbolp (car pattern-form))
     (error "Not an argument nor pattern type: `%S' in form `%S'"
            (car pattern-form)
@@ -189,10 +177,6 @@ This is required for recognizing if a form should bind turn argument."
      (make-phony--pattern-literal :string string))
     ((cl-struct phony--pattern-rule name)
      (make-phony--pattern-rule :name name))
-    ((cl-struct phony--pattern-external-rule name namespace)
-     (make-phony--pattern-external-rule
-      :name name
-      :namespace namespace))
     ((cl-struct phony--pattern-builtin-word)
      (phony--make-pattern-builtin-word))
     ((cl-struct phony--pattern-builtin-phrase)

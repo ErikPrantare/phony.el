@@ -162,11 +162,6 @@ syntax from untrusted sources!"
   `(,(phony--pattern-argument-name pattern)
     ,(phony--unparse (phony--pattern-argument-pattern pattern))))
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-external-rule))
-  "Unparse PATTERN."
-  `(external-rule ,@(phony--pattern-external-rule-namespace pattern)
-                  ,(phony--pattern-external-rule-name pattern)))
-
 (cl-defmethod phony--unparse ((pattern phony--pattern-sequence))
   "Unparse PATTERN."
   `(seq ,@(mapcar #'phony--unparse

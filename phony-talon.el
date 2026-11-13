@@ -62,15 +62,6 @@
   (format "(%s)*" (phony-talon--pattern-match-string
                    (phony--pattern-zero-or-more-pattern pattern))))
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-external-rule))
-  "Return the Talon pattern string for matching PATTERN."
-  (format "<%s>" (string-join
-                  (seq-map #'symbol-name
-                           (append
-                            (phony--pattern-external-rule-namespace pattern)
-                            (list (phony--pattern-external-rule-name pattern))))
-                  ".")))
-
 (cl-defmethod phony-talon--pattern-match-string ((_pattern phony--pattern-builtin-word))
   "Return the Talon pattern string for matching PATTERN."
   "<word>")

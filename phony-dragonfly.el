@@ -73,10 +73,6 @@
     (pattern . ,(phony-dragonfly--serialize-pattern
                  (phony--pattern-optional-pattern pattern)))))
 
-(cl-defmethod phony-dragonfly--serialize-pattern ((_pattern phony--pattern-external-rule))
-  "Convert PATTERN to a form serializable by `json-encode'."
-  `((type . "impossible")))
-
 (cl-defmethod phony-dragonfly--serialize-pattern ((pattern phony--pattern-sequence))
   "Convert PATTERN to a form serializable by `json-encode'."
   `((type . "sequence")
