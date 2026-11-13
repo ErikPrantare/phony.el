@@ -14,16 +14,18 @@
          (utterances '("bring air to boff"
                        "go up twice"
                        "swap air and boff and plex and yank outside to its outside outside")))
-    ;; warm up
-    (dolist (utterance utterances)
-      (phony-evaluate utterance))
-    ;; time benchmark
-    (message "Time benchmark:")
+    ;; cold time benchmark
+    (message "Cold time benchmark:")
     (dolist (utterance utterances)
       (message "%s: %s"
                utterance
-               (benchmark-run 20
-                 (phony-evaluate utterance))))
+               (benchmark-run 1 (phony-evaluate utterance))))
+    ;; warm time benchmark
+    (message "Warm time benchmark:")
+    (dolist (utterance utterances)
+      (message "%s: %s"
+               utterance
+               (benchmark-run 20 (phony-evaluate utterance))))
     ;; memory benchmark
     (message "Memory benchmark:")
     (let ((previous-memory-count (memory-use-counts)))

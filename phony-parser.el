@@ -406,18 +406,18 @@ VALUE.
 The parser is constructed using a trie, so that parsing is linear with
 respect to the length of LITERALS, and constant with respect to the
 length of ENTRIES."
-  ;; NOTE: Potential blowup if a ENTRIES contains a large amount of
-  ;; long common prefixes.
   (let ((child-parsers (make-hash-table :test 'equal))
-        (values nil))
-    (pcase-dolist (`(,literals . ,value) entries)
-      (if (not literals)
-          (push value values)
-        (puthash (car literals)
+        (values nil)
+        ;; Note: #'caar on '() yields nil, so if an entry has no
+        ;; LITERALS, it will be indexed by nil.
+        (prefix-groups (seq-group-by #'caar entries)))
+    (pcase-dolist (`(,prefix . ,group) prefix-groups)
+      (if (not prefix)
+          (setq values (mapcar #'cdr group))
+        (puthash prefix
                  (phony-parser--trie-parser
-                  (cl-loop for entry in entries
-                           when (equal (car literals) (caar entry))
-                           collect (cons (cdar entry) (cdr entry))))
+                  (mapcar (lambda (entry) (cons (cdar entry) (cdr entry)))
+                          group))
                  child-parsers)))
     (phony-parser--make
      :parses-function (lambda () values)
