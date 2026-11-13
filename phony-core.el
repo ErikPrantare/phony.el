@@ -725,29 +725,16 @@ recognition engine."
 (gv-define-setter phony-dictionary-alist (value dictionary)
   `(phony-set-dictionary-alist ,dictionary ,value))
 
-(defun phony--create-lookup-representation (entry dictionary)
-  "Create lookup string for ENTRY in DICTIONARY.
-
-When evaluating the returned string from emacsclient, this performs
-the lookup."
-  (format "(%s \"%s\")"
-          (phony--dictionary-name dictionary)
-          (car entry)))
-
 (defun phony--prepare-dictionary-for-serialization (dictionary)
   "Return DICTIONARY as an entry for `json-serialize'.
 
 This represents one key-value pair, mapping the external dictionary name
-to its dictionary."
+to its dictionary.  The dictionary is represented by an array containing
+the utterances."
   (cons (make-symbol (phony--rule-external-name dictionary))
-        (mapcar (lambda (entry)
-                  (cons
-                   (make-symbol (car entry))
-                   ;; Each value is a string, encoding a form that
-                   ;; will evaluate to the actual value.
-                   (phony--create-lookup-representation
-                    entry dictionary)))
-                (phony--dictionary-mapping dictionary))))
+        (apply
+         #'vector
+         (mapcar #'car (phony--dictionary-mapping dictionary)))))
 
 ;; TODO: Handle IO errors
 (defun phony--write-dictionaries-to-file (grammar)
@@ -1472,10 +1459,15 @@ commands as well.
 
 If there is no possible parse for UTTERANCE, a `user-error' is
 signaled."
-  (let ((parses (phony-parser--parse-utterance utterance)))
-    (if parses
-        (mapcar #'phony--evaluate (car parses))
-      (user-error "No parse for utterance: %s" utterance))))
+  ;; When invoked from emacsclient, the current buffer and selected
+  ;; window differ.
+  (with-selected-window (selected-window)
+    (with-current-buffer (current-buffer)
+      (let ((parses (phony-parser--parse-utterance utterance)))
+        (if parses
+            (dolist (command (car parses))
+              (phony--evaluate command))
+          (user-error "No parse for utterance: %s" utterance))))))
 
 (provide 'phony-core)
 ;;; phony-core.el ends here
