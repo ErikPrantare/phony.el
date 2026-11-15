@@ -94,7 +94,7 @@ accepts any token."
   "Return the next item and remaining input from INPUT, or nil."
   (and input (cons (car input) (cdr input))))
 
-(defun phony-parser--run (parser input)
+(defun phony-parser--parse (parser input)
   "Return all completed results of running PARSER on INPUT."
   (cl-loop
    for step = (phony-parser--input-step input)
@@ -229,10 +229,6 @@ The parser normalizes ITEM and token input with
                 (lambda (&rest args) (apply f x args))
                 (cdr parsers))))
     (phony-parser--return (funcall f))))
-
-(defun phony-parser--parse (parser input)
-  "Return all completed results of running PARSER on INPUT."
-  (phony-parser--run parser input))
 
 (defun phony-parser--guard (pred)
   "Return a parser that succeeds if PRED returns non-nil."
