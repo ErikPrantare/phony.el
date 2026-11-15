@@ -22,7 +22,7 @@
 
 ;;; Commentary:
 
-;;
+;; This file defines the Talon backend.
 
 ;;; Code:
 

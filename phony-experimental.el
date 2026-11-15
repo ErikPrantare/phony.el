@@ -21,7 +21,8 @@
 
 ;;; Commentary:
 
-;;
+;; Experimental features are exposed here.  These features may change
+;; or be removed at any moment.
 
 ;;; Code:
 

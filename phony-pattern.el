@@ -21,7 +21,8 @@
 
 ;;; Commentary:
 
-;;
+;; This file specifies the structure, syntax and some helpers for the
+;; patterns, used in `phony-defun'.
 
 ;;; Code:
 

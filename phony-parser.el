@@ -21,6 +21,8 @@
 
 ;;; Commentary:
 
+;; This file defines the parser for phony grammars.
+
 ;;; Code:
 
 (require 'cl-lib)
