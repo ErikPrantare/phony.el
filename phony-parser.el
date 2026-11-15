@@ -90,19 +90,11 @@ accepts any token."
             phony-parser--current-generation)))
   (phony-parser--parser-wants-cache parser))
 
-(defun phony-parser--input-step (input)
-  "Return the next item and remaining input from INPUT, or nil."
-  (and input (cons (car input) (cdr input))))
-
 (defun phony-parser--parse (parser input)
   "Return all completed results of running PARSER on INPUT."
-  (cl-loop
-   for step = (phony-parser--input-step input)
-   while step
-   do (pcase-let* ((`(,item . ,tail) step))
-        (setq parser (phony-parser--step parser item))
-        (setq input tail))
-   finally return (phony-parser--parses parser)))
+  (while input
+    (setq parser (phony-parser--step parser (pop input))))
+  (phony-parser--parses parser))
 
 (defun phony-parser--any ()
   "Return a parser that accepts any single token."
