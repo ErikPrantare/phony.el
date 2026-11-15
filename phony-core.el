@@ -315,7 +315,7 @@ This function assumes that contributions have been internalized.  See
          (lambda (pattern)
            (if (and (phony--pattern-rule-p pattern)
                     (eq (phony--pattern-rule-name pattern) from))
-               (make-phony--pattern-rule :name to)
+               (phony--make-pattern-rule :name to)
              pattern))
          (phony--procedure-rule-pattern rule))))
 
