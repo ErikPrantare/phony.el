@@ -114,7 +114,7 @@ syntax from untrusted sources!"
   "Unparse RULE."
   `(phony-defun ,(phony--rule-name rule)
        ,(mapcar #'phony--unparse
-                (phony--pattern-sequence-patterns
+                (phony-pattern--sequence-patterns
                  (phony--procedure-rule-pattern rule)))
      ,@(phony--rule-parameters rule)
      ;; Refer to args so as to not trigger unused argument warnings.
@@ -141,51 +141,51 @@ syntax from untrusted sources!"
   `(phony-define-interface ,(phony--rule-name rule)
      ,@(phony--rule-parameters rule)))
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-literal))
+(cl-defmethod phony--unparse ((pattern phony-pattern--literal))
   "Unparse PATTERN."
-  (phony--pattern-literal-string pattern))
+  (phony-pattern--literal-string pattern))
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-rule))
+(cl-defmethod phony--unparse ((pattern phony-pattern--rule))
   "Unparse PATTERN."
-  (phony--pattern-rule-name pattern))
+  (phony-pattern--rule-name pattern))
 
-(cl-defmethod phony--unparse ((_pattern phony--pattern-builtin-word))
+(cl-defmethod phony--unparse ((_pattern phony-pattern--builtin-word))
   "Unparse PATTERN."
   'phony--builtin-word)
 
-(cl-defmethod phony--unparse ((_pattern phony--pattern-builtin-phrase))
+(cl-defmethod phony--unparse ((_pattern phony-pattern--builtin-phrase))
   "Unparse PATTERN."
   'phony--builtin-phrase)
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-argument))
+(cl-defmethod phony--unparse ((pattern phony-pattern--argument))
   "Unparse PATTERN."
-  `(,(phony--pattern-argument-name pattern)
-    ,(phony--unparse (phony--pattern-argument-pattern pattern))))
+  `(,(phony-pattern--argument-name pattern)
+    ,(phony--unparse (phony-pattern--argument-pattern pattern))))
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-sequence))
+(cl-defmethod phony--unparse ((pattern phony-pattern--sequence))
   "Unparse PATTERN."
   `(seq ,@(mapcar #'phony--unparse
-                  (phony--pattern-sequence-patterns pattern))))
+                  (phony-pattern--sequence-patterns pattern))))
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-alternative))
+(cl-defmethod phony--unparse ((pattern phony-pattern--alternative))
   "Unparse PATTERN."
   `(| ,@(mapcar #'phony--unparse
-                (phony--pattern-alternative-patterns pattern))))
+                (phony-pattern--alternative-patterns pattern))))
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-optional))
+(cl-defmethod phony--unparse ((pattern phony-pattern--optional))
   "Unparse PATTERN."
   `(\? ,(phony--unparse
-         (phony--pattern-optional-pattern pattern))))
+         (phony-pattern--optional-pattern pattern))))
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-one-or-more))
+(cl-defmethod phony--unparse ((pattern phony-pattern--one-or-more))
   "Unparse PATTERN."
   `(+ ,(phony--unparse
-        (phony--pattern-repeat-pattern pattern))))
+        (phony-pattern--repeat-pattern pattern))))
 
-(cl-defmethod phony--unparse ((pattern phony--pattern-zero-or-more))
+(cl-defmethod phony--unparse ((pattern phony-pattern--zero-or-more))
   "Unparse PATTERN."
   `(* ,(phony--unparse
-        (phony--pattern-repeat-pattern pattern))))
+        (phony-pattern--repeat-pattern pattern))))
 
 (provide 'phony-serialize-syntax)
 ;;; phony-serialize-syntax.el ends here

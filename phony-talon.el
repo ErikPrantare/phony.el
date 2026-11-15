@@ -31,56 +31,56 @@
 (cl-defgeneric phony-talon--pattern-match-string (pattern)
   "Return the Talon pattern string for matching PATTERN.")
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-literal))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--literal))
   "Return the Talon pattern string for matching PATTERN."
-  (string-replace "'" "\\'" (phony--pattern-literal-string pattern)))
+  (string-replace "'" "\\'" (phony-pattern--literal-string pattern)))
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-rule))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--rule))
   "Return the Talon pattern string for matching PATTERN."
   (format "<user.%s>"
           (phony--rule-external-name
-           (phony--pattern-rule-name pattern))))
+           (phony-pattern--rule-name pattern))))
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-sequence))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--sequence))
   "Return the Talon pattern string for matching PATTERN."
   (string-join (seq-map #'phony-talon--pattern-match-string
-                        (phony--pattern-sequence-patterns pattern))
+                        (phony-pattern--sequence-patterns pattern))
                " "))
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-alternative))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--alternative))
   "Return the Talon pattern string for matching PATTERN."
   (format "(%s)"
           (string-join (seq-map #'phony-talon--pattern-match-string
-                                (phony--pattern-alternative-patterns pattern))
+                                (phony-pattern--alternative-patterns pattern))
                        " | ")))
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-optional))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--optional))
   "Return the Talon pattern string for matching PATTERN."
   (format "[%s]" (phony-talon--pattern-match-string
-                  (phony--pattern-optional-pattern pattern))))
+                  (phony-pattern--optional-pattern pattern))))
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-one-or-more))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--one-or-more))
   "Return the Talon pattern string for matching PATTERN."
   (format "(%s)+" (phony-talon--pattern-match-string
-                   (phony--pattern-one-or-more-pattern pattern))))
+                   (phony-pattern--one-or-more-pattern pattern))))
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-zero-or-more))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--zero-or-more))
   "Return the Talon pattern string for matching PATTERN."
   (format "(%s)*" (phony-talon--pattern-match-string
-                   (phony--pattern-zero-or-more-pattern pattern))))
+                   (phony-pattern--zero-or-more-pattern pattern))))
 
-(cl-defmethod phony-talon--pattern-match-string ((_pattern phony--pattern-builtin-word))
+(cl-defmethod phony-talon--pattern-match-string ((_pattern phony-pattern--builtin-word))
   "Return the Talon pattern string for matching PATTERN."
   "<word>")
 
-(cl-defmethod phony-talon--pattern-match-string ((_pattern phony--pattern-builtin-phrase))
+(cl-defmethod phony-talon--pattern-match-string ((_pattern phony-pattern--builtin-phrase))
   "Return the Talon pattern string for matching PATTERN."
   "<phrase>")
 
-(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-argument))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--argument))
   "Return the Talon pattern string for matching PATTERN."
   (phony-talon--pattern-match-string
-   (phony--pattern-argument-pattern pattern)))
+   (phony-pattern--argument-pattern pattern)))
 
 (cl-defgeneric phony-talon--rule-match-string (rule analysis-data)
   "Return the full Talon rule pattern for RULE given ANALYSIS-DATA.")

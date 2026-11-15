@@ -28,49 +28,49 @@
 
 (require 'cl-lib)
 
-(cl-defstruct (phony--pattern-literal
-               (:constructor phony--make-pattern-literal))
+(cl-defstruct (phony-pattern--literal
+               (:constructor phony-pattern--make-literal))
   "Pattern matching a literal utterance."
   ( string nil
     :type string
     :documentation "Utterance that matches this pattern."))
 
-(cl-defstruct (phony--pattern-sequence
-               (:constructor phony--make-pattern-sequence))
+(cl-defstruct (phony-pattern--sequence
+               (:constructor phony-pattern--make-sequence))
   "Pattern matching a sequence of sub-patterns."
   ( patterns nil
     :documentation "List of sub-patterns that must match in sequence."))
 
-(cl-defstruct (phony--pattern-optional
-               (:constructor phony--make-pattern-optional))
+(cl-defstruct (phony-pattern--optional
+               (:constructor phony-pattern--make-optional))
   "Pattern matching PATTERN zero or one times."
   ( pattern nil
     :documentation "The pattern to match zero or one times."))
 
-(cl-defstruct (phony--pattern-repeat
-               (:constructor phony--make-pattern-repeat))
+(cl-defstruct (phony-pattern--repeat
+               (:constructor phony-pattern--make-repeat))
   "Pattern that may match PATTERN multiple times."
   ( pattern nil
     :documentation "The pattern to match repeatedly."))
 
-(cl-defstruct (phony--pattern-one-or-more
-               (:include phony--pattern-repeat)
-               (:constructor phony--make-pattern-one-or-more))
+(cl-defstruct (phony-pattern--one-or-more
+               (:include phony-pattern--repeat)
+               (:constructor phony-pattern--make-one-or-more))
   "Pattern matching PATTERN one or more times.")
 
-(cl-defstruct (phony--pattern-zero-or-more
-               (:include phony--pattern-repeat)
-               (:constructor phony--make-pattern-zero-or-more))
+(cl-defstruct (phony-pattern--zero-or-more
+               (:include phony-pattern--repeat)
+               (:constructor phony-pattern--make-zero-or-more))
   "Pattern matching PATTERN zero or more times.")
 
-(cl-defstruct (phony--pattern-alternative
-               (:constructor phony--make-pattern-alternative))
+(cl-defstruct (phony-pattern--alternative
+               (:constructor phony-pattern--make-alternative))
   "Pattern matching one of PATTERNS."
   ( patterns nil
     :documentation "The alternatives to match."))
 
-(cl-defstruct (phony--pattern-argument
-               (:constructor phony--make-pattern-argument))
+(cl-defstruct (phony-pattern--argument
+               (:constructor phony-pattern--make-argument))
   "Pattern matching FORM and binding it to function argument NAME."
   ( name nil
     :type symbol
@@ -79,22 +79,22 @@
            :type sexp
            :documentation "Pattern whose match will bind to the argument."))
 
-(cl-defstruct (phony--pattern-rule
-               (:constructor phony--make-pattern-rule))
+(cl-defstruct (phony-pattern--rule
+               (:constructor phony-pattern--make-rule))
   "Pattern matching another rule."
   ( name nil
     :type symbol
     :documentation "Symbol naming the phony rule that this pattern matches."))
 
-(cl-defstruct (phony--pattern-builtin-word
-               (:constructor phony--make-pattern-builtin-word))
+(cl-defstruct (phony-pattern--builtin-word
+               (:constructor phony-pattern--make-builtin-word))
   "Pattern matching any word.")
 
-(cl-defstruct (phony--pattern-builtin-phrase
-               (:constructor phony--make-pattern-builtin-phrase))
+(cl-defstruct (phony-pattern--builtin-phrase
+               (:constructor phony-pattern--make-builtin-phrase))
   "Pattern matching any phrase.")
 
-(defun phony--pattern-parse-implicit-sequence (pattern-forms arglist)
+(defun phony-pattern--parse-implicit-sequence (pattern-forms arglist)
   "Parse implicit sequence form PATTERN-FORMS.
 
 An implicit sequence form is one where the symbol `seq' is not
@@ -104,29 +104,29 @@ If PATTERN-FORMS has one element, that form is parsed and returned
 directly.  Otherwise, a sequence pattern containing the parse of
 PATTERN-FORMS is returned.
 
-ARGLIST is the same as for `phony--parse-speech-pattern'."
+ARGLIST is the same as for `phony-pattern--parse'."
   (if (length= pattern-forms 1)
-      (phony--parse-speech-pattern (car pattern-forms) arglist)
-    (phony--make-pattern-sequence
+      (phony-pattern--parse (car pattern-forms) arglist)
+    (phony-pattern--make-sequence
      :patterns (mapcar
                 (lambda (pattern-form)
-                  (phony--parse-speech-pattern
+                  (phony-pattern--parse
                    pattern-form arglist))
                 pattern-forms))))
 
-(defun phony--parse-speech-pattern (pattern-form arglist)
+(defun phony-pattern--parse (pattern-form arglist)
   "Parse PATTERN-FORM into an pattern.
 
 ARGLIST is the list of argument names for the function being defined.
 This is required for recognizing if a form should bind to an argument."
   (cond
    ((stringp pattern-form)
-    (phony--make-pattern-literal
+    (phony-pattern--make-literal
      :string pattern-form))
    ((member (car-safe pattern-form) arglist)
-    (phony--make-pattern-argument
+    (phony-pattern--make-argument
      :name (car pattern-form)
-     :pattern (phony--parse-speech-pattern
+     :pattern (phony-pattern--parse
                (cadr pattern-form) arglist)))
    ;; NOTE: The reader interprets ? as a character escape, so to use
    ;; it in the specification of the pattern we actually need to
@@ -134,40 +134,40 @@ This is required for recognizing if a form should bind to an argument."
    ;; space.
    ((or (eq (car-safe pattern-form) ?\s)
         (eq (car-safe pattern-form) '\?))
-    (phony--make-pattern-optional
+    (phony-pattern--make-optional
      :pattern
-     (phony--pattern-parse-implicit-sequence
+     (phony-pattern--parse-implicit-sequence
       (cdr pattern-form) arglist)))
    ((eq (car-safe pattern-form) '+)
-    (phony--make-pattern-one-or-more
+    (phony-pattern--make-one-or-more
      :pattern
-     (phony--pattern-parse-implicit-sequence
+     (phony-pattern--parse-implicit-sequence
       (cdr pattern-form) arglist)))
    ((eq (car-safe pattern-form) '*)
-    (phony--make-pattern-zero-or-more
+    (phony-pattern--make-zero-or-more
      :pattern
-     (phony--pattern-parse-implicit-sequence
+     (phony-pattern--parse-implicit-sequence
       (cdr pattern-form) arglist)))
    ((eq (car-safe pattern-form) 'seq)
-    (phony--make-pattern-sequence
+    (phony-pattern--make-sequence
      :patterns
      (mapcar
       (lambda (subpattern)
-        (phony--parse-speech-pattern subpattern arglist))
+        (phony-pattern--parse subpattern arglist))
       (cdr pattern-form))))
    ((eq (car-safe pattern-form) '|)
-    (phony--make-pattern-alternative
+    (phony-pattern--make-alternative
      :patterns
      (mapcar
       (lambda (subpattern)
-        (phony--parse-speech-pattern subpattern arglist))
+        (phony-pattern--parse subpattern arglist))
       (cdr pattern-form))))
    ((eq pattern-form 'phony--builtin-word)
-    (phony--make-pattern-builtin-word))
+    (phony-pattern--make-builtin-word))
    ((eq pattern-form 'phony--builtin-phrase)
-    (phony--make-pattern-builtin-phrase))
+    (phony-pattern--make-builtin-phrase))
    ((symbolp pattern-form)
-    (phony--make-pattern-rule
+    (phony-pattern--make-rule
      :name pattern-form))
    ((symbolp (car pattern-form))
     (error "Not an argument nor pattern type: `%S' in form `%S'"
@@ -175,69 +175,69 @@ This is required for recognizing if a form should bind to an argument."
            pattern-form))
    (t (error "No parse for %S" pattern-form))))
 
-(defun phony--pattern-map-children (f pattern)
+(defun phony-pattern--map-children (f pattern)
   "Return a copy of PATTERN with F applied to each of its children."
   (pcase pattern
-    ((cl-struct phony--pattern-sequence patterns)
-     (phony--make-pattern-sequence
+    ((cl-struct phony-pattern--sequence patterns)
+     (phony-pattern--make-sequence
       :patterns (seq-map f patterns)))
-    ((cl-struct phony--pattern-alternative patterns)
-     (phony--make-pattern-alternative
+    ((cl-struct phony-pattern--alternative patterns)
+     (phony-pattern--make-alternative
       :patterns (seq-map f patterns)))
-    ((cl-struct phony--pattern-optional (pattern child))
-     (phony--make-pattern-optional
+    ((cl-struct phony-pattern--optional (pattern child))
+     (phony-pattern--make-optional
       :pattern (funcall f child)))
-    ((cl-struct phony--pattern-one-or-more (pattern child))
-     (phony--make-pattern-one-or-more
+    ((cl-struct phony-pattern--one-or-more (pattern child))
+     (phony-pattern--make-one-or-more
       :pattern (funcall f child)))
-    ((cl-struct phony--pattern-zero-or-more (pattern child))
-     (phony--make-pattern-zero-or-more
+    ((cl-struct phony-pattern--zero-or-more (pattern child))
+     (phony-pattern--make-zero-or-more
       :pattern (funcall f child)))
-    ((cl-struct phony--pattern-argument name (pattern child))
-     (phony--make-pattern-argument
+    ((cl-struct phony-pattern--argument name (pattern child))
+     (phony-pattern--make-argument
       :name name
       :pattern (funcall f child)))
-    ((cl-struct phony--pattern-literal string)
-     (phony--make-pattern-literal :string string))
-    ((cl-struct phony--pattern-rule name)
-     (phony--make-pattern-rule :name name))
-    ((cl-struct phony--pattern-builtin-word)
-     (phony--make-pattern-builtin-word))
-    ((cl-struct phony--pattern-builtin-phrase)
-     (phony--make-pattern-builtin-phrase))
+    ((cl-struct phony-pattern--literal string)
+     (phony-pattern--make-literal :string string))
+    ((cl-struct phony-pattern--rule name)
+     (phony-pattern--make-rule :name name))
+    ((cl-struct phony-pattern--builtin-word)
+     (phony-pattern--make-builtin-word))
+    ((cl-struct phony-pattern--builtin-phrase)
+     (phony-pattern--make-builtin-phrase))
     (_ (error "No case for pattern of type %s: %s"
               (type-of pattern)
               pattern))))
 
-(defun phony--pattern-transform (f pattern)
+(defun phony-pattern--transform (f pattern)
   "Recursively apply F to PATTERN.
 
 F is applied to a copy of PATTERN with children transformed by F."
-  (funcall f (phony--pattern-map-children
-              (lambda (child) (phony--pattern-transform f child))
+  (funcall f (phony-pattern--map-children
+              (lambda (child) (phony-pattern--transform f child))
               pattern)))
 
-(defun phony--copy-pattern (pattern)
+(defun phony-pattern--copy (pattern)
   "Return a deep copy of PATTERN."
-  (phony--pattern-transform #'identity pattern))
+  (phony-pattern--transform #'identity pattern))
 
-(defun phony--pattern-children (pattern)
+(defun phony-pattern--children (pattern)
   "Return all direct sub-patterns of PATTERN."
   (let ((children '()))
-    (phony--pattern-map-children
+    (phony-pattern--map-children
      (lambda (child) (push child children))
      pattern)
     (nreverse children)))
 
-(defun phony--pattern-collect (predicate pattern)
+(defun phony-pattern--collect (predicate pattern)
   "Return list of descendants of PATTERN matching PREDICATE.
 
 If PATTERN matches PREDICATE, it will be part of the list.  Matches are
 returned in the same order that they occur in PATTERN."
   (let ((collected-children
          (seq-mapcat
-          (apply-partially #'phony--pattern-collect predicate)
-          (phony--pattern-children pattern))))
+          (apply-partially #'phony-pattern--collect predicate)
+          (phony-pattern--children pattern))))
     (if (funcall predicate pattern)
         (cons pattern collected-children)
       collected-children)))

@@ -158,7 +158,7 @@ See documentation for `phony-define-interface'.")
     :type function
     :documentation "Function to call when the utterance is matched.")
   ( pattern nil
-    :type phony--pattern-sequence
+    :type phony-pattern--sequence
     :documentation "Parsed pattern tree for the utterance pattern.")
   ( arglist '()
     :type (repeat symbol)
@@ -304,7 +304,7 @@ If this is nil, there is no default provider."))
   "Return a deep copy of RULE."
   (let ((copy (phony--make-procedure-rule
                :function (phony--procedure-rule-function rule)
-               :pattern (phony--copy-pattern (phony--procedure-rule-pattern rule))
+               :pattern (phony-pattern--copy (phony--procedure-rule-pattern rule))
                :arglist (copy-sequence (phony--procedure-rule-arglist rule))
                :interactive-p (phony--procedure-rule-interactive-p rule)
                :anchor-beginning-p (phony--procedure-rule-anchor-beginning-p rule)
@@ -368,17 +368,17 @@ grammars."
     (setf (alist-get 'storage children nil t) nil)
     children))
 
-(cl-defmethod phony-ag--children ((pattern phony--pattern-sequence))
+(cl-defmethod phony-ag--children ((pattern phony-pattern--sequence))
   "Return the children of PATTERN."
   (seq-map-indexed
    (lambda (child index) (cons index child))
-   (phony--pattern-sequence-patterns pattern)))
+   (phony-pattern--sequence-patterns pattern)))
 
-(cl-defmethod phony-ag--children ((pattern phony--pattern-alternative))
+(cl-defmethod phony-ag--children ((pattern phony-pattern--alternative))
   "Return the children of PATTERN."
   (seq-map-indexed
    (lambda (child index) (cons index child))
-   (phony--pattern-alternative-patterns pattern)))
+   (phony-pattern--alternative-patterns pattern)))
 
 (phony-ag--define-inherited phony--containing-rule (node)
   "Return the rule containing NODE.")

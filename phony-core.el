@@ -311,11 +311,11 @@ This function assumes that contributions have been internalized.  See
 (cl-defmethod phony--substitute-in-rule ((rule phony--procedure-rule) from to)
   "Change references to rule FROM to rule TO in RULE."
   (setf (phony--procedure-rule-pattern rule)
-        (phony--pattern-transform
+        (phony-pattern--transform
          (lambda (pattern)
-           (if (and (phony--pattern-rule-p pattern)
-                    (eq (phony--pattern-rule-name pattern) from))
-               (phony--make-pattern-rule :name to)
+           (if (and (phony-pattern--rule-p pattern)
+                    (eq (phony-pattern--rule-name pattern) from))
+               (phony-pattern--make-rule :name to)
              pattern))
          (phony--procedure-rule-pattern rule))))
 
@@ -346,9 +346,9 @@ This function assumes that contributions have been internalized.  See
 This does not resolve interfaces nor contributions to open rules."
   (cl-typecase rule
     (phony--procedure-rule
-     (seq-map #'phony--pattern-rule-name
-              (phony--pattern-collect
-               #'phony--pattern-rule-p
+     (seq-map #'phony-pattern--rule-name
+              (phony-pattern--collect
+               #'phony-pattern--rule-p
                (phony--procedure-rule-pattern rule))))
     (phony--open-rule
      (phony--open-rule-alternatives rule))
@@ -1382,7 +1382,7 @@ Optional keywords common to all rule types are:
            (list :name ',name
                  :function (lambda ,arguments ,@(ensure-list doc) ,@body)
                  :arglist ',arguments
-                 :pattern ,(phony--parse-speech-pattern expanded-pattern arguments)
+                 :pattern ,(phony-pattern--parse expanded-pattern arguments)
                  :documentation ,doc)
            ',optional-arguments))))))
 
