@@ -1,4 +1,7 @@
 * NEXT
+- Generalized the patterns of ~phony-defun~.  Arguments can now bind
+  to any pattern, not just rules.  See ~phony-defun~ for documentation
+  on what value is produced by the different patterns.
 - Added ~phony-evaluate-as-event~ for interactive evaluation of
   utterances.
 - ~phony-experimental-evaluate~ is now obsolete.  Use

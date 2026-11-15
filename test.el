@@ -138,20 +138,68 @@ If there is no parse, an error is thrown."
       (error "No parse available for '%s'" sentence))
     (car result)))
 
+(ert-deftest phony-pattern-literal-value ()
+  "Literal patterns evaluate to themselves."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun return-hello ("why" (hello "hello") "there")
+      hello)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "why hello there") "hello"))))
+
+(ert-deftest phony-pattern-repetition-value ()
+  "Repetition patterns evaluate to a list of the contained pattern."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun repeat-single ((x (+ "z")))
+      x)
+    (phony-defun repeat-sequence ((x (+ "a" "b")))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "z z z") '("z" "z" "z")))
+    (should (equal (phony-test--evaluate "a b a b") '(("a" "b") ("a" "b"))))))
+
+(ert-deftest phony-pattern-sequence-value ()
+  "Sequence patterns evaluate to a list of the contained patterns."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun sequence ((x (seq "x" (+ "y"))))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "x y y y") '("x" ("y" "y" "y"))))))
+
+(ert-deftest phony-pattern-optional-value ()
+  "Optional patterns evaluate to the contained pattern or nil."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun optional1 ("1" (x (? "x")))
+      x)
+    (phony-defun optional2 ("2" (x (? "x" "y")))
+      x)
+    (phony-defun optional3 ("3" (x (? (+ "x"))))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "1 x") "x"))
+    (should (equal (phony-test--evaluate "1") nil))
+    (should (equal (phony-test--evaluate "2 x y") '("x" "y")))
+    (should (equal (phony-test--evaluate "2") nil))
+    (should (equal (phony-test--evaluate "3 x x x x") '("x" "x" "x" "x")))
+    (should (equal (phony-test--evaluate "3") nil))))
+
 (ert-deftest phony-dictionary-modification-parses ()
   "Changing a dictionary reflects immediately in the parser."
   (phony-test
-    (phony-mode 1)
-    (phony-define-dictionary lol
-      '(("lol" . 1337)))
-    (phony-defun somelol (lol)
-      lol)
-    (phony--export-all)
-    (should (= (phony-test--evaluate "lol") 1337))
-    (should-error (phony-test--evaluate "lmao"))
-    (setf (phony-dictionary-get "lmao" 'lol) 42)
-    (should (= (phony-test--evaluate "lol") 1337))
-    (should (= (phony-test--evaluate "lmao") 42))))
+   (phony-mode 1)
+   (phony-define-dictionary lol
+     '(("lol" . 1337)))
+   (phony-defun somelol (lol)
+     lol)
+   (phony--export-all)
+   (should (= (phony-test--evaluate "lol") 1337))
+   (should-error (phony-test--evaluate "lmao"))
+   (setf (phony-dictionary-get "lmao" 'lol) 42)
+   (should (= (phony-test--evaluate "lol") 1337))
+   (should (= (phony-test--evaluate "lmao") 42))))
 
 (ert-deftest phony-dictionary-removal ()
   "Removing an element from a dictionary reflects in the parser."

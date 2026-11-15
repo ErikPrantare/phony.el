@@ -79,12 +79,68 @@
                (:constructor phony--make-pattern-builtin-phrase))
   "Pattern matching any phrase.")
 
-(defun phony--parse-speech-value-pattern (pattern-form)
-  "Parse PATTERN-FORM into a valued pattern.
+(defun phony--pattern-parse-implicit-sequence (pattern-forms arglist)
+  "Parse implicit sequence form PATTERN-FORMS.
 
-Valued patterns are those that get associated to a value when matched.
-Only these patterns may be bound to arguments."
+An implicit sequence form is one where the symbol `seq' is not
+explicitly specified, as for ?, + and *.
+
+If PATTERN-FORMS has one element, that form is parsed and returned
+directly.  Otherwise, a sequence pattern containing the parse of
+PATTERN-FORMS is returned.
+
+ARGLIST is the same as for `phony--parse-speech-pattern'."
+  (if (length= pattern-forms 1)
+      (phony--parse-speech-pattern (car pattern-forms) arglist)
+    (make-phony--pattern-sequence
+     :patterns (mapcar
+                (lambda (pattern-form)
+                  (phony--parse-speech-pattern
+                   pattern-form arglist))
+                pattern-forms))))
+
+(defun phony--parse-speech-pattern (pattern-form arglist)
+  "Parse PATTERN-FORM into an pattern.
+
+ARGLIST is the list of argument names for the function being defined.
+This is required for recognizing if a form should bind to an argument."
   (cond
+   ((stringp pattern-form)
+    (make-phony--pattern-literal
+     :string pattern-form))
+   ((member (car-safe pattern-form) arglist)
+    (make-phony--pattern-argument
+     :name (car pattern-form)
+     :pattern (phony--parse-speech-pattern
+               (cadr pattern-form) arglist)))
+   ;; NOTE: The reader interprets ? as a character escape, so to use
+   ;; it in the specification of the pattern we actually need to
+   ;; match on the character after that, which we require to be
+   ;; space.
+   ((or (eq (car-safe pattern-form) ?\s)
+        (eq (car-safe pattern-form) '\?))
+    (make-phony--pattern-optional
+     :pattern
+     (phony--pattern-parse-implicit-sequence
+      (cdr pattern-form) arglist)))
+   ((eq (car-safe pattern-form) '+)
+    (make-phony--pattern-one-or-more
+     :pattern
+     (phony--pattern-parse-implicit-sequence
+      (cdr pattern-form) arglist)))
+   ((eq (car-safe pattern-form) '*)
+    (make-phony--pattern-zero-or-more
+     :pattern
+     (phony--pattern-parse-implicit-sequence
+      (cdr pattern-form) arglist)))
+   ((eq (car-safe pattern-form) 'seq)
+    (make-phony--pattern-sequence
+     :patterns
+     (mapcar
+      (lambda (subpattern)
+        (phony--parse-speech-pattern
+         subpattern arglist))
+      (cdr pattern-form))))
    ((eq pattern-form 'phony--builtin-word)
     (phony--make-pattern-builtin-word))
    ((eq pattern-form 'phony--builtin-phrase)
@@ -97,62 +153,6 @@ Only these patterns may be bound to arguments."
            (car pattern-form)
            pattern-form))
    (t (error "No parse for %S" pattern-form))))
-
-(defun phony--parse-speech-pattern (pattern-form arglist)
-  "Parse PATTERN-FORM into an pattern.
-
-ARGLIST is the list of argument names for the function being defined.
-This is required for recognizing if a form should bind turn argument."
-  (cond
-   ((stringp pattern-form)
-    (make-phony--pattern-literal
-     :string pattern-form))
-   ((member (car-safe pattern-form) arglist)
-    (make-phony--pattern-argument
-     :name (car pattern-form)
-     :pattern (phony--parse-speech-value-pattern
-               (cadr pattern-form))))
-   ;; NOTE: The reader interprets ? as a character escape, so to use
-   ;; it in the specification of the pattern we actually need to
-   ;; match on the character after that, which we require to be
-   ;; space.
-   ((or (eq (car-safe pattern-form) ?\s)
-        (eq (car-safe pattern-form) '\?))
-    (make-phony--pattern-optional
-     :pattern
-     (make-phony--pattern-sequence
-      :patterns (mapcar
-                 (lambda (subpattern)
-                   (phony--parse-speech-pattern
-                    subpattern arglist))
-                 (cdr pattern-form)))))
-   ((eq (car-safe pattern-form) '+)
-    (make-phony--pattern-one-or-more
-     :pattern
-     (make-phony--pattern-sequence
-      :patterns (mapcar
-                 (lambda (subpattern)
-                   (phony--parse-speech-pattern
-                    subpattern arglist))
-                 (cdr pattern-form)))))
-   ((eq (car-safe pattern-form) '*)
-    (make-phony--pattern-zero-or-more
-     :pattern
-     (make-phony--pattern-sequence
-      :patterns (mapcar
-                 (lambda (subpattern)
-                   (phony--parse-speech-pattern
-                    subpattern arglist))
-                 (cdr pattern-form)))))
-   ((eq (car-safe pattern-form) 'seq)
-    (make-phony--pattern-sequence
-     :patterns
-     (mapcar
-      (lambda (subpattern)
-        (phony--parse-speech-pattern
-         subpattern arglist))
-      (cdr pattern-form))))
-   (t (phony--parse-speech-value-pattern pattern-form))))
 
 (defun phony--pattern-map-children (f pattern)
   "Return a copy of PATTERN with F applied to each of its children."

@@ -318,6 +318,21 @@ literals."
   "Collect arguments from LITERAL."
   (make-list (seq-length arglist) nil))
 
+(cl-defmethod phony-parser--collect-arguments-from-tree (_match-tree (_pattern phony--pattern-builtin-word) arglist)
+  ;; checkdoc-params: (arglist)
+  "Collect arguments from BUILTIN-WORD."
+  (make-list (seq-length arglist) nil))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (_match-tree (_pattern phony--pattern-builtin-phrase) arglist)
+  ;; checkdoc-params: (arglist)
+  "Collect arguments from BUILTIN-PHRASE."
+  (make-list (seq-length arglist) nil))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (_match-tree (_pattern phony--pattern-rule) arglist)
+  ;; checkdoc-params: (arglist)
+  "Collect arguments from RULE."
+  (make-list (seq-length arglist) nil))
+
 (cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony--pattern-sequence) arglist)
   ;; checkdoc-params: (match-tree arglist)
   "Collect arguments from SEQUENCE.
@@ -339,13 +354,64 @@ unspecified alternative is picked."
        arglist)
     (make-list (seq-length arglist) nil)))
 
+(cl-defgeneric phony-parser--match-tree-to-ast (match-tree pattern)
+  "Transform MATCH-TREE to an AST according to PATTERN.")
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (_ phony--pattern-literal))
+  "Transform MATCH-TREE to an AST."
+  match-tree)
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (_ phony--pattern-builtin-word))
+  "Transform MATCH-TREE to an AST."
+  match-tree)
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (_ phony--pattern-builtin-phrase))
+  "Transform MATCH-TREE to an AST."
+  match-tree)
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (_ phony--pattern-rule))
+  "Transform MATCH-TREE to an AST."
+  match-tree)
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (sequence phony--pattern-sequence))
+  "Transform MATCH-TREE to an AST according to SEQUENCE."
+  `(list ,@(seq-mapn (lambda (submatch subpattern)
+                       (phony-parser--match-tree-to-ast
+                        submatch subpattern))
+                     match-tree
+                     (phony--pattern-sequence-patterns sequence))))
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (repeat phony--pattern-repeat))
+  "Transform MATCH-TREE to an AST according to REPEAT."
+  `(list ,@(mapcar (lambda (submatch)
+                     (phony-parser--match-tree-to-ast
+                      submatch (phony--pattern-repeat-pattern repeat)))
+                   match-tree)))
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (optional phony--pattern-optional))
+  "Transform MATCH-TREE to an AST according to OPTIONAL."
+  (and match-tree (phony-parser--match-tree-to-ast
+                   match-tree
+                   (phony--pattern-optional-pattern optional))))
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (argument phony--pattern-argument))
+  "Transform MATCH-TREE to an AST according to ARGUMENT."
+  (phony-parser--match-tree-to-ast
+   match-tree
+   (phony--pattern-argument-pattern argument)))
+
 (cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony--pattern-argument) arglist)
   ;; checkdoc-params: (match-tree arglist)
   "Collect arguments from argument PATTERN."
-  (seq-map (lambda (argument)
-             (and (eq argument (phony--pattern-argument-name pattern))
-                  match-tree))
-           arglist))
+  (let ((capture-pattern (phony--pattern-argument-pattern pattern)))
+    (seq-mapn (lambda (a b) (or a b))
+              (seq-map (lambda (argument)
+                         (and (eq argument (phony--pattern-argument-name pattern))
+                              (phony-parser--match-tree-to-ast
+                               match-tree capture-pattern)))
+                       arglist)
+              (phony-parser--collect-arguments-from-tree
+               match-tree capture-pattern arglist))))
 
 (cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony--pattern-repeat) arglist)
   ;; checkdoc-params: (match-tree arglist)
@@ -372,7 +438,7 @@ Arguments occurring within PATTERN are collected into list forms."
 (phony-ag--define-synthesized phony-parser--parser (node)
   "Return a parser matching NODE.
 
-For an pattern, the parser produces a match tree.  For a rule, it
+For a pattern, the parser produces a match tree.  For a rule, it
 produces an AST.  For a grammar, it produces a list of ASTs, one for
 each command in the uttered sequence.")
 

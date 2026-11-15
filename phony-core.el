@@ -1207,16 +1207,42 @@ value of matching the procedure rule is the value returned by BODY.
 PATTERN is either a string literal, in which case the rule is matched
 when that string is uttered, or it is an unquoted list of patterns.  In
 that case the rule is matched when each pattern is uttered in sequence.
-An pattern can take the following forms:
+A pattern can take one of the following forms:
 
   STRING           Match a literal STRING.
   RULE             Match a rule named RULE.
-  (ARG RULE)       Match RULE, bind its value to argument ARG when
-                   evaluating BODY.
+  (ARG PAT)        Match pattern PAT and bind its value to argument ARG
+                   when evaluating BODY.  The value produced by a
+                   pattern is specified in the next table.
   (seq PATS...)    Match patterns PATS in sequence.
   (? PATS...)      Optionally match patterns PATS in sequence.
   (* PATS...)      Match patterns PATS in sequence zero or more times.
   (+ PATS...)      Match patterns PATS in sequence one or more times.
+
+Patterns produce values that can be bound to arguments.  The values
+produced by the different pattern forms are given below:
+
+  STRING           Produces STRING.
+  RULE             Produces the value produced by RULE.
+  (ARG PAT)        Produces the value produced by PAT.
+  (seq PATS...)    Produces a list, where each element is the value
+                   produced by the corresponding pattern in PATS.
+
+For the following three patterns, PATS is either one or multiple
+patterns.  If it is one, PATS produces the value of that one pattern.
+If it is multiple, PATS produces a list where each element is the value
+of the corresponding pattern:
+
+  (? PATS...)      Produces nil if not matched, or the value of PATS
+                   when matched.
+  (* PATS...)      Produces a list containing the value produced by PATS
+                   at each repetition.
+  (+ PATS...)      Produces a list containing the value produced by PATS
+                   at each repetition.
+
+Bindings done inside of patterns are also transformed when needed: + and
+* turn all internal bindings into lists, and ? turn them into nil if the
+pattern is not matched.
 
 Optional argument DOCSTRING is a documentation string for the rule.
 
@@ -1302,10 +1328,20 @@ Optional keywords common to all rule types are:
   ;;   are they also used as building blocks for other rules as well.
   ;;   A common mistake was therefore to forget to set :interactive to
   ;;   nil, causing erroneous behaviour.
+  ;; - Implicit sequencing in +, * and ?: Ergonomic to be able to spec e.g. (seq x (+ "and" x)).
+  ;; - (+ PATS...) equivalent to (+ (seq PATS)) only if PATS is
+  ;;   multiple, otherwise no implicit seq wrapping: The expected
+  ;;   value produced by (+ x) would be a list of x:s.  The only
+  ;;   reasonable value produced by (+ x y) is a list, each element a
+  ;;   list (x y).  The "global non-uniformity" was deemed ok,
+  ;;   justified by the order of discovery: (+ x) behaves in the
+  ;;   "obvious" way, and when writing (+ x y), it then also behaves
+  ;;   in the only reasonable way.  If the discovery was the other way
+  ;;   around, the "obvious" way for (+ x) to behave would be the same
+  ;;   as for (+ x y).
 
   ;; TODO: Move more of the logic to phony--define-procedure-rule:
   ;; - Implicit argument deduction
-  ;; - Adding implicit 'seq (if not already done)
   ;; - Sanity checks
   ;; - Consider removing implicit argument naming.  In the presence of
   ;;   namespaces, the default argument name is too clunky anyway.
