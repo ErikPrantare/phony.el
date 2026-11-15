@@ -1386,10 +1386,6 @@ Optional keywords common to all rule types are:
                  :documentation ,doc)
            ',optional-arguments))))))
 
-(phony-define-dictionary phony--impossible
-  "Rule that always fails to match."
-  '())
-
 (eval-and-compile
   (defun phony--expand-implicit-arguments (pattern-form)
     "Expand implicit arguments in PATTERN-FORM.
