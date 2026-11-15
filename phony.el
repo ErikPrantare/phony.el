@@ -3,8 +3,8 @@
 ;; Copyright (C) 2026 Erik Präntare
 
 ;; Author: Erik Präntare <erik@prantare.xyz>
-;; Keywords: files
-;; Version: 2.2.0
+;; Keywords: convenience
+;; Version: 3.0.0
 ;; Homepage: https://github.com/ErikPrantare/phony.el
 ;; Package-Requires: ((emacs "29.1") (simulacrum "2.0.0"))
 ;; Created: 13 Jul 2024
@@ -62,11 +62,9 @@
 
 (require 'phony-core)
 (require 'phony-stdlib)
-(require 'phony-stdlib-talon-community)
 
 (autoload 'phony-experimental-mode "phony-experimental")
 (autoload 'phony-talon-export "phony-talon")
-(autoload 'phony-dragonfly-export "phony-dragonfly")
 
 (provide 'phony)
 ;;; phony.el ends here

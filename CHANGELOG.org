@@ -1,3 +1,21 @@
+* 3.0.0 [2026-11-15 Sun]
+- New pattern for ~phony-defun~: You can now specify a match of one of
+  multiple alternatives using |.  See ~phony-defun~ documentation for
+  more information.
+- Generalized the patterns of ~phony-defun~.  Arguments can now bind
+  to any pattern, not just rules.  See ~phony-defun~ for documentation
+  on what value is produced by the different patterns.
+- Added ~phony-evaluate-as-event~ for interactive evaluation of
+  utterances.
+- ~phony-experimental-evaluate~ is now obsolete.  Use
+  ~phony-evaluate~ instead.
+- Significantly improved performance of ~phony-evaluate~.
+- Removed ~phony-stdlib-talon-community~.
+- Removed ~phony-experimental-set-parser-literal-comparator~.  Use
+  ~phony-experimental-set-parser-literal-normalizer~ instead.
+- Removed the dragonfly backend.  It didn't really work, and became a
+  maintenance burden.
+
 * 2.2.0 [2026-10-21 Wed]
 - ~phony-evaluate~ has been renamed ~phony-experimental-evaluate~.
   Require ~phony-experimental~ to load it.

@@ -39,7 +39,7 @@ exporters do nothing, and export request debounce is turned off."
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
          (phony--last-analysis nil)
-         (phony-parser--literal-comparator #'string-equal))
+         (phony-parser--literal-normalizer #'identity))
      (unwind-protect
          (progn
            (phony-mode 0)
@@ -74,7 +74,7 @@ exporters do nothing, and export request debounce is turned off."
     (let* ((dictionary-export-count 0)
            (rule-export-count 0)
            (phony--dictionary-export-function
-            (lambda () (cl-incf dictionary-export-count)))
+            (lambda (_grammar) (cl-incf dictionary-export-count)))
            (phony-export-function
             (lambda (_analysis-data) (cl-incf rule-export-count))))
       (phony-mode 1)
@@ -114,7 +114,7 @@ exporters do nothing, and export request debounce is turned off."
     (let* ((dictionary-export-count 0)
            (rule-export-count 0)
            (phony--dictionary-export-function
-            (lambda () (cl-incf dictionary-export-count)))
+            (lambda (_grammar) (cl-incf dictionary-export-count)))
            (phony-export-function
             (lambda (_analysis-data) (cl-incf rule-export-count))))
       (phony-dictionary-put "beta" 'test-dict 2)
@@ -133,10 +133,79 @@ exporters do nothing, and export request debounce is turned off."
 SENTENCE must parse unambiguously into a single command.
 
 If there is no parse, an error is thrown."
-  (let ((result (phony-experimental-evaluate sentence 'NO-PARSE)))
+  (let ((result (phony-evaluate sentence 'NO-PARSE)))
     (when (eq result 'NO-PARSE)
       (error "No parse available for '%s'" sentence))
     (car result)))
+
+(ert-deftest phony-pattern-literal-value ()
+  "Literal patterns evaluate to themselves."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun return-hello ("why" (hello "hello") "there")
+      hello)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "why hello there") "hello"))))
+
+(ert-deftest phony-pattern-repetition-value ()
+  "Repetition patterns evaluate to a list of the contained pattern."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun repeat-single ((x (+ "z")))
+      x)
+    (phony-defun repeat-sequence ((x (+ "a" "b")))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "z z z") '("z" "z" "z")))
+    (should (equal (phony-test--evaluate "a b a b") '(("a" "b") ("a" "b"))))))
+
+(ert-deftest phony-pattern-sequence-value ()
+  "Sequence patterns evaluate to a list of the contained patterns."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun sequence ((x (seq "x" (+ "y"))))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "x y y y") '("x" ("y" "y" "y"))))))
+
+(ert-deftest phony-pattern-optional-value ()
+  "Optional patterns evaluate to the contained pattern or nil."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun optional1 ("1" (x (? "x")))
+      x)
+    (phony-defun optional2 ("2" (x (? "x" "y")))
+      x)
+    (phony-defun optional3 ("3" (x (? (+ "x"))))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "1 x") "x"))
+    (should (equal (phony-test--evaluate "1") nil))
+    (should (equal (phony-test--evaluate "2 x y") '("x" "y")))
+    (should (equal (phony-test--evaluate "2") nil))
+    (should (equal (phony-test--evaluate "3 x x x x") '("x" "x" "x" "x")))
+    (should (equal (phony-test--evaluate "3") nil))))
+
+(ert-deftest phony-pattern-alternative-value ()
+  "Alternation patterns evaluate to the matched alternative."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun alt ((x (| "x" "y" "z")))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "x") "x"))
+    (should (equal (phony-test--evaluate "y") "y"))
+    (should (equal (phony-test--evaluate "z") "z"))))
+
+(ert-deftest phony-pattern-binding-in-alternative ()
+  "Binding in non-matched alternative gets bound to nil."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun alt ((| "x" (x "y")))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "x") nil))
+    (should (equal (phony-test--evaluate "y") "y"))))
 
 (ert-deftest phony-dictionary-modification-parses ()
   "Changing a dictionary reflects immediately in the parser."
@@ -151,6 +220,34 @@ If there is no parse, an error is thrown."
     (should-error (phony-test--evaluate "lmao"))
     (setf (phony-dictionary-get "lmao" 'lol) 42)
     (should (= (phony-test--evaluate "lol") 1337))
+    (should (= (phony-test--evaluate "lmao") 42))))
+
+(ert-deftest phony-dictionary-removal ()
+  "Removing an element from a dictionary reflects in the parser."
+  (phony-test
+    (phony-mode 1)
+    (phony-define-dictionary lol
+      '(("lol" . 1337)))
+    (phony-defun somelol (lol)
+      lol)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "lol") 1337))
+    (phony-dictionary-remove "lol" 'lol)
+    (should-error (phony-test--evaluate "lol"))))
+
+(ert-deftest phony-dictionary-replacement ()
+  "Replacing contents of a dictionary reflects in the parser."
+  (phony-test
+    (phony-mode 1)
+    (phony-define-dictionary lol
+      '(("lol" . 1337)))
+    (phony-defun somelol (lol)
+      lol)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "lol") 1337))
+    (should-error (phony-test--evaluate "lmao"))
+    (phony-set-dictionary-alist 'lol '(("lmao" . 42)))
+    (should-error (phony-test--evaluate "lol"))
     (should (= (phony-test--evaluate "lmao") 42))))
 
 (ert-deftest phony-multi-word-literal-in-procedure-rule ()
@@ -481,6 +578,19 @@ If there is no parse, an error is thrown."
     (should (equal (phony-test--evaluate "abra ha da bruh")
                    "abra ha da bruh"))))
 
+(ert-deftest phony-mode-deactivation ()
+  "Rules can be enabled with according to mode."
+  (phony-test
+    (phony-defun show-phrase ((phrase phony--builtin-phrase))
+      :mode text-mode
+      phrase)
+    (phony--export-all)
+    (should-error (phony-test--evaluate "abra ha da bruh"))
+    (with-temp-buffer
+      (text-mode)
+      (should (equal (phony-test--evaluate "abra ha da bruh")
+                     "abra ha da bruh")))))
+
 (ert-deftest phony-disabled-rules-no-contribute-externally ()
   "Disabled rules do not contribute to open rules outside module."
   (phony-test
@@ -556,12 +666,10 @@ If there is no parse, an error is thrown."
     (should-error (phony-test--evaluate "z w"))
     (should-error (phony-test--evaluate "w z"))))
 
-(ert-deftest phony-parser-literal-comparator ()
-  "`phony-experimental-set-parser-literal-comparator' works as advertised."
+(ert-deftest phony-parser-literal-normalizer ()
+  "`phony-experimental-set-parser-literal-normalizer' works as advertised."
   (phony-test
-    (phony-experimental-set-parser-literal-comparator
-     (lambda (token literal)
-       (= (length token) (length literal))))
+    (phony-experimental-set-parser-literal-normalizer #'length)
     (phony-defun x ("1234" (? "12") "123")
       42)
     (phony--export-all)
@@ -596,6 +704,9 @@ If there is no parse, an error is thrown."
             (phony-define-dictionary more-numbers
               :contributes-to number
               '(("pi" . 3.14) ("elite" . 1337)))
+            (phony-defun yet-more-numbers ((x (| "i" "neggy")))
+              :contributes-to number
+              (pcase x ("i" (sqrt -1)) ("neggy" -1)))
             (phony-defun double ("double" number)
               (* 2 number))
             (phony-defun insert-word ("insert" (word phony--builtin-word))

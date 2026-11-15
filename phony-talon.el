@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2025, 2026  Erik Präntare
 
-;; Author: Erik Präntare <erik@system2>
+;; Author: Erik Präntare <erik@prantare.xyz>
 ;; Keywords: convenience
 ;; Created: 26 Jul 2025
 
@@ -22,130 +22,73 @@
 
 ;;; Commentary:
 
-;;
+;; This file defines the Talon backend.
 
 ;;; Code:
 
 (require 'phony-core)
 
-(cl-defgeneric phony-talon--capture-name (element)
-  "Return the Talon capture name for ELEMENT."
-  (error "Internal error, please report a bug: No talon name for element %S"
-         element))
+(cl-defgeneric phony-talon--pattern-match-string (pattern)
+  "Return the Talon pattern string for matching PATTERN.")
 
-(cl-defmethod phony-talon--capture-name ((element phony--element-rule))
-  "Return the Talon capture name for ELEMENT."
-  (phony--rule-external-name
-   (phony--element-rule-name element)))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--literal))
+  "Return the Talon pattern string for matching PATTERN."
+  (string-replace "'" "\\'" (phony-pattern--literal-string pattern)))
 
-(cl-defmethod phony-talon--capture-name ((element phony--element-external-rule))
-  "Return the Talon capture name for ELEMENT."
-  (phony--element-external-rule-name element))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--rule))
+  "Return the Talon pattern string for matching PATTERN."
+  (format "<user.%s>"
+          (phony--rule-external-name
+           (phony-pattern--rule-name pattern))))
 
-(cl-defmethod phony-talon--capture-name ((_element phony--element-builtin-word))
-  "Return the Talon capture name for ELEMENT."
-  "word")
-
-(cl-defmethod phony-talon--capture-name ((_element phony--element-builtin-phrase))
-  "Return the Talon capture name for ELEMENT."
-  "phrase")
-
-(cl-defgeneric phony-talon--element-match-string (element rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering.")
-
-(cl-defmethod phony-talon--element-match-string ((element phony--element-literal) _rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering."
-  (string-replace "'" "\\'" (phony--element-literal-string element)))
-
-(cl-defmethod phony-talon--element-match-string ((element phony--element-rule) rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering."
-  (let* ((occurrence-number (phony-talon--occurrence-number element rule)))
-    (format "<user.%s%s>"
-            (phony--rule-external-name
-             (phony--element-rule-name element))
-            (if (>= occurrence-number 1)
-                (format "_phony_clone%s"
-                        (1- occurrence-number))
-              ""))))
-
-(cl-defmethod phony-talon--element-match-string ((element phony--element-sequence) rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering."
-  (string-join (seq-map (lambda (element) (phony-talon--element-match-string element rule))
-                        (phony--element-sequence-elements element))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--sequence))
+  "Return the Talon pattern string for matching PATTERN."
+  (string-join (seq-map #'phony-talon--pattern-match-string
+                        (phony-pattern--sequence-patterns pattern))
                " "))
 
-(cl-defmethod phony-talon--element-match-string ((element phony--element-optional) rule)
-  "Return the Talon pattern string for matching ELEMENT.
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--alternative))
+  "Return the Talon pattern string for matching PATTERN."
+  (format "(%s)"
+          (string-join (seq-map #'phony-talon--pattern-match-string
+                                (phony-pattern--alternative-patterns pattern))
+                       " | ")))
 
-RULE provides context for occurrence numbering."
-  (format "[%s]" (phony-talon--element-match-string
-                  (phony--element-optional-element element)
-                  rule)))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--optional))
+  "Return the Talon pattern string for matching PATTERN."
+  (format "[%s]" (phony-talon--pattern-match-string
+                  (phony-pattern--optional-pattern pattern))))
 
-(cl-defmethod phony-talon--element-match-string ((element phony--element-one-or-more) rule)
-  "Return the Talon pattern string for matching ELEMENT.
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--one-or-more))
+  "Return the Talon pattern string for matching PATTERN."
+  (format "(%s)+" (phony-talon--pattern-match-string
+                   (phony-pattern--one-or-more-pattern pattern))))
 
-RULE provides context for occurrence numbering."
-  (format "(%s)+" (phony-talon--element-match-string
-                   (phony--element-one-or-more-element element)
-                   rule)))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--zero-or-more))
+  "Return the Talon pattern string for matching PATTERN."
+  (format "(%s)*" (phony-talon--pattern-match-string
+                   (phony-pattern--zero-or-more-pattern pattern))))
 
-(cl-defmethod phony-talon--element-match-string ((element phony--element-zero-or-more) rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering."
-  (format "(%s)*" (phony-talon--element-match-string
-                   (phony--element-zero-or-more-element element)
-                   rule)))
-
-(cl-defmethod phony-talon--element-match-string ((element phony--element-external-rule) _rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering."
-  ;; External rules may only occur once in a rule (internal
-  ;; constraint).  So no need to worry about rule multiplicity.
-  (format "<%s>" (string-join
-                  (seq-map #'symbol-name
-                           (append
-                            (phony--element-external-rule-namespace element)
-                            (list (phony--element-external-rule-name element))))
-                  ".")))
-
-(cl-defmethod phony-talon--element-match-string ((_element phony--element-builtin-word) _rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering."
+(cl-defmethod phony-talon--pattern-match-string ((_pattern phony-pattern--builtin-word))
+  "Return the Talon pattern string for matching PATTERN."
   "<word>")
 
-(cl-defmethod phony-talon--element-match-string ((_element phony--element-builtin-phrase) _rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering."
+(cl-defmethod phony-talon--pattern-match-string ((_pattern phony-pattern--builtin-phrase))
+  "Return the Talon pattern string for matching PATTERN."
   "<phrase>")
 
-(cl-defmethod phony-talon--element-match-string ((element phony--element-argument) rule)
-  "Return the Talon pattern string for matching ELEMENT.
-
-RULE provides context for occurrence numbering."
-  (phony-talon--element-match-string
-   (phony--element-argument-element element)
-   rule))
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--argument))
+  "Return the Talon pattern string for matching PATTERN."
+  (phony-talon--pattern-match-string
+   (phony-pattern--argument-pattern pattern)))
 
 (cl-defgeneric phony-talon--rule-match-string (rule analysis-data)
   "Return the full Talon rule pattern for RULE given ANALYSIS-DATA.")
 
 (cl-defmethod phony-talon--rule-match-string ((rule phony--procedure-rule) _analysis-data)
   "Return the full Talon rule pattern for RULE given ANALYSIS-DATA."
-  (let* ((element (phony--procedure-rule-element rule)))
-    (concat "'" (phony-talon--element-match-string element rule) "'")))
+  (let* ((pattern (phony--procedure-rule-pattern rule)))
+    (concat "'" (phony-talon--pattern-match-string pattern) "'")))
 
 (cl-defmethod phony-talon--rule-match-string ((rule phony--open-rule) analysis-data)
   "Return the full Talon rule pattern for RULE given ANALYSIS-DATA."
@@ -164,40 +107,6 @@ RULE provides context for occurrence numbering."
   "Return the full Talon rule pattern for RULE given ANALYSIS-DATA."
   (concat "'{user." (phony--rule-external-name rule) "}'"))
 
-(cl-defgeneric phony-talon--argument-multiplicity (_argument _element)
-  "Return the multiplicity of ARGUMENT within ELEMENT.
-
-The context is one of: `singular', `optional', or `repeat'.  Returns nil
-if ARGUMENT is not found in ELEMENTS."
-  nil)
-
-(cl-defmethod phony-talon--argument-multiplicity (argument (element phony--element-sequence))
-  "Return the multiplicity of ARGUMENT within ELEMENT."
-  (thread-last
-    (phony--element-sequence-elements element)
-    (seq-map (apply-partially #'phony-talon--argument-multiplicity argument))
-    (seq-find #'identity)))
-
-(cl-defmethod phony-talon--argument-multiplicity (argument (element phony--element-argument))
-  "Return the multiplicity of ARGUMENT within ELEMENT."
-  (when (eq argument element) 'singular))
-
-(cl-defmethod phony-talon--argument-multiplicity (argument (element phony--element-optional))
-  "Return the multiplicity of ARGUMENT within ELEMENT."
-  (let ((downstream-context (phony-talon--argument-multiplicity
-                             argument
-                             (phony--element-optional-element element))))
-    (if (eq downstream-context 'singular)
-        'optional
-      downstream-context)))
-
-(cl-defmethod phony-talon--argument-multiplicity (argument (element phony--element-repeat))
-  "Return the multiplicity of ARGUMENT within ELEMENT."
-  (if-let* ((downstream-context (phony-talon--argument-multiplicity
-                                 argument
-                                 (phony--element-repeat-element element))))
-      'repeat))
-
 (defun phony-talon--speech-insert-rule (rule)
   "Insert a .talon rule entry for procedure RULE."
   (when (phony--procedure-rule-anchor-beginning-p rule)
@@ -211,9 +120,7 @@ if ARGUMENT is not found in ELEMENTS."
 (defun phony-talon--insert-capture-preamble (rule analysis-data)
   ;; checkdoc-params: (analysis-data)
   "Insert the Python capture preamble for RULE."
-  (if (phony--rule-always-active-p
-       rule
-       (phony--analysis-data-grammar analysis-data))
+  (if (phony--rule-always-active-p rule)
       (insert "@module.capture(rule=" (phony-talon--rule-match-string rule analysis-data) ")\n")
     (insert "# Base case for when the rule is inactive\n")
     (phony-talon--insert-python-disabled rule)
@@ -232,78 +139,10 @@ if ARGUMENT is not found in ELEMENTS."
            (phony--rule-external-name rule)
            "m[0]")))
 
-(defun phony-talon--find-argument-element (argument rule)
-  "Find element matching ARGUMENT in RULE.
-Return nil if no such element exists."
-  (car-safe
-   (phony--element-collect
-    (lambda (element)
-      (and (phony--element-argument-p element)
-           (eq (phony--element-argument-name element)
-               argument)))
-    (phony--procedure-rule-element rule))))
-
-(defun phony-talon--occurrence-number (match-element rule)
-  "Get index of occurence of MATCH-ELEMENT in procedure rule RULE.
-
-This goes through all match elements of RULE and returns the index of
-MATCH-ELEMENT among all of those `equal' to it."
-  (seq-position
-   (phony--element-collect
-    (apply-partially #'equal match-element)
-    (phony--procedure-rule-element rule))
-   match-element
-   #'eq))
-
 (cl-defmethod phony-talon--insert-python ((rule phony--procedure-rule))
   "Insert python code for capturing RULE."
-  (insert "def " (phony--rule-external-name rule) "(m) -> str:\n")
-  (seq-doseq (argument (phony--procedure-rule-arglist rule))
-    (let* ((argument-element
-            (phony-talon--find-argument-element argument rule)))
-      (insert "    " (phony--rule-external-name argument)
-              " = ")
-      (if (not argument-element)
-          (insert "'nil'")
-        (let* ((match-form (phony--element-argument-element argument-element))
-               (rule-occurrence-number
-                (phony-talon--occurrence-number match-form rule))
-               (argument-context
-                (phony-talon--argument-multiplicity
-                 argument-element
-                 (phony--procedure-rule-element rule)))
-               (attribute-name (phony-talon--capture-name match-form)))
-          (when (>= rule-occurrence-number 1)
-            (setq attribute-name (concat attribute-name
-                                         (format "_phony_clone%s"
-                                                 (1- rule-occurrence-number)))))
-          (when (eq argument-context 'repeat)
-            (setq attribute-name (concat attribute-name "_list")))
-          (if (or (phony--element-external-rule-p match-form)
-                  (phony--element-builtin-word-p match-form)
-                  (phony--element-builtin-phrase-p match-form))
-              (insert (format "from_talon_capture(m.%1$s) if hasattr(m,'%1$s') else 'nil'"
-                              attribute-name))
-            (pcase argument-context
-              ('singular
-               (insert (format "m.%s" attribute-name)))
-              ('optional
-               (insert (format "getattr(m,'%s','nil')" attribute-name)))
-              ('repeat
-               (insert (format "'(list ' + ' '.join(getattr(m,'%s',[])) + ')'" attribute-name)))
-              (_ (error "Internal error: Unrecognized context %S (argument %S in rule %S)"
-                        argument-context
-                        argument-element
-                        (phony--rule-name rule)))))))
-      (insert "\n")))
-  (insert
-   (format "    return f\"(%s %s)\"\n"
-           (symbol-name (phony--procedure-rule-name rule))
-           (string-join
-            (seq-map (lambda (argument)
-                       (format "{%s}" (phony--rule-external-name argument)))
-                     (phony--procedure-rule-arglist rule))
-            " "))))
+  (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
+          "     return ' '.join(str(x) for x in m)\n"))
 
 (cl-defmethod phony-talon--insert-python ((rule phony--dictionary))
   "Insert python code for capturing RULE."
@@ -321,18 +160,6 @@ MATCH-ELEMENT among all of those `equal' to it."
   "Whether to always listen for utterances, even if Emacs is not focused.
 
 If you are using EXWM, you probably want this to be t.")
-
-(defun phony-talon--clone-rule (rule times)
-  "Insert TIMES clone captures for RULE.
-
-Clone captures are needed because Talon does not differentiate
-between multiple captures of the same name in one pattern."
-  (dotimes (i times)
-    (insert (format "\n@module.capture(rule='<user.%s>')\n"
-                    (phony--rule-external-name rule)))
-    (insert
-     (format "def %s_phony_clone%s(m) -> str:\n    return m[0]\n"
-             (phony--rule-external-name rule) i))))
 
 (cl-defun phony-talon--insert-exported-rules (rules)
   "Insert .talon entries for all exported procedure rules in RULES."
@@ -374,7 +201,7 @@ This function creates .talon and .py files in the output directory."
               "        message = json.load(inn)\n"
               "        for list_name in message:\n"
               "            module.list(list_name, '')\n"
-              "            context.lists['user.' + list_name] = message[list_name]\n"
+              "            context.lists['user.' + list_name] = {utterance: utterance for utterance in message[list_name]}\n"
               "\n"
               "path = '" (phony--output-directory "dictionaries.json") "'\n"
               "if os.path.isfile(path):\n"
@@ -392,7 +219,7 @@ This function creates .talon and .py files in the output directory."
               "    return subprocess.Popen(\n"
               "        ['emacsclient',\n"
               "         '--eval',\n"
-              "         f\"(phony--evaluate '{expression})\"])\n"
+              "         f\"(phony-evaluate-as-event \\\"{expression}\\\")\"])\n"
               "\n"
               "def evaluate_lisp(expression: str):\n"
               "    evaluate_lisp_async(expression).wait()\n"
@@ -431,7 +258,7 @@ This function creates .talon and .py files in the output directory."
               ;; We split without providing delimiter, otherwise
               ;; splitting the empty string will yield one empty tag.
               "        tags = {'user.' + tag for tag in inn.read().strip().split()}\n"
-              "        if tags != tag_context.tags:"
+              "        if tags != tag_context.tags:\n"
               "            tag_context.tags = tags\n"
               "\n"
               "talon.fs.watch('" (phony--output-directory "active-rules") "',\n"
@@ -440,15 +267,11 @@ This function creates .talon and .py files in the output directory."
               "module.list(\"phony_disabled_rule\", desc=\"This cannot match\")\n")
       (seq-doseq (rule rules)
         (insert "\n")
-        (unless (phony--rule-always-active-p
-                 rule (phony--analysis-data-grammar analysis-data))
+        (unless (phony--rule-always-active-p rule)
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
                           (phony--rule-external-name rule))))
         (phony-talon--insert-capture-preamble rule analysis-data)
-        (phony-talon--insert-python rule)
-        (phony-talon--clone-rule
-         rule
-         (max 0 (1- (phony--maximum-producer-multiplicity analysis-data rule))))))))
+        (phony-talon--insert-python rule)))))
 
 (defun phony-talon-export (analysis-data)
   ;; checkdoc-params: (analysis-data)

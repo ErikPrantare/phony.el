@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2026 Erik Präntare
 
-;; Author: Erik Präntare
+;; Author: Erik Präntare <erik@prantare.xyz>
 ;; Created: 24 Jun 2026
 
 ;; This program is free software; you can redistribute it and/or
@@ -21,23 +21,41 @@
 
 ;;; Commentary:
 
+;; This file defines the parser for phony grammars.
+
 ;;; Code:
 
 (require 'cl-lib)
 (require 'map)
-(require 'phony-model)
 (require 'seq)
+
+(require 'phony-model)
+(require 'phony-ag)
+
+(defvar phony-parser--wants-any-token 'phony-parser--wants-any-token
+  "Unique symbol indicating that the parser can match any token.")
 
 (cl-defstruct (phony-parser--parser
                (:constructor phony-parser--make)
                (:copier nil))
   "Step-based parser over token sequences."
-  parses-function step-function)
+  parses-function
+  wants-function
+  step-function
+  parses-cache
+  wants-cache
+  ;; Fresh cons is always unequal to the actual generation.
+  (parses-generation (cons nil nil))
+  (wants-generation (cons nil nil)))
+
+(defvar phony-parser--current-generation -1
+  "The current generation of parsing.  This is incremented each parse.")
 
 (defvar phony-parser--empty-parser
   (phony-parser--make
    :parses-function (lambda () nil)
-   :step-function (lambda (_item) phony-parser--empty-parser))
+   :step-function (lambda (_item) phony-parser--empty-parser)
+   :wants-function (lambda () '()))
   "Parser that produces no results for any input.")
 
 (defun phony-parser--empty-p (parser)
@@ -46,25 +64,37 @@
 
 (defun phony-parser--parses (parser)
   "Return the completed results of PARSER."
-  (funcall (phony-parser--parser-parses-function parser)))
+  (unless (eql phony-parser--current-generation
+               (phony-parser--parser-parses-generation parser))
+    (setf (phony-parser--parser-parses-cache parser)
+          (funcall (phony-parser--parser-parses-function parser)))
+    (setf (phony-parser--parser-parses-generation parser)
+          phony-parser--current-generation))
+  (phony-parser--parser-parses-cache parser))
 
 (defun phony-parser--step (parser item)
   "Advance PARSER by one token ITEM and return the resulting parser."
   (funcall (phony-parser--parser-step-function parser) item))
 
-(defun phony-parser--input-step (input)
-  "Return the next item and remaining input from INPUT, or nil."
-  (and input (cons (car input) (cdr input))))
+(defun phony-parser--wants (parser)
+  "Return the next legal tokens of PARSER.
 
-(defun phony-parser--run (parser input)
+If a token is the symbol `phony-parser--wants-any-token', the parser
+accepts any token."
+  (unless (eql phony-parser--current-generation
+               (phony-parser--parser-wants-generation parser))
+    (let ((wants (funcall (phony-parser--parser-wants-function parser))))
+      (setf (phony-parser--parser-wants-cache parser)
+            (seq-uniq wants))
+      (setf (phony-parser--parser-wants-generation parser)
+            phony-parser--current-generation)))
+  (phony-parser--parser-wants-cache parser))
+
+(defun phony-parser--parse (parser input)
   "Return all completed results of running PARSER on INPUT."
-  (cl-loop
-   for step = (phony-parser--input-step input)
-   while step
-   do (pcase-let* ((`(,item . ,tail) step))
-        (setq parser (phony-parser--step parser item))
-        (setq input tail))
-   finally return (phony-parser--parses parser)))
+  (while input
+    (setq parser (phony-parser--step parser (pop input))))
+  (phony-parser--parses parser))
 
 (defun phony-parser--any ()
   "Return a parser that accepts any single token."
@@ -72,7 +102,10 @@
    :parses-function (lambda () nil)
    :step-function
    (lambda (item)
-     (phony-parser--return item))))
+     (phony-parser--return item))
+   :wants-function
+   (lambda ()
+     (list phony-parser--wants-any-token))))
 
 (defun phony-parser--join (parser)
   "Flatten PARSER.
@@ -92,7 +125,13 @@ are run on subsequent tokens and their results collected."
          (phony-parser--join (phony-parser--step parser item))
          (seq-map (lambda (parse)
                     (phony-parser--step parse item))
-                  (phony-parser--parses parser))))))))
+                  (phony-parser--parses parser)))))
+     :wants-function
+     (lambda ()
+       (append
+        (phony-parser--wants parser)
+        (seq-mapcat #'phony-parser--wants
+                    (phony-parser--parses parser)))))))
 
 (defun phony-parser--map (f parser)
   "Return a parser applying F to each result of PARSER."
@@ -104,7 +143,10 @@ are run on subsequent tokens and their results collected."
        (seq-map f (phony-parser--parses parser)))
      :step-function
      (lambda (item)
-       (phony-parser--map f (phony-parser--step parser item))))))
+       (phony-parser--map f (phony-parser--step parser item)))
+     :wants-function
+     (lambda ()
+       (phony-parser--wants parser)))))
 
 (defun phony-parser--bind (parser f)
   "Return a parser that feeds each result of PARSER into F and flattens."
@@ -114,7 +156,8 @@ are run on subsequent tokens and their results collected."
   "Return a parser that succeeds immediately with X."
   (phony-parser--make
    :parses-function (lambda () (list x))
-   :step-function (lambda (_item) (phony-parser--empty))))
+   :step-function (lambda (_item) (phony-parser--empty))
+   :wants-function (lambda () '())))
 
 (defun phony-parser--empty ()
   "Return the empty parser."
@@ -133,21 +176,36 @@ are run on subsequent tokens and their results collected."
        :parses-function
        (lambda ()
          (seq-mapcat #'phony-parser--parses parsers))
-       :step-function (lambda (item)
-                        (phony-parser--alternative
-                         (seq-map
-                          (lambda (parser) (phony-parser--step parser item))
-                          parsers))))))))
+       :step-function
+       (lambda (item)
+         (phony-parser--alternative
+          (seq-map
+           (lambda (parser) (phony-parser--step parser item))
+           parsers)))
+       :wants-function
+       (lambda ()
+         (seq-mapcat #'phony-parser--wants parsers)))))))
 
-(defun phony-parser--satisfy (f)
-  "Return a parser that accepts a token satisfying F."
+(defvar phony-parser--literal-normalizer #'identity
+  "Function for normalizing tokens and literals.
+
+Comparison is done on the normalized strings.")
+
+(defun phony-parser--accept (item)
+  "Return a parser that only accepts ITEM.
+
+The parser normalizes ITEM and token input with
+`phony-parser--literal-normalizer' before comparing."
   (phony-parser--make
    :parses-function (lambda () nil)
    :step-function
    (lambda (token)
-     (if (funcall f token)
+     (if (equal (funcall phony-parser--literal-normalizer token)
+                (funcall phony-parser--literal-normalizer item))
          (phony-parser--return token)
-       (phony-parser--empty)))))
+       (phony-parser--empty)))
+   :wants-function
+   (lambda () (list (funcall phony-parser--literal-normalizer item)))))
 
 (defun phony-parser--then (parser1 parser2)
   "Return a parser that sequences PARSER1 then PARSER2, keeping PARSER2 results."
@@ -163,10 +221,6 @@ are run on subsequent tokens and their results collected."
                 (lambda (&rest args) (apply f x args))
                 (cdr parsers))))
     (phony-parser--return (funcall f))))
-
-(defun phony-parser--parse (parser input)
-  "Return all completed results of running PARSER on INPUT."
-  (phony-parser--run parser input))
 
 (defun phony-parser--guard (pred)
   "Return a parser that succeeds if PRED returns non-nil."
@@ -186,16 +240,31 @@ no arguments to yield the actual parser to use."
    :parses-function
    (lambda () (phony-parser--parses (funcall parser-factory)))
    :step-function
-   (lambda (item) (phony-parser--step (funcall parser-factory) item))))
+   (lambda (item) (phony-parser--step (funcall parser-factory) item))
+   :wants-function
+   (lambda () (phony-parser--wants (funcall parser-factory)))))
+
+(defun phony-parser--runtime-resolved-cached (parser-factory generation-function)
+  "Return a parser behaving like PARSER-FACTORY invoked at runtime.
+
+The results are cached.  The cache is invalidated whenever the return
+value of GENERATION-FUNCTION changes.
+
+PARSER-FACTORY is invoked with no arguments to yield the parser to use."
+  (let ((generation (cons nil nil)) ; Fresh cons is never eql to value
+                                    ; of GENERATION-FUNCTION.
+        (parser nil))
+    (phony-parser--runtime-resolved
+     (lambda ()
+       (let ((current-generation (funcall generation-function)))
+         (unless (eql current-generation generation)
+           (setq parser (funcall parser-factory))
+           (setq generation current-generation)))
+       parser))))
 
 (defun phony-parser--rule-active-guard (rule)
   "Return a parser that succeeds if RULE is currently active."
   (phony-parser--guard (lambda () (phony--rule-active-p rule))))
-
-(defvar phony-parser--literal-comparator 'string-equal
-  "Comparator used for comparing tokens with literal words.
-Called with the token as the first parameter, and the literal word as
-the second parameter.")
 
 (defun phony-parser--literal (string)
   "Return a parser that accepts tokens matching STRING.
@@ -204,16 +273,13 @@ STRING is split up into words.  The returned parser reads that many
 tokens before accepting, if the tokens correspond to the words.
 The result of a parse is STRING.
 
-Uses `phony-parser--literal-comparator' for the comparison between token
-and literal."
+Uses `phony-parser--literal-normalizer' to normalize tokens and
+literals."
   (let ((words (string-split string)))
     (apply
      #'phony-parser--lift
      (lambda (&rest _words) string)
-     (seq-map (lambda (word)
-                (phony-parser--satisfy
-                 (apply-partially phony-parser--literal-comparator word)))
-              words))))
+     (seq-map #'phony-parser--accept words))))
 
 (defun phony-parser--optional (parser)
   "Return a parser that matches PARSER zero or one times."
@@ -234,53 +300,134 @@ and literal."
       (lambda (parse-tail) (cons parse parse-tail))
       (phony-parser--zero-or-more parser)))))
 
-(cl-defgeneric phony-parser--collect-arguments-from-tree (match-tree element arglist)
-  "Extract argument bindings from MATCH-TREE according to ELEMENT and ARGLIST.")
+(cl-defgeneric phony-parser--collect-arguments-from-tree (match-tree pattern arglist)
+  "Extract argument bindings from MATCH-TREE according to PATTERN and ARGLIST.")
 
-(cl-defmethod phony-parser--collect-arguments-from-tree (_match-tree (_element phony--element-literal) arglist)
+(cl-defmethod phony-parser--collect-arguments-from-tree (_match-tree (_pattern phony-pattern--literal) arglist)
   ;; checkdoc-params: (arglist)
   "Collect arguments from LITERAL."
   (make-list (seq-length arglist) nil))
 
-(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (element phony--element-sequence) arglist)
+(cl-defmethod phony-parser--collect-arguments-from-tree (_match-tree (_pattern phony-pattern--builtin-word) arglist)
+  ;; checkdoc-params: (arglist)
+  "Collect arguments from BUILTIN-WORD."
+  (make-list (seq-length arglist) nil))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (_match-tree (_pattern phony-pattern--builtin-phrase) arglist)
+  ;; checkdoc-params: (arglist)
+  "Collect arguments from BUILTIN-PHRASE."
+  (make-list (seq-length arglist) nil))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (_match-tree (_pattern phony-pattern--rule) arglist)
+  ;; checkdoc-params: (arglist)
+  "Collect arguments from RULE."
+  (make-list (seq-length arglist) nil))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony-pattern--sequence) arglist)
   ;; checkdoc-params: (match-tree arglist)
   "Collect arguments from SEQUENCE.
 
-If an argument occurs in multiple children of ELEMENT, an
+If an argument occurs in multiple children of PATTERN, an
 unspecified alternative is picked."
-  (apply #'seq-mapn (lambda (&rest elements) (seq-some #'identity elements))
-         (seq-mapn (lambda (match-value element)
-                     (phony-parser--collect-arguments-from-tree match-value element arglist))
-                   match-tree (phony--element-sequence-elements element))))
+  (apply #'seq-mapn (lambda (&rest patterns) (seq-some #'identity patterns))
+         (seq-mapn (lambda (match-value pattern)
+                     (phony-parser--collect-arguments-from-tree match-value pattern arglist))
+                   match-tree (phony-pattern--sequence-patterns pattern))))
 
-(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (optional phony--element-optional) arglist)
+(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (optional phony-pattern--optional) arglist)
   ;; checkdoc-params: (match-tree arglist)
   "Collect arguments from OPTIONAL."
   (if match-tree
       (phony-parser--collect-arguments-from-tree
        match-tree
-       (phony--element-optional-element optional)
+       (phony-pattern--optional-pattern optional)
        arglist)
     (make-list (seq-length arglist) nil)))
 
-(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (element phony--element-argument) arglist)
-  ;; checkdoc-params: (match-tree arglist)
-  "Collect arguments from argument ELEMENT."
-  (seq-map (lambda (argument)
-             (and (eq argument (phony--element-argument-name element))
-                  match-tree))
-           arglist))
+(cl-defgeneric phony-parser--match-tree-to-ast (match-tree pattern)
+  "Transform MATCH-TREE to an AST according to PATTERN.")
 
-(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (element phony--element-repeat) arglist)
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (_ phony-pattern--literal))
+  "Transform MATCH-TREE to an AST."
+  match-tree)
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (_ phony-pattern--builtin-word))
+  "Transform MATCH-TREE to an AST."
+  match-tree)
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (_ phony-pattern--builtin-phrase))
+  "Transform MATCH-TREE to an AST."
+  match-tree)
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (_ phony-pattern--rule))
+  "Transform MATCH-TREE to an AST."
+  match-tree)
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (sequence phony-pattern--sequence))
+  "Transform MATCH-TREE to an AST according to SEQUENCE."
+  `(list ,@(seq-mapn (lambda (submatch subpattern)
+                       (phony-parser--match-tree-to-ast
+                        submatch subpattern))
+                     match-tree
+                     (phony-pattern--sequence-patterns sequence))))
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (repeat phony-pattern--repeat))
+  "Transform MATCH-TREE to an AST according to REPEAT."
+  `(list ,@(mapcar (lambda (submatch)
+                     (phony-parser--match-tree-to-ast
+                      submatch (phony-pattern--repeat-pattern repeat)))
+                   match-tree)))
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (optional phony-pattern--optional))
+  "Transform MATCH-TREE to an AST according to OPTIONAL."
+  (and match-tree (phony-parser--match-tree-to-ast
+                   match-tree
+                   (phony-pattern--optional-pattern optional))))
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (argument phony-pattern--argument))
+  "Transform MATCH-TREE to an AST according to ARGUMENT."
+  (phony-parser--match-tree-to-ast
+   match-tree
+   (phony-pattern--argument-pattern argument)))
+
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (alternative phony-pattern--alternative))
+  "Transform MATCH-TREE to an AST according to ALTERNATIVE."
+  (phony-parser--match-tree-to-ast
+   (cdr match-tree)
+   (elt (phony-pattern--alternative-patterns alternative)
+        (car match-tree))))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony-pattern--alternative) arglist)
+  ;; checkdoc-params: (match-tree arglist)
+  "Collect arguments according to PATTERN."
+  (phony-parser--collect-arguments-from-tree
+   (cdr match-tree)
+   (elt (phony-pattern--alternative-patterns pattern) (car match-tree))
+   arglist))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony-pattern--argument) arglist)
+  ;; checkdoc-params: (match-tree arglist)
+  "Collect arguments from argument PATTERN."
+  (let ((capture-pattern (phony-pattern--argument-pattern pattern)))
+    (seq-mapn (lambda (a b) (or a b))
+              (seq-map (lambda (argument)
+                         (and (eq argument (phony-pattern--argument-name pattern))
+                              (phony-parser--match-tree-to-ast
+                               match-tree capture-pattern)))
+                       arglist)
+              (phony-parser--collect-arguments-from-tree
+               match-tree capture-pattern arglist))))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony-pattern--repeat) arglist)
   ;; checkdoc-params: (match-tree arglist)
   "Collect arguments from REPEAT.
 
-Arguments occurring within ELEMENT are collected into list forms."
+Arguments occurring within PATTERN are collected into list forms."
   (if (null match-tree)
       (make-list (seq-length arglist) nil)
     (let ((occurring-arguments
-           (seq-map #'phony--element-argument-name
-                    (phony--element-collect #'phony--element-argument-p element))))
+           (seq-map #'phony-pattern--argument-name
+                    (phony-pattern--collect #'phony-pattern--argument-p pattern))))
       (seq-mapn (lambda (match-data argument)
                   (and (seq-contains-p occurring-arguments argument)
                        `(list ,@match-data)))
@@ -288,74 +435,73 @@ Arguments occurring within ELEMENT are collected into list forms."
                        (seq-map (lambda (match-value)
                                   (phony-parser--collect-arguments-from-tree
                                    match-value
-                                   (phony--element-repeat-element element)
+                                   (phony-pattern--repeat-pattern pattern)
                                    arglist))
                                 match-tree))
                 arglist))))
 
-(phony--define-grammar-attribute phony-parser--rule-cache (grammar)
-  "Return hash table mapping rule names to their parsers in GRAMMAR."
-  (make-hash-table))
-(declare-function phony-parser--rule-cache nil)
+(phony-ag--define-synthesized phony-parser--parser (node)
+  "Return a parser matching NODE.
 
-(cl-defgeneric phony-parser--from-element (element grammar)
-  "Build a parser from ELEMENT.
+For a pattern, the parser produces a match tree.  For a rule, it
+produces an AST.  For a grammar, it produces a list of ASTs, one for
+each command in the uttered sequence.")
 
-References to other rules are resolved through GRAMMAR.")
-
-(cl-defmethod phony-parser--from-element ((literal phony--element-literal) _grammar)
+(cl-defmethod phony-parser--parser ((literal phony-pattern--literal))
   "Return a parser matching LITERAL."
-  (phony-parser--literal (phony--element-literal-string literal)))
+  (phony-parser--literal (phony-pattern--literal-string literal)))
 
-(cl-defmethod phony-parser--from-element ((sequence phony--element-sequence) grammar)
-  ;; checkdoc-params: (grammar)
-  "Return a parser matching each element of SEQUENCE in order."
+(cl-defmethod phony-parser--parser ((sequence phony-pattern--sequence))
+  "Return a parser matching each pattern of SEQUENCE in order."
   (apply
    #'phony-parser--lift #'list
-   (seq-map (lambda (element) (phony-parser--from-element element grammar))
-            (phony--element-sequence-elements sequence))))
+   (seq-map #'phony-parser--parser
+            (phony-pattern--sequence-patterns sequence))))
 
-(cl-defmethod phony-parser--from-element ((optional phony--element-optional) grammar)
-  ;; checkdoc-params: (grammar)
+(cl-defmethod phony-parser--parser ((alternative phony-pattern--alternative))
+  "Return a parser matching one of the patterns in ALTERNATIVE.
+
+The produced value is a cons (INDEX . VALUE), where INDEX is the index
+of the matched alternative in ALTERNATIVE, and VALUE the value of the
+corresponding match."
+  (phony-parser--alternative
+   (seq-map-indexed
+    (lambda (pattern i)
+      (phony-parser--map
+       (lambda (parse) (cons i parse))
+       (phony-parser--parser pattern)))
+    (phony-pattern--alternative-patterns alternative))))
+
+(cl-defmethod phony-parser--parser ((optional phony-pattern--optional))
   "Return a parser matching OPTIONAL zero or one times."
   (phony-parser--optional
-   (phony-parser--from-element (phony--element-optional-element optional) grammar)))
+   (phony-parser--parser (phony-pattern--optional-pattern optional))))
 
-(cl-defmethod phony-parser--from-element ((repeat phony--element-zero-or-more) grammar)
-  ;; checkdoc-params: (grammar)
+(cl-defmethod phony-parser--parser ((repeat phony-pattern--zero-or-more))
   "Return a parser matching REPEAT zero or more times."
   (phony-parser--zero-or-more
-   (phony-parser--from-element (phony--element-zero-or-more-element repeat) grammar)))
+   (phony-parser--parser (phony-pattern--zero-or-more-pattern repeat))))
 
-(cl-defmethod phony-parser--from-element ((repeat phony--element-one-or-more) grammar)
-  ;; checkdoc-params: (grammar)
+(cl-defmethod phony-parser--parser ((repeat phony-pattern--one-or-more))
   "Return a parser matching REPEAT one or more times."
   (phony-parser--one-or-more
-   (phony-parser--from-element (phony--element-one-or-more-element repeat) grammar)))
+   (phony-parser--parser (phony-pattern--one-or-more-pattern repeat))))
 
-(cl-defmethod phony-parser--from-element ((argument phony--element-argument) grammar)
-  ;; checkdoc-params: (grammar)
-  "Return a parser matching the inner element of ARGUMENT."
-  (phony-parser--from-element (phony--element-argument-element argument) grammar))
+(cl-defmethod phony-parser--parser ((argument phony-pattern--argument))
+  "Return a parser matching the inner pattern of ARGUMENT."
+  (phony-parser--parser (phony-pattern--argument-pattern argument)))
 
-(cl-defmethod phony-parser--from-element ((_ phony--element-external-rule) _grammar)
-  "Return the empty parser.
-
-External rules cannot be parsed locally."
-  (phony-parser--empty))
-
-(cl-defmethod phony-parser--from-element ((rule phony--element-rule) grammar)
-  ;; checkdoc-params: (grammar)
+(cl-defmethod phony-parser--parser ((rule phony-pattern--rule))
   "Return a parser matching the rule named by RULE."
-  (let ((name (phony--element-rule-name rule)))
-    (with-memoization (gethash name (phony-parser--rule-cache grammar))
-      (phony-parser--from-rule (phony--get-rule name grammar) grammar))))
+  (let ((grammar (phony--containing-grammar rule))
+        (name (phony-pattern--rule-name rule)))
+    (phony-parser--parser (phony--get-rule name grammar))))
 
-(cl-defmethod phony-parser--from-element ((_ phony--element-builtin-word) _grammar)
+(cl-defmethod phony-parser--parser ((_ phony-pattern--builtin-word))
   "Return parser accepting an arbitrary word."
   (phony-parser--any))
 
-(cl-defmethod phony-parser--from-element ((_ phony--element-builtin-phrase) _grammar)
+(cl-defmethod phony-parser--parser ((_ phony-pattern--builtin-phrase))
   "Return parser accepting an arbitrary sequence of words.
 
 The result is returned as one string, each word interspersed with a
@@ -364,13 +510,7 @@ space."
    (lambda (strings) (string-join strings " "))
    (phony-parser--one-or-more (phony-parser--any))))
 
-(cl-defgeneric phony-parser--from-rule (rule grammar)
-  "Return a parser matching RULE and producing an AST.
-
-References to other rules are resolved through GRAMMAR.")
-
-(cl-defmethod phony-parser--from-rule ((rule phony--procedure-rule) grammar)
-  ;; checkdoc-params: (grammar)
+(cl-defmethod phony-parser--parser ((rule phony--procedure-rule))
   "Return a parser matching RULE."
   (phony-parser--then
    (phony-parser--rule-active-guard rule)
@@ -379,36 +519,72 @@ References to other rules are resolved through GRAMMAR.")
       `(,(phony--rule-name rule)
         ,@(phony-parser--collect-arguments-from-tree
            match-tree
-           (phony--procedure-rule-element rule)
+           (phony--procedure-rule-pattern rule)
            (phony--procedure-rule-arglist rule))))
-    (phony-parser--from-element (phony--procedure-rule-element rule) grammar))))
+    (phony-parser--parser (phony--procedure-rule-pattern rule)))))
 
-(cl-defmethod phony-parser--from-rule ((rule phony--dictionary) _grammar)
-  ;; checkdoc-params: (grammar)
+(defun phony-parser--trie-parser (entries)
+  "Make a parser for ENTRIES.
+
+ENTRIES is a list, each element of the form (LITERALS . VALUE).  This
+function returns a parser that matches a sequence of LITERALS, producing
+VALUE.
+
+The parser is constructed using a trie, so that parsing is linear with
+respect to the length of LITERALS, and constant with respect to the
+length of ENTRIES."
+  (let ((child-parsers (make-hash-table :test 'equal))
+        (values nil)
+        ;; Note: #'caar on '() yields nil, so if an entry has no
+        ;; LITERALS, it will be indexed by nil.
+        (prefix-groups (seq-group-by #'caar entries)))
+    (pcase-dolist (`(,prefix . ,group) prefix-groups)
+      (if (not prefix)
+          (setq values (mapcar #'cdr group))
+        (puthash prefix
+                 (phony-parser--trie-parser
+                  (mapcar (lambda (entry) (cons (cdar entry) (cdr entry)))
+                          group))
+                 child-parsers)))
+    (phony-parser--make
+     :parses-function (lambda () values)
+     :step-function
+     (lambda (item)
+       (gethash (funcall phony-parser--literal-normalizer item)
+                child-parsers
+                (phony-parser--empty)))
+     :wants-function
+     (lambda () (mapcar #'car prefix-groups)))))
+
+(defun phony-parser--make-dictionary-parser (dictionary)
+  "Return parser unconditionally matching an entry of DICTIONARY."
+  (phony-parser--trie-parser
+   (mapcar (pcase-lambda (`(,utterance . _))
+             (cons (seq-map phony-parser--literal-normalizer
+                            (string-split utterance))
+                   utterance))
+           (phony--dictionary-mapping dictionary))))
+
+(cl-defmethod phony-parser--parser ((rule phony--dictionary))
   "Return a parser matching any entry of dictionary RULE."
   (phony-parser--then
    (phony-parser--rule-active-guard rule)
    (phony-parser--map
     (lambda (utterance) `(,(phony--dictionary-name rule) ,utterance))
-    (phony-parser--runtime-resolved
-     (lambda ()
-       (phony-parser--alternative
-        (seq-map #'phony-parser--literal
-                 (map-keys (phony--dictionary-mapping rule)))))))))
+    (phony-parser--runtime-resolved-cached
+     (lambda () (phony-parser--make-dictionary-parser rule))
+     (lambda () (phony--dictionary-generation rule))))))
 
-(cl-defmethod phony-parser--from-rule ((rule phony--open-rule) grammar)
-  ;; checkdoc-params: (grammar)
+(cl-defmethod phony-parser--parser ((rule phony--open-rule))
   "Return a parser matching any alternative of open RULE."
   (phony-parser--then
    (phony-parser--rule-active-guard rule)
    (phony-parser--alternative
-    (seq-map (lambda (production) (phony-parser--from-rule
-                                   (phony--get-rule production grammar)
-                                   grammar))
-             (phony--open-rule-alternatives rule)))))
+    (seq-map #'phony-parser--parser
+             (phony--resolved-alternatives rule)))))
 
-(defun phony-parser--make-parser (grammar)
-  "Build a parser matching all active interactive procedure rules of GRAMMAR."
+(cl-defmethod phony-parser--parser ((grammar phony--grammar))
+  "Return parser matching active interactive procedure rules of GRAMMAR."
   (let* ((rules (seq-filter
                  (lambda (rule)
                    (and (phony--procedure-rule-p rule)
@@ -426,9 +602,7 @@ References to other rules are resolved through GRAMMAR.")
          (lonely-anchor (alist-get '(t . t) anchor-groups nil nil #'equal)))
     (cl-flet ((from-alternatives (rules)
                 (phony-parser--alternative
-                 (seq-map (lambda (rule)
-                            (phony-parser--from-rule rule grammar))
-                          rules))))
+                 (seq-map #'phony-parser--parser rules))))
       (phony-parser--alternative
        (list
         (phony-parser--map
@@ -442,26 +616,21 @@ References to other rules are resolved through GRAMMAR.")
            (from-alternatives first-anchor)))
          (phony-parser--zero-or-more
           (phony-parser--alternative
-           (seq-map (lambda (rule)
-                      (phony-parser--from-rule rule grammar))
-                    no-anchor)))
+           (seq-map #'phony-parser--parser no-anchor)))
          (phony-parser--optional
           (phony-parser--map
            #'list
            (from-alternatives last-anchor)))))))))
-
-(phony--define-grammar-attribute phony-parser--get-parser (grammar)
-  "Return a parser for matching GRAMMAR."
-  (phony-parser--make-parser grammar))
-(declare-function phony-parser--get-parser nil)
 
 (defun phony-parser--parse-utterance (utterance &optional grammar)
   "Parse UTTERANCE string into a list of possible parse results.
 
 Rules are taken from GRAMMAR or `phony--exported-grammar' if it is nil
 or not given.  GRAMMAR must be a prepared grammar."
+  (setq grammar (or grammar phony--exported-grammar))
+  (cl-incf phony-parser--current-generation)
   (phony-parser--parse
-   (phony-parser--get-parser (or grammar phony--exported-grammar))
+   (phony-parser--parser grammar)
    (string-split utterance)))
 
 (provide 'phony-parser)

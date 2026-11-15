@@ -300,26 +300,21 @@ NUMBER-STRING is parsed by `string-to-number'."
   :interactive nil
   (+ ?0 digit))
 
-(phony-define-open-rule phony-stdlib--graphical-character
-  "A graphical character."
-  ;; TODO: Perhaps a :closed parameter would be nice?  To avoid the
-  ;; indirection for graphical-character.
-  :alternatives
-  (letter phony-stdlib--digit-character non-alphanumeric-character))
-
-(phony-defun graphical-character (phony-stdlib--graphical-character)
-  "A graphical character."
-  ;; We add indirection to signal that the open is inextensible.
+(phony-defun graphical-character
+    ((character (| letter
+                   phony-stdlib--digit-character
+                   non-alphanumeric-character)))
+  "A graphical CHARACTER."
   :interactive nil
-  phony-stdlib--graphical-character)
+  character)
 
-(phony-defun any-alphanumeric-key (phony-stdlib--graphical-character)
+(phony-defun any-alphanumeric-key (graphical-character)
   "A graphical character.
 
 This rule is obsolete.  Use `graphical-character' instead."
   :interactive nil
   ;; TODO: Mark :obsolete when added to phony.
-  phony-stdlib--graphical-character)
+  graphical-character)
 
 (phony-defun symbol-key (non-alphanumeric-character)
   "A graphical character that is not alphanumeric.

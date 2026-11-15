@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2026 Erik Präntare
 
-;; Author: Erik Präntare
+;; Author: Erik Präntare <erik@prantare.xyz>
 ;; Created: 20 Oct 2026
 
 ;; This program is free software; you can redistribute it and/or
@@ -22,7 +22,7 @@
 ;;; Commentary:
 
 ;; This file defines structs for grammars, modules and rules.  The
-;; structs for elements are also included from phony-element.  There
+;; structs for patterns are also included from phony-pattern.  There
 ;; are also some helper functions and macros here.
 
 ;;; Code:
@@ -30,7 +30,8 @@
 (require 'cl-lib)
 (require 'subr-x)
 
-(require 'phony-element)
+(require 'phony-pattern)
+(require 'phony-ag)
 
 (cl-defstruct (phony--grammar
                (:constructor phony--make-grammar)
@@ -76,25 +77,6 @@ grammar object should never be mutated.")
      :module-provision
      (copy-hash-table
       (phony--grammar-module-provision grammar)))))
-
-(defmacro phony--define-grammar-attribute (name args docstring &rest body)
-  "Define a lazily evaluated grammar attribute.
-
-Grammar attributes should only be used for prepared grammars (see
-`phony--prepare-grammar').
-
-This defines a function NAME for getting the attribute.  ARGS must
-be (grammar) unquoted.  DOCSTRING is the documentation for the attribute
-function and BODY defines how to compute the attribute."
-  (declare (indent defun)
-           (doc-string 3))
-  ;; TODO: Fix symbol generation
-  ;; TODO: Ensure args is just one parameter named grammar
-  `(let ((attribute (make-hash-table :weakness 'key)))
-     (defun ,name ,args
-       ,docstring
-       (with-memoization (map-elt attribute grammar)
-         ,@body))))
 
 (defun phony--get-rules (grammar)
   "Return a list containing the rules of GRAMMAR."
@@ -175,9 +157,9 @@ See documentation for `phony-define-interface'.")
   ( function '()
     :type function
     :documentation "Function to call when the utterance is matched.")
-  ( element nil
-    :type phony--element-sequence
-    :documentation "Parsed element tree for the utterance pattern.")
+  ( pattern nil
+    :type phony-pattern--sequence
+    :documentation "Parsed pattern tree for the utterance pattern.")
   ( arglist '()
     :type (repeat symbol)
     :documentation "List of argument symbols extracted from the pattern.")
@@ -212,7 +194,10 @@ needs to share storage for dictionaries with the front-facing
 `phony--default-grammar'.  This indirection is for that."
   ( mapping nil
     :type list
-    :documentation "An alist mapping utterances, strings, to values."))
+    :documentation "An alist mapping utterances, strings, to values.")
+  ( generation 0
+    :type integer
+    :documentation "Integer counting how many times the storage has been updated."))
 
 (cl-defstruct (phony--dictionary
                (:include phony--rule)
@@ -231,10 +216,60 @@ exported grammar."))
   (phony--dictionary-storage-mapping
    (phony--dictionary-storage dictionary)))
 
+(defun phony--dictionary-generation (dictionary)
+  "Return the generation of DICTIONARY."
+  (phony--dictionary-storage-generation
+   (phony--dictionary-storage dictionary)))
+
+(defun phony--dictionary-touch (dictionary)
+  "Mark DICTIONARY as updated.
+
+Do not call this directly.  Use `phony--dictionary-mapping' or
+`phony--dictionary-elt' generalized variables for changing the content,
+or `phony--dictionary-delete' for deletion."
+  (let ((storage (phony--dictionary-storage dictionary)))
+    (cl-incf (phony--dictionary-storage-generation storage))))
+
 (gv-define-setter phony--dictionary-mapping (value dictionary)
-  `(setf (phony--dictionary-storage-mapping
-          (phony--dictionary-storage ,dictionary))
-         ,value))
+  (macroexp-let2* nil (dictionary
+                       (storage `(phony--dictionary-storage ,dictionary))
+                       value)
+    `(progn
+       (setf (phony--dictionary-storage-mapping ,storage) ,value)
+       (phony--dictionary-touch ,dictionary)
+       ,value)))
+
+;; We could make dictionaries implement the full map.el interface if
+;; we end up adding more functions.
+(defun phony--dictionary-elt (dictionary utterance)
+  "Return the value of DICTIONARY at UTTERANCE."
+  (alist-get
+   utterance
+   (phony--dictionary-mapping dictionary)
+   nil nil #'equal))
+
+(gv-define-setter phony--dictionary-elt (value dictionary utterance)
+  (macroexp-let2* nil (dictionary
+                       (storage `(phony--dictionary-storage ,dictionary))
+                       value utterance)
+    `(progn
+       (setf (alist-get ,utterance
+                        (phony--dictionary-storage-mapping ,storage)
+                        nil nil #'equal)
+             ,value)
+       (phony--dictionary-touch ,dictionary)
+       ,value)))
+
+(defun phony--dictionary-delete (dictionary utterance)
+  "Remove entry keyed by UTTERANCE from DICTIONARY."
+  (let ((storage (phony--dictionary-storage dictionary)))
+    (setf (alist-get utterance
+                     (phony--dictionary-storage-mapping storage)
+                     nil 'remove #'equal)
+          nil)
+    (phony--dictionary-touch dictionary))
+  ;; Mirrors behaviour of `map-delete'
+  dictionary)
 
 (cl-defstruct (phony--interface-rule
                (:include phony--rule)
@@ -269,7 +304,7 @@ If this is nil, there is no default provider."))
   "Return a deep copy of RULE."
   (let ((copy (phony--make-procedure-rule
                :function (phony--procedure-rule-function rule)
-               :element (phony--copy-element (phony--procedure-rule-element rule))
+               :pattern (phony-pattern--copy (phony--procedure-rule-pattern rule))
                :arglist (copy-sequence (phony--procedure-rule-arglist rule))
                :interactive-p (phony--procedure-rule-interactive-p rule)
                :anchor-beginning-p (phony--procedure-rule-anchor-beginning-p rule)
@@ -312,6 +347,69 @@ A rule is inactive if none of its modes are currently active."
                   (memq mode local-minor-modes)
                   (memq mode global-minor-modes)))
                modes))))
+
+(cl-defmethod phony-ag--children ((grammar phony--grammar))
+  "Return the children of GRAMMAR."
+  (let ((children (cl-call-next-method)))
+    (maphash (lambda (name rule)
+               (push (cons (cons 'rule name) rule) children))
+             (phony--grammar-rules grammar))
+    (maphash (lambda (name rule)
+               (push (cons (cons 'module name) rule) children))
+             (phony--grammar-modules grammar))
+    children))
+
+(cl-defmethod phony-ag--children ((_dictionary phony--dictionary))
+  "Return the children of DICTIONARY.
+
+The underlying storage is excluded, as it is shared between different
+grammars."
+  (let ((children (cl-call-next-method)))
+    (setf (alist-get 'storage children nil t) nil)
+    children))
+
+(cl-defmethod phony-ag--children ((pattern phony-pattern--sequence))
+  "Return the children of PATTERN."
+  (seq-map-indexed
+   (lambda (child index) (cons index child))
+   (phony-pattern--sequence-patterns pattern)))
+
+(cl-defmethod phony-ag--children ((pattern phony-pattern--alternative))
+  "Return the children of PATTERN."
+  (seq-map-indexed
+   (lambda (child index) (cons index child))
+   (phony-pattern--alternative-patterns pattern)))
+
+(phony-ag--define-inherited phony--containing-rule (node)
+  "Return the rule containing NODE.")
+
+(phony-ag--define-equation phony--containing-rule
+    ((rule phony--rule) _)
+  rule)
+
+(phony-ag--define-inherited phony--containing-grammar (node)
+  "Return the grammar containing NODE.")
+
+(phony-ag--define-equation phony--containing-grammar
+    ((grammar phony--grammar) _)
+  grammar)
+
+(phony-ag--define-inherited phony--containing-module (node)
+                            "Return the module containing NODE.")
+
+(phony-ag--define-equation phony--containing-module ((grammar phony--grammar)
+                                                     (rule-slot (head rule)))
+  (and-let* ((rule-name (cdr rule-slot))
+             (rule (phony--get-rule rule-name grammar))
+             (module-name (phony--rule-module rule))
+             (module (gethash module-name (phony--grammar-modules grammar))))
+    module))
+
+(phony-ag--define-synthesized phony--resolved-alternatives (open-rule)
+  "Return alternatives of OPEN-RULE as a list of rules."
+  (let ((grammar (phony--containing-grammar open-rule)))
+    (mapcar (lambda (name) (phony--get-rule name grammar))
+            (phony--open-rule-alternatives open-rule))))
 
 (provide 'phony-model)
 
