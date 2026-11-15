@@ -285,12 +285,12 @@ comparison.  For example, the following code makes ~phony-evaluate~
 ignore casing and punctuation when parsing:
 
 #+begin_src emacs-lisp
-  (defun my-phony-parser--sanitize (s)
-    "Lowercase and remove punctuation."
-    (string-trim (replace-regexp-in-string "[-,\\.!?:]" "" (downcase s))))
+  (defun my/sanitize-literal (s)
+    "Lowercase and remove punctuation in S."
+    (replace-regexp-in-string "[-,\\.!?:]" "" (downcase s)))
 
   (phony-experimental-set-parser-literal-normalizer
-   #'my-phony-compare-literal)
+   #'my/sanitize-literal)
 #+end_src
 
 * Pre-defined rulesets
