@@ -47,6 +47,13 @@
                         (phony--pattern-sequence-patterns pattern))
                " "))
 
+(cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-alternative))
+  "Return the Talon pattern string for matching PATTERN."
+  (format "(%s)"
+          (string-join (seq-map #'phony-talon--pattern-match-string
+                                (phony--pattern-alternative-patterns pattern))
+                       " | ")))
+
 (cl-defmethod phony-talon--pattern-match-string ((pattern phony--pattern-optional))
   "Return the Talon pattern string for matching PATTERN."
   (format "[%s]" (phony-talon--pattern-match-string

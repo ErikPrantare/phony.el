@@ -400,6 +400,21 @@ unspecified alternative is picked."
    match-tree
    (phony--pattern-argument-pattern argument)))
 
+(cl-defmethod phony-parser--match-tree-to-ast (match-tree (alternative phony--pattern-alternative))
+  "Transform MATCH-TREE to an AST according to ALTERNATIVE."
+  (phony-parser--match-tree-to-ast
+   (cdr match-tree)
+   (elt (phony--pattern-alternative-patterns alternative)
+        (car match-tree))))
+
+(cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony--pattern-alternative) arglist)
+  ;; checkdoc-params: (match-tree arglist)
+  "Collect arguments according to PATTERN."
+  (phony-parser--collect-arguments-from-tree
+   (cdr match-tree)
+   (elt (phony--pattern-alternative-patterns pattern) (car match-tree))
+   arglist))
+
 (cl-defmethod phony-parser--collect-arguments-from-tree (match-tree (pattern phony--pattern-argument) arglist)
   ;; checkdoc-params: (match-tree arglist)
   "Collect arguments from argument PATTERN."
@@ -452,6 +467,20 @@ each command in the uttered sequence.")
    #'phony-parser--lift #'list
    (seq-map #'phony-parser--parser
             (phony--pattern-sequence-patterns sequence))))
+
+(cl-defmethod phony-parser--parser ((alternative phony--pattern-alternative))
+  "Return a parser matching one of the patterns in ALTERNATIVE.
+
+The produced value is a cons (INDEX . VALUE), where INDEX is the index
+of the matched alternative in ALTERNATIVE, and VALUE the value of the
+corresponding match."
+  (phony-parser--alternative
+   (seq-map-indexed
+    (lambda (pattern i)
+      (phony-parser--map
+       (lambda (parse) (cons i parse))
+       (phony-parser--parser pattern)))
+    (phony--pattern-alternative-patterns alternative))))
 
 (cl-defmethod phony-parser--parser ((optional phony--pattern-optional))
   "Return a parser matching OPTIONAL zero or one times."

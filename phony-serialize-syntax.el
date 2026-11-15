@@ -167,6 +167,11 @@ syntax from untrusted sources!"
   `(seq ,@(mapcar #'phony--unparse
                   (phony--pattern-sequence-patterns pattern))))
 
+(cl-defmethod phony--unparse ((pattern phony--pattern-alternative))
+  "Unparse PATTERN."
+  `(| ,@(mapcar #'phony--unparse
+                (phony--pattern-alternative-patterns pattern))))
+
 (cl-defmethod phony--unparse ((pattern phony--pattern-optional))
   "Unparse PATTERN."
   `(\? ,(phony--unparse

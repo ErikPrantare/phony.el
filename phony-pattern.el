@@ -29,24 +29,24 @@
 
 (cl-defstruct phony--pattern-literal
   "Pattern matching a literal utterance."
-  (string nil
-          :type string
-          :documentation "Utterance that matches this pattern."))
+  ( string nil
+    :type string
+    :documentation "Utterance that matches this pattern."))
 
 (cl-defstruct phony--pattern-sequence
   "Pattern matching a sequence of sub-patterns."
-  (patterns nil
-            :documentation "List of sub-patterns that must match in sequence."))
+  ( patterns nil
+    :documentation "List of sub-patterns that must match in sequence."))
 
 (cl-defstruct phony--pattern-optional
   "Pattern matching PATTERN zero or one times."
-  (pattern nil
-           :documentation "The pattern to match zero or one times."))
+  ( pattern nil
+    :documentation "The pattern to match zero or one times."))
 
 (cl-defstruct phony--pattern-repeat
   "Pattern that may match PATTERN multiple times."
-  (pattern nil
-           :documentation "The pattern to match repeatedly."))
+  ( pattern nil
+    :documentation "The pattern to match repeatedly."))
 
 (cl-defstruct (phony--pattern-one-or-more
                (:include phony--pattern-repeat))
@@ -56,20 +56,25 @@
                (:include phony--pattern-repeat))
   "Pattern matching PATTERN zero or more times.")
 
+(cl-defstruct phony--pattern-alternative
+  "Pattern matching one of PATTERNS."
+  ( patterns nil
+    :documentation "The alternatives to match."))
+
 (cl-defstruct phony--pattern-argument
   "Pattern matching FORM and binding it to function argument NAME."
-  (name nil
-        :type symbol
-        :documentation "Symbol naming the argument that captures the value of the match.")
+  ( name nil
+    :type symbol
+    :documentation "Symbol naming the argument that captures the value of the match.")
   (pattern nil
            :type sexp
            :documentation "Pattern whose match will bind to the argument."))
 
 (cl-defstruct phony--pattern-rule
   "Pattern matching another rule."
-  (name nil
-        :type symbol
-        :documentation "Symbol naming the phony rule that this pattern matches."))
+  ( name nil
+    :type symbol
+    :documentation "Symbol naming the phony rule that this pattern matches."))
 
 (cl-defstruct (phony--pattern-builtin-word
                (:constructor phony--make-pattern-builtin-word))
@@ -138,8 +143,14 @@ This is required for recognizing if a form should bind to an argument."
      :patterns
      (mapcar
       (lambda (subpattern)
-        (phony--parse-speech-pattern
-         subpattern arglist))
+        (phony--parse-speech-pattern subpattern arglist))
+      (cdr pattern-form))))
+   ((eq (car-safe pattern-form) '|)
+    (make-phony--pattern-alternative
+     :patterns
+     (mapcar
+      (lambda (subpattern)
+        (phony--parse-speech-pattern subpattern arglist))
       (cdr pattern-form))))
    ((eq pattern-form 'phony--builtin-word)
     (phony--make-pattern-builtin-word))
@@ -159,6 +170,9 @@ This is required for recognizing if a form should bind to an argument."
   (pcase pattern
     ((cl-struct phony--pattern-sequence patterns)
      (make-phony--pattern-sequence
+      :patterns (seq-map f patterns)))
+    ((cl-struct phony--pattern-alternative patterns)
+     (make-phony--pattern-alternative
       :patterns (seq-map f patterns)))
     ((cl-struct phony--pattern-optional (pattern child))
      (make-phony--pattern-optional

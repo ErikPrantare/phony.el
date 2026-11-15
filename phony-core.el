@@ -1218,6 +1218,7 @@ A pattern can take one of the following forms:
   (? PATS...)      Optionally match patterns PATS in sequence.
   (* PATS...)      Match patterns PATS in sequence zero or more times.
   (+ PATS...)      Match patterns PATS in sequence one or more times.
+  (| PATS...)      Match one of the patterns PATS.
 
 Patterns produce values that can be bound to arguments.  The values
 produced by the different pattern forms are given below:
@@ -1227,6 +1228,8 @@ produced by the different pattern forms are given below:
   (ARG PAT)        Produces the value produced by PAT.
   (seq PATS...)    Produces a list, where each element is the value
                    produced by the corresponding pattern in PATS.
+  (| PATS...)      Produces the value produced by the pattern in PATS
+                   matched.
 
 For the following three patterns, PATS is either one or multiple
 patterns.  If it is one, PATS produces the value of that one pattern.
@@ -1410,7 +1413,7 @@ Return a list of symbols, one per argument binding found in the
 pattern tree."
     (cond
      ;; ?\s is what ? followed by a space is read as.
-     ((and (listp pattern-form) (memq (car pattern-form) '(seq ?\s \? + *)))
+     ((and (listp pattern-form) (memq (car pattern-form) '(seq ?\s \? + * |)))
       (seq-mapcat #'phony--collect-arguments (cdr pattern-form)))
      ((listp pattern-form)
       (list (car pattern-form)))

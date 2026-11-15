@@ -186,20 +186,41 @@ If there is no parse, an error is thrown."
     (should (equal (phony-test--evaluate "3 x x x x") '("x" "x" "x" "x")))
     (should (equal (phony-test--evaluate "3") nil))))
 
+(ert-deftest phony-pattern-alternative-value ()
+  "Alternation patterns evaluate to the matched alternative."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun alt ((x (| "x" "y" "z")))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "x") "x"))
+    (should (equal (phony-test--evaluate "y") "y"))
+    (should (equal (phony-test--evaluate "z") "z"))))
+
+(ert-deftest phony-pattern-binding-in-alternative ()
+  "Binding in non-matched alternative gets bound to nil."
+  (phony-test
+    (phony-mode 1)
+    (phony-defun alt ((| "x" (x "y")))
+      x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "x") nil))
+    (should (equal (phony-test--evaluate "y") "y"))))
+
 (ert-deftest phony-dictionary-modification-parses ()
   "Changing a dictionary reflects immediately in the parser."
   (phony-test
-   (phony-mode 1)
-   (phony-define-dictionary lol
-     '(("lol" . 1337)))
-   (phony-defun somelol (lol)
-     lol)
-   (phony--export-all)
-   (should (= (phony-test--evaluate "lol") 1337))
-   (should-error (phony-test--evaluate "lmao"))
-   (setf (phony-dictionary-get "lmao" 'lol) 42)
-   (should (= (phony-test--evaluate "lol") 1337))
-   (should (= (phony-test--evaluate "lmao") 42))))
+    (phony-mode 1)
+    (phony-define-dictionary lol
+      '(("lol" . 1337)))
+    (phony-defun somelol (lol)
+      lol)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "lol") 1337))
+    (should-error (phony-test--evaluate "lmao"))
+    (setf (phony-dictionary-get "lmao" 'lol) 42)
+    (should (= (phony-test--evaluate "lol") 1337))
+    (should (= (phony-test--evaluate "lmao") 42))))
 
 (ert-deftest phony-dictionary-removal ()
   "Removing an element from a dictionary reflects in the parser."
@@ -683,6 +704,9 @@ If there is no parse, an error is thrown."
             (phony-define-dictionary more-numbers
               :contributes-to number
               '(("pi" . 3.14) ("elite" . 1337)))
+            (phony-defun yet-more-numbers ((x (| "i" "neggy")))
+              :contributes-to number
+              (pcase x ("i" (sqrt -1)) ("neggy" -1)))
             (phony-defun double ("double" number)
               (* 2 number))
             (phony-defun insert-word ("insert" (word phony--builtin-word))
