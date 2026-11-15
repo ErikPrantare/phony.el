@@ -374,6 +374,12 @@ grammars."
    (lambda (child index) (cons index child))
    (phony--pattern-sequence-patterns pattern)))
 
+(cl-defmethod phony-ag--children ((pattern phony--pattern-alternative))
+  "Return the children of PATTERN."
+  (seq-map-indexed
+   (lambda (child index) (cons index child))
+   (phony--pattern-alternative-patterns pattern)))
+
 (phony-ag--define-inherited phony--containing-rule (node)
   "Return the rule containing NODE.")
 
