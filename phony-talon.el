@@ -258,7 +258,7 @@ This function creates .talon and .py files in the output directory."
               ;; We split without providing delimiter, otherwise
               ;; splitting the empty string will yield one empty tag.
               "        tags = {'user.' + tag for tag in inn.read().strip().split()}\n"
-              "        if tags != tag_context.tags:"
+              "        if tags != tag_context.tags:\n"
               "            tag_context.tags = tags\n"
               "\n"
               "talon.fs.watch('" (phony--output-directory "active-rules") "',\n"
