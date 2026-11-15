@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Erik Präntare
 
 ;; Author: Erik Präntare <erik@prantare.xyz>
-;; Keywords: files
+;; Keywords: convenience
 ;; Version: 2.2.0
 ;; Homepage: https://github.com/ErikPrantare/phony.el
 ;; Package-Requires: ((emacs "29.1") (simulacrum "2.0.0"))
