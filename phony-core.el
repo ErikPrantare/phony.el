@@ -1122,9 +1122,7 @@ results of the analysis."
 (defcustom phony-export-function 'phony-talon-export
   "Function to be used for exporting spoken rules."
   ;; Using radio instead of choice did not display :tag
-  :type '(choice (function-item :tag "Dragonfly exporter"
-                                phony-dragonfly-export)
-                 (function-item :tag "Talon exporter"
+  :type '(choice (function-item :tag "Talon exporter"
                                 phony-talon-export))
   :tag "Phony Rule Exporter"
   :risky t

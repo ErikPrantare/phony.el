@@ -13,6 +13,8 @@
 - Removed ~phony-stdlib-talon-community~.
 - Removed ~phony-experimental-set-parser-literal-comparator~.  Use
   ~phony-experimental-set-parser-literal-normalizer~ instead.
+- Removed the dragonfly backend.  It didn't really work, and became a
+  maintenance burden.
 
 * 2.2.0 [2026-10-21 Wed]
 - ~phony-evaluate~ has been renamed ~phony-experimental-evaluate~.

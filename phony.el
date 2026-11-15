@@ -65,7 +65,6 @@
 
 (autoload 'phony-experimental-mode "phony-experimental")
 (autoload 'phony-talon-export "phony-talon")
-(autoload 'phony-dragonfly-export "phony-dragonfly")
 
 (provide 'phony)
 ;;; phony.el ends here
