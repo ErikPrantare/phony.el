@@ -1392,9 +1392,10 @@ Optional keywords common to all rule types are:
 
 A bare symbol `foo' is expanded to `(foo foo)', binding the rule's
 match value to an argument of the same name.  Recurses into `seq',
-`?', `+', `*' forms."
+`?', `+', `*' and `|' forms, but not into argument bindings."
     (cond
-     ((and (listp pattern-form) (memq (car pattern-form) '(seq ? + *)))
+     ;; ?\s is what ? followed by a space is read as.
+     ((and (listp pattern-form) (memq (car pattern-form) '(seq ?\s \? + * |)))
       `(,(car pattern-form)
         ,@(seq-map #'phony--expand-implicit-arguments (cdr pattern-form))))
      ((symbolp pattern-form)
