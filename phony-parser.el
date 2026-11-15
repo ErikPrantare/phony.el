@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2026 Erik Präntare
 
-;; Author: Erik Präntare
+;; Author: Erik Präntare <erik@prantare.xyz>
 ;; Created: 24 Jun 2026
 
 ;; This program is free software; you can redistribute it and/or

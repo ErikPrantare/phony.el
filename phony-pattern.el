@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2025, 2026  Erik Präntare
 
-;; Author: Erik Präntare <erik@system2>
+;; Author: Erik Präntare <erik@prantare.xyz>
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
