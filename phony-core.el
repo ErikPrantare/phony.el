@@ -431,7 +431,8 @@ module from rules in disabled modules."
       (when (phony--procedure-rule-p rule)
         (setf (phony--procedure-rule-interactive-p rule) nil)))))
 
-(define-error 'phony--interface-cycle "Cycle in providers")
+(define-error 'phony--grammar-error "Error in grammar")
+(define-error 'phony--interface-cycle "Cycle in providers" 'phony--grammar-error)
 
 (defun phony--detect-interface-cycles (grammar)
   "Error if there is a rule provision cycle in GRAMMAR."
@@ -567,23 +568,43 @@ If the resolution fails or there is no default, this returns nil."
   "Return resolution of INTERFACE."
   (phony--interface-resolved-provider interface))
 
+(cl-defstruct (phony--diagnostic
+               (:constructor phony--make-diagnostic)
+               (:copier nil))
+  "A diagnostic."
+  ( message ""
+    :type string
+    :documentation "The diagnostic message.")
+  ( type nil
+    :type symbol
+    :documentation "The diagnostic type."))
+
 (defun phony--prepare-grammar (grammar)
   "Prepare GRAMMAR for export.
 
-The returned grammar must not be mutated."
-  (let ((prepared (phony--copy-grammar grammar)))
-    (phony--seal-disabled-modules prepared)
-    (phony--detect-non-open-contributions prepared)
-    (phony--internalize-contributions prepared)
-    (phony--detect-interface-cycles prepared)
-    ;; HACK: This lil clone dance is necessary until we remove
-    ;; rewriting from reachability pruning.
-    (phony-ag--initialize prepared)
-    (phony--remove-unreachable-resolve-interfaces prepared)
-    (setq prepared (phony--copy-grammar prepared))
-    (phony--canonicalize-grammar prepared)
-    (phony-ag--initialize prepared)
-    prepared))
+The returned grammar must not be mutated.
+
+If preparation yields any errors, this function instead returns a list
+of diagnostics."
+  (condition-case e
+      (let ((prepared (phony--copy-grammar grammar)))
+        (phony--seal-disabled-modules prepared)
+        (phony--detect-non-open-contributions prepared)
+        (phony--internalize-contributions prepared)
+        (phony--detect-interface-cycles prepared)
+        ;; HACK: This lil clone dance is necessary until we remove
+        ;; rewriting from reachability pruning.
+        (phony-ag--initialize prepared)
+        (phony--remove-unreachable-resolve-interfaces prepared)
+        (setq prepared (phony--copy-grammar prepared))
+        (phony--canonicalize-grammar prepared)
+        (phony-ag--initialize prepared)
+        prepared)
+    (phony--grammar-error
+     (list (phony--make-diagnostic
+            ;; Emacs 31: error-type
+            :type (car e)
+            :message (error-message-string e))))))
 
 (defun phony--add-rule (rule grammar)
   "Add RULE to GRAMMAR.
@@ -1137,8 +1158,12 @@ If no rules are defined, this function does nothing."
   (when (phony--get-rules phony--default-grammar)
     (let* ((prepared-grammar (phony--prepare-grammar phony--default-grammar))
            (analysis-data (phony--analyze-grammar prepared-grammar)))
-      (if (phony--analysis-data-contains-errors analysis-data)
-          (display-warning 'phony "Grammar contains errors, not exporting")
+      (if (not (phony--grammar-p prepared-grammar))
+          (progn (dolist (diagnostic prepared-grammar)
+                   (display-warning
+                    'phony (phony--diagnostic-message diagnostic)))
+                 (display-warning
+                  'phony "Grammar contains errors, not exporting"))
         (when (and (not noninteractive)
                    (not (server-running-p))
                    (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))

@@ -341,6 +341,22 @@ If there is no parse, an error is thrown."
    (phony--export-all)
    (should (= (phony-test--evaluate "double elite") 2674))))
 
+(defmacro phony-test-should-have-diagnostics (&rest diagnostic-types)
+  "Fail if diagnostics of current grammar are not DIAGNOSTIC-TYPES.
+
+This checks that the types of the diagnostics match exactly with those
+given by DIAGNOSTIC-TYPES."
+  `(let ((diagnostics (phony--prepare-grammar phony--default-grammar)))
+     (when (phony--grammar-p diagnostics)
+       (setq diagnostics '()))
+     (unless  (seq-set-equal-p
+               (seq-map #'phony--diagnostic-type diagnostics)
+               '(,@diagnostic-types))
+       (ert-fail
+        (format "Expected diagnostics %s, got %s"
+                '(,@diagnostic-types)
+                (seq-map #'phony--diagnostic-type diagnostics))))))
+
 (ert-deftest phony-interface-cycle-detection ()
   "Cyclic interfaces error."
   (phony-test
@@ -348,7 +364,7 @@ If there is no parse, an error is thrown."
      :provides number)
    (phony-defun double ("double" number)
      (* 2 number))
-   (should-error (phony--export-all) :type 'phony--interface-cycle)))
+   (phony-test-should-have-diagnostics phony--interface-cycle)))
 
 (ert-deftest phony-interface-uses-selected-provider ()
   "Only the selected provider is used for interface."
