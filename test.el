@@ -366,6 +366,15 @@ given by DIAGNOSTIC-TYPES."
      (* 2 number))
    (phony-test-should-have-diagnostics phony--interface-cycle)))
 
+(ert-deftest phony-interface-default-cycle-detection ()
+  "Cyclic interface defaults error."
+  (phony-test
+   (phony-define-interface number
+     :default number)
+   (phony-defun double ("double" number)
+     (* 2 number))
+   (phony-test-should-have-diagnostics phony--interface-cycle)))
+
 (ert-deftest phony-interface-uses-selected-provider ()
   "Only the selected provider is used for interface."
   (phony-test

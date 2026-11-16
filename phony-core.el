@@ -432,35 +432,36 @@ module from rules in disabled modules."
         (setf (phony--procedure-rule-interactive-p rule) nil)))))
 
 (define-error 'phony--grammar-error "Error in grammar")
-(define-error 'phony--interface-cycle "Cycle in providers" 'phony--grammar-error)
+(define-error 'phony--interface-cycle "Cycle in interfaces" 'phony--grammar-error)
 
 (defun phony--detect-interface-cycles (grammar)
-  "Error if there is a rule provision cycle in GRAMMAR."
-  (let* ((rules (phony--get-rules grammar))
-         (providers (seq-filter #'phony--rule-provides rules))
-         (provision-map
-          (map-into (seq-map (lambda (provider)
-                               (cons provider
-                                     (phony--get-rule
-                                      (phony--rule-provides provider)
-                                      grammar)))
-                             providers)
-                    '(hash-table :test eq))))
-    (dolist (provider providers)
-      (let ((current provider)
-            (cycle (list provider))
-            (visited (make-hash-table :test 'eq)))
-        (while current
-          (puthash current t visited)
-          (setq current (gethash current provision-map))
-          (push current cycle)
-          (when (gethash current visited)
-            (signal 'phony--interface-cycle
-                    (seq-map
-                     #'phony--rule-name
-                     ;; Emacs 31: drop-while
-                     (seq-drop-while (lambda (rule) (not (eq rule current)))
-                                     (nreverse cycle))))))))))
+  "Error if there is an interface cycle in GRAMMAR."
+  (cl-flet ((successors (node)
+              (seq-filter
+               #'phony--interface-rule-p
+               (or (phony--interface-provider-candidates node)
+                   (ensure-list (phony--interface-default-resolved node))))))
+    (let* ((rules (phony--get-rules grammar))
+           (interfaces (seq-filter #'phony--interface-rule-p rules)))
+      (dolist (interface interfaces)
+        (let ((stack '())
+              (done (make-hash-table :test 'eq)))
+          (cl-labels ((dfs (node)
+                        (push node stack)
+                        (when (memq node (cdr stack))
+                          (signal 'phony--interface-cycle
+                                  (seq-map
+                                   #'phony--rule-name
+                                   ;; Emacs 31: drop-while
+                                   (seq-drop-while
+                                    (lambda (rule) (not (eq rule node)))
+                                    (nreverse stack)))))
+                        (dolist (successor (successors node))
+                          (unless (gethash successor done)
+                            (dfs successor)))
+                        (pop stack)
+                        (puthash node t done)))
+            (dfs interface)))))))
 
 (defun phony--canonicalize-grammar (grammar)
   "Rewrite GRAMMAR into canonical form.
@@ -500,7 +501,7 @@ Keys and values are rule objects."
           (cons rule (phony--get-rule (phony--rule-provides rule) grammar))))
    (phony--get-rules grammar)))
 
-(phony-ag--define-synthesized phony--interface-candidate-alist (grammar)
+(phony-ag--define-synthesized phony--interface-provider-candidate-alist (grammar)
   "Return alist mapping interfaces to the providers of it in GRAMMAR."
   (let* ((inverse-provider-alist
           (seq-map (lambda (entry) (cons (cdr entry) (car entry)))
@@ -510,7 +511,7 @@ Keys and values are rule objects."
                (cons (car entry) (seq-map #'cdr (cdr entry))))
              grouped)))
 
-(phony-ag--define-synthesized phony--interface-candidates (interface)
+(phony-ag--define-synthesized phony--interface-provider-candidates (interface)
   "Return candidates for INTERFACE."
   (seq-filter
    (lambda (candidate)
@@ -520,7 +521,7 @@ Keys and values are rule objects."
           (phony--containing-module candidate)
           (phony--containing-grammar interface))))
    (map-elt
-    (phony--interface-candidate-alist
+    (phony--interface-provider-candidate-alist
      (phony--containing-grammar interface))
     interface)))
 
@@ -537,7 +538,7 @@ If the resolution fails or there is no default, this returns nil."
 
 (phony-ag--define-synthesized phony--interface-resolved-provider (interface)
   "Return the resolved provider for INTERFACE."
-  (let ((providers (phony--interface-candidates interface)))
+  (let ((providers (phony--interface-provider-candidates interface)))
     ;; If rules in the user's configuration provide for the
     ;; interface, they take precedence.
     (when-let* ((user-providers (seq-filter #'phony--user-rule-p providers)))
@@ -588,13 +589,14 @@ If preparation yields any errors, this function instead returns a list
 of diagnostics."
   (condition-case e
       (let ((prepared (phony--copy-grammar grammar)))
+        ;; HACK: We re-initialize the ag and clone wherever ag
+        ;; functionality is useful, even though we are performing
+        ;; rewrite.  This will slowly be scrubbed from mutation.
         (phony--seal-disabled-modules prepared)
         (phony--detect-non-open-contributions prepared)
         (phony--internalize-contributions prepared)
-        (phony--detect-interface-cycles prepared)
-        ;; HACK: This lil clone dance is necessary until we remove
-        ;; rewriting from reachability pruning.
         (phony-ag--initialize prepared)
+        (phony--detect-interface-cycles prepared)
         (phony--remove-unreachable-resolve-interfaces prepared)
         (setq prepared (phony--copy-grammar prepared))
         (phony--canonicalize-grammar prepared)
