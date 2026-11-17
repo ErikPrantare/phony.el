@@ -432,7 +432,18 @@ module from rules in disabled modules."
         (setf (phony--procedure-rule-interactive-p rule) nil)))))
 
 (define-error 'phony--grammar-error "Error in grammar")
-(define-error 'phony--interface-cycle "Cycle in interfaces" 'phony--grammar-error)
+
+(define-error 'phony--interface-cycle
+              "Cycle in interfaces"
+              'phony--grammar-error)
+
+(define-error 'phony--ambiguous-interface
+              "More than one candidate provider"
+              'phony--grammar-error)
+
+(define-error 'phony--provider-not-found
+              "No provider found for %s"
+              'phony--grammar-error)
 
 (defun phony--detect-interface-cycles (grammar)
   "Error if there is an interface cycle in GRAMMAR."
@@ -450,12 +461,18 @@ module from rules in disabled modules."
                         (push node stack)
                         (when (memq node (cdr stack))
                           (signal 'phony--interface-cycle
-                                  (seq-map
-                                   #'phony--rule-name
-                                   ;; Emacs 31: drop-while
-                                   (seq-drop-while
-                                    (lambda (rule) (not (eq rule node)))
-                                    (nreverse stack)))))
+                                  (list
+                                   (format
+                                    "Cycle in interface resolution: %s"
+                                    (string-join
+                                     (thread-last
+                                       (nreverse stack)
+                                       ;; Emacs 31: drop-while
+                                       (seq-drop-while
+                                        (lambda (rule) (not (eq rule node))))
+                                       (seq-map #'phony--rule-name)
+                                       (seq-map #'symbol-name))
+                                     " -> ")))))
                         (dolist (successor (successors node))
                           (unless (gethash successor done)
                             (dfs successor)))
@@ -553,16 +570,20 @@ If the resolution fails or there is no default, this returns nil."
                  default-name (phony--rule-name interface)))
         (setq providers (list default))))
     (when (> (length providers) 1)
-      (error "More than one eligible provider available for %s\nProviders: %s"
-             (phony--rule-name interface)
-             (mapconcat
-              (lambda (provider) (symbol-name (phony--rule-name provider)))
-              providers
-              ", ")))
+      (signal
+       'phony--ambiguous-interface
+       (list (format "More than one eligible provider available for %s\nProviders: %s"
+                     (phony--rule-name interface)
+                     (mapconcat
+                      (lambda (provider) (symbol-name (phony--rule-name provider)))
+                      providers
+                      ", ")))))
     (when (= (length providers) 0)
       ;; TODO: Hint about providers in non-selected modules
-      (error "No eligible provider available for %s"
-             (phony--rule-name interface)))
+      (signal
+       'phony--provider-not-found
+       (list (format "No eligible provider available for %s"
+                     (phony--rule-name interface)))))
     (phony--resolved-rule (car providers))))
 
 (cl-defmethod phony--resolved-rule ((interface phony--interface-rule))
@@ -606,7 +627,7 @@ of diagnostics."
      (list (phony--make-diagnostic
             ;; Emacs 31: error-type
             :type (car e)
-            :message (error-message-string e))))))
+            :message (cadr e))))))
 
 (defun phony--add-rule (rule grammar)
   "Add RULE to GRAMMAR.
@@ -1158,23 +1179,23 @@ If any errors are detected in the grammar, the rules are not exported.
 
 If no rules are defined, this function does nothing."
   (when (phony--get-rules phony--default-grammar)
-    (let* ((prepared-grammar (phony--prepare-grammar phony--default-grammar))
-           (analysis-data (phony--analyze-grammar prepared-grammar)))
+    (let* ((prepared-grammar (phony--prepare-grammar phony--default-grammar)))
       (if (not (phony--grammar-p prepared-grammar))
           (progn (dolist (diagnostic prepared-grammar)
                    (display-warning
                     'phony (phony--diagnostic-message diagnostic)))
                  (display-warning
                   'phony "Grammar contains errors, not exporting"))
-        (when (and (not noninteractive)
-                   (not (server-running-p))
-                   (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
-          (server-start))
-        (cancel-function-timers #'phony--sync-state)
-        (run-with-idle-timer 0.1 t #'phony--sync-state)
-        (funcall phony-export-function analysis-data)
-        (phony--export-dictionaries prepared-grammar)
-        (setq phony--exported-grammar prepared-grammar)))))
+        (let ((analysis-data (phony--analyze-grammar prepared-grammar)))
+          (when (and (not noninteractive)
+                     (not (server-running-p))
+                     (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
+            (server-start))
+          (cancel-function-timers #'phony--sync-state)
+          (run-with-idle-timer 0.1 t #'phony--sync-state)
+          (funcall phony-export-function analysis-data)
+          (phony--export-dictionaries prepared-grammar)
+          (setq phony--exported-grammar prepared-grammar))))))
 
 (defun phony--debounce (f &rest args)
   "Debounce the invocation of F by waiting until next idle.
