@@ -1017,12 +1017,6 @@ If a rule is produced multiple times, it is duplicated.")
    nil
    :type boolean
    :documentation "Whether the analysis detected errors in the grammar.")
-  (linear-extension
-   nil
-   :type list
-   :documentation "Linear extension of the dependency graph.
-Also commonly known as topological order.  Rules occurring in this list
-are guaranteed to only depend on preceding rules.")
   (grammar
    nil
    :type phony--grammar
@@ -1089,17 +1083,15 @@ emitted and `phony--analysis-data-contains-errors' will be set to t."
                            mentioner-names ", "))))
      undefined-references)))
 
-(defun phony--try-linear-extension-impl (rule visited finished analysis-data)
-  "Find linear extension of dependency graph in ANALYSIS-DATA.
+(defun phony--confirm-dag-impl (rule visited finished analysis-data)
+  "Ensure grammar rule dependencies in ANALYSIS-DATA forms a DAG.
 
 This function assumes that `phony--analysis-data-productions' has been
 populated in ANALYSIS-DATA.
 
-This function populates `phony--analysis-data-linear-extension' in
-ANALYSIS-DATA.  If a cycle is detected
-`phony--analysis-data-contains-errors' is set to t and the cycle is
-returned without visiting any more rules.  Otherwise, this function
-returns nil.
+If a cycle is detected `phony--analysis-data-contains-errors' is set to
+t and the cycle is returned without visiting any more rules.  Otherwise,
+this function returns nil.
 
 RULE is the currently visited rule.  VISITED is a hash table of the
 already visited rules.  FINISHED is a hash table of rules that have been
@@ -1114,7 +1106,7 @@ its children, and to FINISHED afterwards."
 
       (puthash rule t visited)
       (seq-doseq (dependency (gethash rule dependencies))
-        (when-let* ((path (phony--try-linear-extension-impl
+        (when-let* ((path (phony--confirm-dag-impl
                            dependency visited finished analysis-data)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
@@ -1122,28 +1114,25 @@ its children, and to FINISHED afterwards."
             (cl-return (cons rule path)))))
 
       (puthash rule t finished)
-      (push rule (oref analysis-data linear-extension))
       (cl-return nil))))
 
-(cl-defun phony--try-linear-extension (analysis-data grammar)
-  "Try to construct the linear extension of GRAMMAR's dependency graph.
+(cl-defun phony--analysis-confirm-dag (analysis-data grammar)
+  "Ensure rule dependencies of GRAMMAR forms a DAG.
 
 This function assumes that `phony--analysis-data-productions' has been
 populated in ANALYSIS-DATA.
 
 If it is not possible to create a linear extension because of a cycle,
 `phony--analysis-data-cycle' of ANALYSIS-DATA is set to that cycle and
-`phony--analysis-data-contains-errors' is set to t.  Otherwise,
-`phony--analysis-data-linear-extension' is populated with a valid linear
-extension."
+`phony--analysis-data-contains-errors' is set to t."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
-      (when-let* ((cycle (phony--try-linear-extension-impl
+      (when-let* ((cycle (phony--confirm-dag-impl
                           rule visited finished
                           analysis-data)))
         (oset analysis-data cycle (seq-map #'phony--rule-name cycle))
-        (cl-return-from phony--try-linear-extension)))))
+        (cl-return-from phony--analysis-confirm-dag)))))
 
 (defvar phony--last-analysis nil
   "Results of the last performed analysis.")
@@ -1153,14 +1142,10 @@ extension."
 
 This returns a `phony--analysis-data' structure populated with the
 results of the analysis."
-  ;; TODO: Make this side-effect free and move definition to
-  ;; phony--grammar-analysis.
+  ;; TODO: Get rid of this mess
   (let ((analysis-data (phony--make-analysis-data)))
     (phony--populate-dependency-graph analysis-data grammar)
-    (phony--try-linear-extension analysis-data grammar)
-    (setf (phony--analysis-data-linear-extension analysis-data)
-          (reverse
-           (phony--analysis-data-linear-extension analysis-data)))
+    (phony--analysis-confirm-dag analysis-data grammar)
     (when-let* ((cycle (phony--analysis-data-cycle analysis-data)))
       (display-warning 'phony (concat "Cycle found: "
                                       (string-join
