@@ -360,50 +360,85 @@ If there is no parse, an error is thrown."
 (ert-deftest phony-interface-cycle-detection ()
   "Cyclic interfaces error."
   (phony-test
-   (phony-define-interface number
-     :provides number)
-   (phony-defun double ("double" number)
-     (* 2 number))
-   (phony-test-should-have-diagnostics phony--interface-cycle)))
+    (phony-define-interface number
+      :provides number)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics phony--interface-cycle)))
 
 (ert-deftest phony-interface-default-cycle-detection ()
   "Cyclic interface defaults error."
   (phony-test
-   (phony-define-interface number
-     :default number)
-   (phony-defun double ("double" number)
-     (* 2 number))
-   (phony-test-should-have-diagnostics phony--interface-cycle)))
+    (phony-define-interface number
+      :default number)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics phony--interface-cycle)))
+
+(ert-deftest phony-interface-undefined-default ()
+  "Undefined defaults error."
+  (phony-test
+    (phony-define-interface number
+      :default some-number)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics phony--undefined-interface-default)))
+
+(ert-deftest phony-interface-undefined-default-unreachable ()
+  "Undefined defaults do not error when interface is unreachable."
+  (phony-test
+    (phony-define-interface number
+      :default some-number)
+    (phony-defun double ("double two")
+      (* 2 2))
+
+    (phony-test-should-have-diagnostics)))
+
+(ert-deftest phony-interface-undefined-default-unsued ()
+  "Undefined defaults do not error when unused."
+  (phony-test
+    (phony-define-interface number
+      :default some-number)
+    (phony-defun three "three"
+      :provides number
+      3)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics)))
 
 (ert-deftest phony-interface-uses-selected-provider ()
   "Only the selected provider is used for interface."
   (phony-test
-   (phony-define-module number-module)
-   (phony-define-interface number
-     :module number-module)
-   (phony-define-module three-module)
-   (phony-define-module five-module)
+    (phony-define-module number-module)
+    (phony-define-interface number
+      :module number-module)
+    (phony-define-module three-module)
+    (phony-define-module five-module)
 
-   (phony-defun three "three"
-     :module three-module
-     :provides number
-     3)
-   (phony-defun five "five"
-     :module five-module
-     :provides number
-     5)
-   (phony-defun double ("double" number)
-     (* 2 number))
+    (phony-defun three "three"
+      :module three-module
+      :provides number
+      3)
+    (phony-defun five "five"
+      :module five-module
+      :provides number
+      5)
+    (phony-defun double ("double" number)
+      (* 2 number))
 
-   (phony-provide-from number-module three-module)
-   (phony--export-all)
-   (should (= (phony-test--evaluate "double three") 6))
-   (should-error (phony-test--evaluate "double five"))
+    (phony-provide-from number-module three-module)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "double three") 6))
+    (should-error (phony-test--evaluate "double five"))
 
-   (phony-provide-from number-module five-module)
-   (phony--export-all)
-   (should-error (phony-test--evaluate "double three"))
-   (should (= (phony-test--evaluate "double five") 10))))
+    (phony-provide-from number-module five-module)
+    (phony--export-all)
+    (should-error (phony-test--evaluate "double three"))
+    (should (= (phony-test--evaluate "double five") 10))))
 
 (ert-deftest phony-interface-selected-vs-user-provider ()
   "User providers are preferred over module providers."

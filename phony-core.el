@@ -442,8 +442,16 @@ module from rules in disabled modules."
               'phony--grammar-error)
 
 (define-error 'phony--provider-not-found
-              "No provider found for %s"
+              "No provider found"
               'phony--grammar-error)
+
+(define-error 'phony--undefined-rule
+              "Undefined rule"
+              'phony--grammar-error)
+
+(define-error 'phony--undefined-interface-default
+              "Undefined default parameter to interface"
+              'phony--undefined-rule)
 
 (defun phony--detect-interface-cycles (grammar)
   "Error if there is an interface cycle in GRAMMAR."
@@ -562,27 +570,31 @@ If the resolution fails or there is no default, this returns nil."
       (setq providers user-providers))
     ;; :default provider has lowest priority
     (unless providers
-      (when-let* ((default-name (phony--interface-rule-default interface))
-                  (default (phony--interface-default-resolved interface)))
-        (unless default
-          ;; TODO: Factor out error reporting
-          (error "The default provider `%s' for interface %s is not defined"
-                 default-name (phony--rule-name interface)))
-        (setq providers (list default))))
+      (when-let* ((default-name (phony--interface-rule-default interface)))
+        (let ((default (phony--interface-default-resolved interface)))
+          (unless default
+            (signal
+             'phony--undefined-interface-default
+             (list
+              (format "The default provider `%s' for interface `%s' is not defined"
+                      default-name
+                      (phony--rule-name interface)))))
+          (setq providers (list default)))))
     (when (> (length providers) 1)
       (signal
        'phony--ambiguous-interface
-       (list (format "More than one eligible provider available for %s\nProviders: %s"
-                     (phony--rule-name interface)
-                     (mapconcat
-                      (lambda (provider) (symbol-name (phony--rule-name provider)))
-                      providers
-                      ", ")))))
+       (list
+        (format "More than one eligible provider available for interface `%s'\nProviders: `%s'"
+                (phony--rule-name interface)
+                (mapconcat
+                 (lambda (provider) (symbol-name (phony--rule-name provider)))
+                 providers
+                 ", ")))))
     (when (= (length providers) 0)
       ;; TODO: Hint about providers in non-selected modules
       (signal
        'phony--provider-not-found
-       (list (format "No eligible provider available for %s"
+       (list (format "No eligible provider available for interface `%s'"
                      (phony--rule-name interface)))))
     (phony--resolved-rule (car providers))))
 
