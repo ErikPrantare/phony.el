@@ -13,7 +13,7 @@
           (phony--prepare-grammar phony--default-grammar))
          (utterances '("bring air to boff"
                        "go up twice"
-                       "swap air and boff and plex and yank outside to its outside outside")))
+                       "swap air and boff and plex and yank outside with its outside outside")))
     ;; cold time benchmark
     (message "Cold time benchmark:")
     (dolist (utterance utterances)
