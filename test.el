@@ -38,7 +38,6 @@ exporters do nothing, and export request debounce is turned off."
          (phony--dictionary-export-function #'ignore)
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
-         (phony--last-analysis nil)
          (phony-parser--literal-normalizer #'identity))
      (unwind-protect
          (progn

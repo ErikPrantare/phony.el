@@ -1114,9 +1114,6 @@ If it is not possible to create a linear extension because of a cycle,
         (oset analysis-data cycle (seq-map #'phony--rule-name cycle))
         (cl-return-from phony--analysis-confirm-dag)))))
 
-(defvar phony--last-analysis nil
-  "Results of the last performed analysis.")
-
 (defun phony--analyze-grammar (grammar)
   "Analyze GRAMMAR.
 
@@ -1131,7 +1128,6 @@ results of the analysis."
                                       (string-join
                                        (seq-map #'symbol-name cycle)
                                        " -> "))))
-    (setq phony--last-analysis analysis-data)
     (setf (phony--analysis-data-grammar analysis-data) grammar)
     analysis-data))
 
