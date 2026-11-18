@@ -615,25 +615,34 @@ If there is no parse, an error is thrown."
 (ert-deftest phony-interface-default-provider-vs-user-provider ()
   "Interface default providers are lower priority than user providers."
   (phony-test
-   (phony-define-module interface-module)
-   (phony-define-interface number
-     :default three
-     :module interface-module)
+    (phony-define-module interface-module)
+    (phony-define-interface number
+      :default three
+      :module interface-module)
 
-   (phony-defun three "three"
-     :provides number
-     :module interface-module
-     3)
-   (phony-defun five "five"
-     :provides number
-     5)
+    (phony-defun three "three"
+      :provides number
+      :module interface-module
+      3)
+    (phony-defun five "five"
+      :provides number
+      5)
 
-   (phony-defun sum ("double" number)
-     (* 2 number))
+    (phony-defun sum ("double" number)
+      (* 2 number))
 
-   (phony--export-all)
-   (should (= (phony-test--evaluate "double five") 10))
-   (should-error (phony-test--evaluate "double three"))))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "double five") 10))
+    (should-error (phony-test--evaluate "double three"))))
+
+(ert-deftest phony-cyclic-dependency-diagnostic ()
+  "Cyclic dependencies generate diagnostics."
+  (phony-test
+    (phony-defun some-word ((word another-word))
+      word)
+    (phony-defun another-word ((word some-word))
+      word)
+    (phony-test-should-have-diagnostics phony--dependency-cycle)))
 
 (ert-deftest phony-builtin-word ()
   "Word builtins parse."

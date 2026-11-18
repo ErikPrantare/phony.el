@@ -451,9 +451,13 @@ module from rules in disabled modules."
 
 (define-error 'phony--grammar-error "Error in grammar")
 
+(define-error 'phony--dependency-cycle
+              "Cycle in dependencies"
+              'phony--grammar-error)
+
 (define-error 'phony--interface-cycle
               "Cycle in interfaces"
-              'phony--grammar-error)
+              'phony--dependency-cycle)
 
 (define-error 'phony--ambiguous-interface
               "More than one candidate provider"
@@ -654,6 +658,9 @@ of diagnostics."
         (setq prepared (phony--copy-grammar prepared))
         (phony--canonicalize-grammar prepared)
         (phony-ag--initialize prepared)
+        ;; Put here for now, just to route all grammar errors through
+        ;; the same machinery.
+        (phony--analyze-grammar prepared)
         prepared)
     (phony--grammar-error
      (list (phony--make-diagnostic
@@ -1025,10 +1032,6 @@ rule types.
    :documentation "Hash table mapping a rule to a list of rules it is a submatch of.
 A producer of a rule is a rule whose match includes this rule's match.
 If a rule is produced multiple times, it is duplicated.")
-  (cycle
-   nil
-   :type list
-   :documentation "If non-nil, a sequence of rule names forming a dependency cycle.")
   (grammar
    nil
    :type phony--grammar
@@ -1043,33 +1046,17 @@ in the returned list."
   (gethash rule (phony--analysis-data-producers analysis-data)))
 
 (defun phony--populate-dependency-graph (analysis-data grammar)
-  "Populate the dependency graph of ANALYSIS-DATA from GRAMMAR.
-
-If an undefined rule is mentioned in some pattern, a warning will be
-emitted."
-  (let ((producers (make-hash-table))
-        (undefined-references (make-hash-table)))
+  "Populate the dependency graph of ANALYSIS-DATA from GRAMMAR."
+  (let ((producers (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
       (puthash rule '() producers))
     (seq-doseq (rule (phony--get-rules grammar))
       (seq-doseq (reference (phony--products rule))
-        (if-let* ((reference-rule (phony--get-rule reference grammar)))
-            (progn
-              (push rule (gethash reference-rule producers)))
-          (cl-pushnew (phony--rule-name rule)
-                      (gethash reference undefined-references)))))
-    (oset analysis-data producers producers)
-    (maphash
-     (lambda (name mentioner-names)
-       (display-warning
-        'phony
-        (format "Rule %S is not defined (required by %s)"
-                name
-                (mapconcat (lambda (n) (format "%S" n))
-                           mentioner-names ", "))))
-     undefined-references)))
+        (when-let* ((reference-rule (phony--get-rule reference grammar)))
+          (push rule (gethash reference-rule producers)))))
+    (oset analysis-data producers producers)))
 
-(defun phony--confirm-dag-impl (rule visited finished)
+(defun phony--find-dependency-cycle-impl (rule visited finished)
   "Ensure grammar rule dependencies forms a DAG.
 
 If a cycle is detected it is returned without visiting any more rules.
@@ -1091,7 +1078,7 @@ its children, and to FINISHED afterwards."
 
       (puthash rule t visited)
       (seq-doseq (dependency dependencies)
-        (when-let* ((path (phony--confirm-dag-impl
+        (when-let* ((path (phony--find-dependency-cycle-impl
                            dependency visited finished)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
@@ -1101,33 +1088,31 @@ its children, and to FINISHED afterwards."
       (puthash rule t finished)
       (cl-return nil))))
 
-(cl-defun phony--analysis-confirm-dag (analysis-data grammar)
-  "Ensure rule dependencies of GRAMMAR forms a DAG.
-
-If it is not possible to create a linear extension because of a cycle,
-`phony--analysis-data-cycle' of ANALYSIS-DATA is set to that cycle."
+(cl-defun phony--find-dependency-cycle (grammar)
+  "Return dependency cycle in GRAMMAR if it exists."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
-      (when-let* ((cycle (phony--confirm-dag-impl
-                          rule visited finished)))
-        (oset analysis-data cycle (seq-map #'phony--rule-name cycle))
-        (cl-return-from phony--analysis-confirm-dag)))))
+      (when-let* ((cycle (phony--find-dependency-cycle-impl rule visited finished)))
+        (cl-return-from phony--find-dependency-cycle
+          (seq-map #'phony--rule-name cycle))))
+    nil))
 
 (defun phony--analyze-grammar (grammar)
   "Analyze GRAMMAR.
 
-This returns a `phony--analysis-data' structure populated with the
-results of the analysis."
+This signals `phony--dependency-cycle' if there is a dependency cycle."
   ;; TODO: Get rid of this mess
   (let ((analysis-data (phony--make-analysis-data)))
     (phony--populate-dependency-graph analysis-data grammar)
-    (phony--analysis-confirm-dag analysis-data grammar)
-    (when-let* ((cycle (phony--analysis-data-cycle analysis-data)))
-      (display-warning 'phony (concat "Cycle found: "
-                                      (string-join
-                                       (seq-map #'symbol-name cycle)
-                                       " -> "))))
+    (when-let* ((cycle (phony--find-dependency-cycle grammar)))
+      (signal
+       'phony--dependency-cycle
+       (list
+        (concat "Cycle found: "
+                (string-join
+                 (seq-map #'symbol-name cycle)
+                 " -> ")))))
     (setf (phony--analysis-data-grammar analysis-data) grammar)
     analysis-data))
 
