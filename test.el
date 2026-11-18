@@ -92,7 +92,7 @@ given by DIAGNOSTIC-TYPES."
            (phony--dictionary-export-function
             (lambda (_grammar) (cl-incf dictionary-export-count)))
            (phony-export-function
-            (lambda (_analysis-data) (cl-incf rule-export-count))))
+            (lambda (_grammar) (cl-incf rule-export-count))))
       (phony-mode 1)
       (phony-define-dictionary test-dict
         '(("alpha" . 1)))
@@ -104,7 +104,7 @@ given by DIAGNOSTIC-TYPES."
   (phony-test
     (let* ((rule-export-count 0)
            (phony-export-function
-            (lambda (_analysis-data) (cl-incf rule-export-count))))
+            (lambda (_grammar) (cl-incf rule-export-count))))
       (phony-mode 1)
       (phony-define-open-rule test-open-rule)
       (should (= rule-export-count 1)))))
@@ -114,7 +114,7 @@ given by DIAGNOSTIC-TYPES."
   (phony-test
     (let* ((rule-export-count 0)
            (phony-export-function
-            (lambda (_analysis-data) (cl-incf rule-export-count))))
+            (lambda (_grammar) (cl-incf rule-export-count))))
       (phony-mode 1)
       (cl-letf (((symbol-function 'server-running-p) #'always))
         (phony-defun test-procedure-rule "alpha"
@@ -132,7 +132,7 @@ given by DIAGNOSTIC-TYPES."
            (phony--dictionary-export-function
             (lambda (_grammar) (cl-incf dictionary-export-count)))
            (phony-export-function
-            (lambda (_analysis-data) (cl-incf rule-export-count))))
+            (lambda (_grammar) (cl-incf rule-export-count))))
       (phony-dictionary-put "beta" 'test-dict 2)
       (should (= dictionary-export-count 1))
       (should (= rule-export-count 0))

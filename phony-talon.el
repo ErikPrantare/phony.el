@@ -273,19 +273,19 @@ This function creates .talon and .py files in the output directory."
         (phony-talon--insert-capture-preamble rule analysis-data)
         (phony-talon--insert-python rule)))))
 
-(defun phony-talon-export (analysis-data)
-  ;; checkdoc-params: (analysis-data)
-  "Generate all Talon files from the current phony grammar.
+(defun phony-talon-export (grammar)
+  "Generate Talon configuration for detecting utterances of GRAMMAR.
 
 This function creates .talon and .py files in the output directory and
 symlinks them into ~/.talon/user/."
-  (phony-talon--generate-configuration analysis-data)
-  (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
-    (if (or (not (file-exists-p link-path))
-            (file-symlink-p link-path))
-        (make-symbolic-link (phony-talon--output-path)
-                            link-path t)
-      (warn "Path already exists and is not preexistent symlink: %S" link-path))))
+  (let ((analysis-data (phony--grammar-analysis grammar)))
+    (phony-talon--generate-configuration analysis-data)
+    (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
+      (if (or (not (file-exists-p link-path))
+              (file-symlink-p link-path))
+          (make-symbolic-link (phony-talon--output-path)
+                              link-path t)
+        (warn "Path already exists and is not preexistent symlink: %S" link-path)))))
 
 (provide 'phony-talon)
 ;;; phony-talon.el ends here
