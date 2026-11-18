@@ -1025,39 +1025,27 @@ given by SUCCESSOR-FUNCTION."
         (push predecessor (gethash successor graph))))
     graph))
 
+(phony-ag--define-synthesized phony--get-producers-table (grammar)
+  "Return hash table mapping rules to rules that produce them in GRAMMAR."
+  (phony--inverse-rule-graph
+   grammar
+   (lambda (rule)
+     (seq-map (lambda (product) (phony--get-rule product grammar))
+              (phony--products rule)))))
+
 (cl-defstruct (phony--analysis-data
                (:constructor nil)
                (:constructor phony--make-analysis-data))
   "Storage struct for results of statically analyzing the grammar."
-  (producers
-   (make-hash-table)
-   :type hash-table
-   :documentation "Hash table mapping a rule to a list of rules it is a submatch of.
-A producer of a rule is a rule whose match includes this rule's match.
-If a rule is produced multiple times, it is duplicated.")
   (grammar
    nil
    :type phony--grammar
    :documentation "The grammar that was analyzed."))
 
-(defun phony--get-producers (analysis-data rule)
-  ;; checkdoc-params: (analysis-data)
-  "Get list of rules whose match includes RULE as a submatch.
-
-If a rule includes RULE multiple times, it will also occur as many times
-in the returned list."
-  (gethash rule (phony--analysis-data-producers analysis-data)))
-
-(defun phony--populate-dependency-graph (analysis-data grammar)
-  "Populate the dependency graph of ANALYSIS-DATA from GRAMMAR."
-  (let ((producers (make-hash-table)))
-    (seq-doseq (rule (phony--get-rules grammar))
-      (puthash rule '() producers))
-    (seq-doseq (rule (phony--get-rules grammar))
-      (seq-doseq (reference (phony--products rule))
-        (when-let* ((reference-rule (phony--get-rule reference grammar)))
-          (push rule (gethash reference-rule producers)))))
-    (oset analysis-data producers producers)))
+(defun phony--get-producers (rule)
+  "Get list of rules whose match includes RULE as a submatch."
+  (gethash rule (phony--get-producers-table
+                 (phony--containing-grammar rule))))
 
 (defun phony--find-dependency-cycle-impl (rule visited finished)
   "Ensure grammar rule dependencies forms a DAG.
@@ -1107,7 +1095,6 @@ its children, and to FINISHED afterwards."
 This signals `phony--dependency-cycle' if there is a dependency cycle."
   ;; TODO: Get rid of this mess
   (let ((analysis-data (phony--make-analysis-data)))
-    (phony--populate-dependency-graph analysis-data grammar)
     (when-let* ((cycle (phony--find-dependency-cycle grammar)))
       (signal
        'phony--dependency-cycle
