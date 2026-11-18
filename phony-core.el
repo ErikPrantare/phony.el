@@ -1013,10 +1013,6 @@ If a rule is produced multiple times, it is duplicated.")
    nil
    :type list
    :documentation "If non-nil, a sequence of rule names forming a dependency cycle.")
-  (contains-errors
-   nil
-   :type boolean
-   :documentation "Whether the analysis detected errors in the grammar.")
   (grammar
    nil
    :type phony--grammar
@@ -1038,24 +1034,11 @@ If a rule includes RULE multiple times, it will also occur as many times
 in the returned list."
   (gethash rule (phony--analysis-data-producers analysis-data)))
 
-(defun phony--maximum-producer-multiplicity (analysis-data rule)
-  ;; checkdoc-params: (analysis-data)
-  "Return maximum amount of times RULE is produced by a single rule."
-  (thread-last
-    (phony--get-producers analysis-data rule)
-    (seq-map #'phony--rule-name)
-    (seq-map #'symbol-name)
-    (seq-sort #'string<)
-    (seq-group-by #'identity)
-    (seq-map #'cdr)
-    (seq-map #'length)
-    (apply #'max 0)))
-
 (defun phony--populate-dependency-graph (analysis-data grammar)
   "Populate the dependency graph of ANALYSIS-DATA from GRAMMAR.
 
 If an undefined rule is mentioned in some pattern, a warning will be
-emitted and `phony--analysis-data-contains-errors' will be set to t."
+emitted."
   (let ((productions (make-hash-table))
         (producers (make-hash-table))
         (undefined-references (make-hash-table)))
@@ -1069,8 +1052,7 @@ emitted and `phony--analysis-data-contains-errors' will be set to t."
               (push reference-rule (gethash rule productions))
               (push rule (gethash reference-rule producers)))
           (cl-pushnew (phony--rule-name rule)
-                      (gethash reference undefined-references))
-          (oset analysis-data contains-errors t))))
+                      (gethash reference undefined-references)))))
     (oset analysis-data productions productions)
     (oset analysis-data producers producers)
     (maphash
@@ -1089,9 +1071,8 @@ emitted and `phony--analysis-data-contains-errors' will be set to t."
 This function assumes that `phony--analysis-data-productions' has been
 populated in ANALYSIS-DATA.
 
-If a cycle is detected `phony--analysis-data-contains-errors' is set to
-t and the cycle is returned without visiting any more rules.  Otherwise,
-this function returns nil.
+If a cycle is detected it is returned without visiting any more rules.
+Otherwise, this function returns nil.
 
 RULE is the currently visited rule.  VISITED is a hash table of the
 already visited rules.  FINISHED is a hash table of rules that have been
@@ -1123,8 +1104,7 @@ This function assumes that `phony--analysis-data-productions' has been
 populated in ANALYSIS-DATA.
 
 If it is not possible to create a linear extension because of a cycle,
-`phony--analysis-data-cycle' of ANALYSIS-DATA is set to that cycle and
-`phony--analysis-data-contains-errors' is set to t."
+`phony--analysis-data-cycle' of ANALYSIS-DATA is set to that cycle."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
@@ -1150,8 +1130,7 @@ results of the analysis."
       (display-warning 'phony (concat "Cycle found: "
                                       (string-join
                                        (seq-map #'symbol-name cycle)
-                                       " -> ")))
-      (setf (phony--analysis-data-contains-errors analysis-data) t))
+                                       " -> "))))
     (setq phony--last-analysis analysis-data)
     (setf (phony--analysis-data-grammar analysis-data) grammar)
     analysis-data))
