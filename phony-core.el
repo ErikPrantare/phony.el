@@ -279,13 +279,12 @@ A rule is always active if it is global."
 (phony-ag--define-synthesized phony--grammar-contributions-lookup (grammar)
   "Return hash table mapping open rules of GRAMMAR to a list of contributors.
 
-The table operates on names."
-  (let ((lookup (make-hash-table :test 'eq)))
-    (dolist (rule (phony--get-rules grammar))
-      (dolist (contribution (phony--rule-contributes-to rule))
-        (push (phony--rule-name rule)
-              (gethash contribution lookup))))
-    lookup))
+The table operates on rule objects."
+  (phony--inverse-rule-graph
+   grammar
+   (lambda (rule)
+     (seq-map (lambda (name) (phony--get-rule name grammar))
+              (phony--rule-contributes-to rule)))))
 
 (phony-ag--define-synthesized phony--open-rule-effective-alternatives (open)
   "Return list of alternatives for OPEN, including contributions."
@@ -295,9 +294,11 @@ The table operates on names."
     #'string<
     (append
      (phony--open-rule-alternatives open)
-     (gethash
-      (phony--rule-name open)
-      (phony--grammar-contributions-lookup (phony--containing-grammar open)))))))
+     (seq-map #'phony--rule-name
+              (gethash
+               open
+               (phony--grammar-contributions-lookup
+                (phony--containing-grammar open))))))))
 
 (defun phony--internalize-contributions (grammar)
   "Insert all contributions to open rules as alternatives.
@@ -538,25 +539,13 @@ This function also checks for contributions to non-existent rules."
           (error "Rule `%s' contributes to non-open rule `%s'"
                  (phony--rule-name rule) contribution))))))
 
-(phony-ag--define-synthesized phony--provider-alist (grammar)
-  "Return alist from providers to their provided interfaces in GRAMMAR.
-
-Keys and values are rule objects."
-  (seq-keep
+(phony-ag--define-synthesized phony--interface-provider-candidates-table (grammar)
+  "Return hash table mapping interfaces to the providers of it in GRAMMAR."
+  (phony--inverse-rule-graph
+   grammar
    (lambda (rule)
-     (and (phony--rule-provides rule)
-          (cons rule (phony--get-rule (phony--rule-provides rule) grammar))))
-   (phony--get-rules grammar)))
-
-(phony-ag--define-synthesized phony--interface-provider-candidate-alist (grammar)
-  "Return alist mapping interfaces to the providers of it in GRAMMAR."
-  (let* ((inverse-provider-alist
-          (seq-map (lambda (entry) (cons (cdr entry) (car entry)))
-                   (phony--provider-alist grammar)))
-         (grouped (seq-group-by #'car inverse-provider-alist)))
-    (seq-map (lambda (entry)
-               (cons (car entry) (seq-map #'cdr (cdr entry))))
-             grouped)))
+     (and-let* ((provides (phony--rule-provides rule)))
+       (list (phony--get-rule provides grammar))))))
 
 (phony-ag--define-synthesized phony--interface-provider-candidates (interface)
   "Return candidates for INTERFACE."
@@ -568,7 +557,7 @@ Keys and values are rule objects."
           (phony--containing-module candidate)
           (phony--containing-grammar interface))))
    (map-elt
-    (phony--interface-provider-candidate-alist
+    (phony--interface-provider-candidates-table
      (phony--containing-grammar interface))
     interface)))
 
@@ -1021,6 +1010,20 @@ rule types.
       (append (list :name ',name
                     :documentation ,documentation)
               ',arguments))))
+
+(defun phony--inverse-rule-graph (grammar successor-function)
+  "Return a hash table for an inverse rule graph for GRAMMAR.
+
+SUCCESSOR-FUNCTION encodes the graph.  It takes a rule as input and
+returns a list of the successors.
+
+This function returns a hash table corresponding to the inverse graph
+given by SUCCESSOR-FUNCTION."
+  (let ((graph (make-hash-table :test 'eq)))
+    (dolist (predecessor (phony--get-rules grammar))
+      (dolist (successor (funcall successor-function predecessor))
+        (push predecessor (gethash successor graph))))
+    graph))
 
 (cl-defstruct (phony--analysis-data
                (:constructor nil)
