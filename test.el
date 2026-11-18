@@ -330,6 +330,23 @@ If there is no parse, an error is thrown."
     (should (= (phony-test--evaluate "add five and five") 10))
     (should (= (phony-test--evaluate "add three and three") 6))))
 
+(ert-deftest phony-open-rule-alternatives ()
+  "Given alternatives work."
+  (phony-test
+    (phony-define-open-rule number
+      :alternatives (three))
+    (phony-defun three "three"
+      3)
+    (phony-defun five "five"
+      :contributes-to number
+      5)
+    (phony-defun add ("add" (first number) "and" (second number))
+      (+ first second))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "add five and three") 8))
+    (should (= (phony-test--evaluate "add five and five") 10))
+    (should (= (phony-test--evaluate "add three and three") 6))))
+
 (ert-deftest phony-interface-uses-provider ()
   "Providers are used in place of interfaces."
   (phony-test

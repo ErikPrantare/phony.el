@@ -276,18 +276,36 @@ contribute to open rules."
 A rule is always active if it is global."
   (memq 'global (phony--rule-modes rule)))
 
+(phony-ag--define-synthesized phony--grammar-contributions-lookup (grammar)
+  "Return hash table mapping open rules of GRAMMAR to a list of contributors.
+
+The table operates on names."
+  (let ((lookup (make-hash-table :test 'eq)))
+    (dolist (rule (phony--get-rules grammar))
+      (dolist (contribution (phony--rule-contributes-to rule))
+        (push (phony--rule-name rule)
+              (gethash contribution lookup))))
+    lookup))
+
+(phony-ag--define-synthesized phony--open-rule-effective-alternatives (open)
+  "Return list of alternatives for OPEN, including contributions."
+  (seq-sort
+   #'string<
+   (append
+    (phony--open-rule-alternatives open)
+    (gethash
+     (phony--rule-name open)
+     (phony--grammar-contributions-lookup (phony--containing-grammar open))))))
+
 (defun phony--internalize-contributions (grammar)
   "Insert all contributions to open rules as alternatives.
 
 This mutates GRAMMAR so that all contributions are directly reflected by
 the `phony--open-rule-alternatives' field."
-  (maphash
-   (lambda (name rule)
-     (seq-doseq (contribution (phony--rule-contributes-to rule))
-       (push name (phony--open-rule-alternatives
-                   (phony--get-rule contribution grammar))))
-     (setf (phony--rule-contributes-to rule) nil))
-   (phony--grammar-rules grammar)))
+  (dolist (rule (phony--get-rules grammar))
+    (when (phony--open-rule-p rule)
+      (setf (phony--open-rule-alternatives rule)
+            (phony--open-rule-effective-alternatives rule)))))
 
 (cl-defgeneric phony--substitute-in-rule (rule from to)
   "Change references to rule FROM to rule TO in RULE.
@@ -627,7 +645,9 @@ of diagnostics."
         ;; rewrite.  This will slowly be scrubbed from mutation.
         (phony--seal-disabled-modules prepared)
         (phony--detect-non-open-contributions prepared)
+        (phony-ag--initialize prepared)
         (phony--internalize-contributions prepared)
+        (setq prepared (phony--copy-grammar prepared))
         (phony-ag--initialize prepared)
         (phony--detect-interface-cycles prepared)
         (phony--remove-unreachable-resolve-interfaces prepared)
@@ -914,6 +934,9 @@ rule types.
   "Define an open rule from ARGUMENTS.
 
 See documentation of `phony-define-open-rule' for more information."
+  (when-let* ((alternatives (plist-get arguments :alternatives)))
+    (unless (and (listp alternatives) (not (eq (car alternatives) 'quote)))
+      (error ":alternatives keyword argument must be an unquoted list")))
   (phony--add-new-rule #'phony--make-open-rule arguments)
   (phony-request-export)
   (map-elt arguments :name))
