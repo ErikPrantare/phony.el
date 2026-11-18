@@ -647,9 +647,7 @@ of diagnostics."
         (setq prepared (phony--copy-grammar prepared))
         (phony--canonicalize-grammar prepared)
         (phony-ag--initialize prepared)
-        ;; Put here for now, just to route all grammar errors through
-        ;; the same machinery.
-        (phony--analyze-grammar prepared)
+        (phony--detect-dependency-cycle prepared)
         prepared)
     (phony--grammar-error
      (list (phony--make-diagnostic
@@ -1033,15 +1031,6 @@ given by SUCCESSOR-FUNCTION."
      (seq-map (lambda (product) (phony--get-rule product grammar))
               (phony--products rule)))))
 
-(cl-defstruct (phony--analysis-data
-               (:constructor nil)
-               (:constructor phony--make-analysis-data))
-  "Storage struct for results of statically analyzing the grammar."
-  (grammar
-   nil
-   :type phony--grammar
-   :documentation "The grammar that was analyzed."))
-
 (defun phony--get-producers (rule)
   "Get list of rules whose match includes RULE as a submatch."
   (gethash rule (phony--get-producers-table
@@ -1079,36 +1068,23 @@ its children, and to FINISHED afterwards."
       (puthash rule t finished)
       (cl-return nil))))
 
-(cl-defun phony--find-dependency-cycle (grammar)
-  "Return dependency cycle in GRAMMAR if it exists."
+(cl-defun phony--detect-dependency-cycle (grammar)
+  "Signal if there is a dependency cycle in GRAMMAR.
+
+The error signalled is `phony--dependency-cycle'."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
       (when-let* ((cycle (phony--find-dependency-cycle-impl rule visited finished)))
-        (cl-return-from phony--find-dependency-cycle
-          (seq-map #'phony--rule-name cycle))))
+        (signal
+         'phony--dependency-cycle
+         (list
+          (concat "Cycle found: "
+                  (string-join
+                   (seq-map #'symbol-name
+                            (seq-map #'phony--rule-name cycle))
+                   " -> "))))))
     nil))
-
-(defun phony--analyze-grammar (grammar)
-  "Analyze GRAMMAR.
-
-This signals `phony--dependency-cycle' if there is a dependency cycle."
-  ;; TODO: Get rid of this mess
-  (let ((analysis-data (phony--make-analysis-data)))
-    (when-let* ((cycle (phony--find-dependency-cycle grammar)))
-      (signal
-       'phony--dependency-cycle
-       (list
-        (concat "Cycle found: "
-                (string-join
-                 (seq-map #'symbol-name cycle)
-                 " -> ")))))
-    (setf (phony--analysis-data-grammar analysis-data) grammar)
-    analysis-data))
-
-(phony-ag--define-synthesized phony--grammar-analysis (grammar)
-  "Return the analysis data for GRAMMAR."
-  (phony--analyze-grammar grammar))
 
 (defcustom phony-export-function 'phony-talon-export
   "Function to be used for exporting spoken rules."
