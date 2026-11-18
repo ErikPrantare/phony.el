@@ -791,8 +791,7 @@ If there is no parse, an error is thrown."
             (phony-defun insert-phrase ("insert" (phrase phony--builtin-phrase))
               (insert phrase))
             (phony--export-all)
-            (phony-talon--generate-configuration
-             (phony--grammar-analysis phony--exported-grammar))
+            (phony-talon--generate-configuration phony--exported-grammar)
             (with-temp-buffer
               (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
                                            (phony-talon--output-path "rules.py")

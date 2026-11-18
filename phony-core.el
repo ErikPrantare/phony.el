@@ -289,13 +289,15 @@ The table operates on names."
 
 (phony-ag--define-synthesized phony--open-rule-effective-alternatives (open)
   "Return list of alternatives for OPEN, including contributions."
-  (seq-sort
-   #'string<
-   (append
-    (phony--open-rule-alternatives open)
-    (gethash
-     (phony--rule-name open)
-     (phony--grammar-contributions-lookup (phony--containing-grammar open))))))
+  ;; TODO: Warn about duplicate :contributes-to and :alternatives
+  (seq-uniq
+   (seq-sort
+    #'string<
+    (append
+     (phony--open-rule-alternatives open)
+     (gethash
+      (phony--rule-name open)
+      (phony--grammar-contributions-lookup (phony--containing-grammar open)))))))
 
 (defun phony--internalize-contributions (grammar)
   "Insert all contributions to open rules as alternatives.
@@ -359,9 +361,7 @@ This function assumes that contributions have been internalized.  See
    (phony--get-rules grammar)))
 
 (defun phony--products (rule)
-  "Return the names of the rules that may occur as submatches of RULE.
-
-This does not resolve interfaces nor contributions to open rules."
+  "Return the names of the rules that may occur as submatches of RULE."
   (cl-typecase rule
     (phony--procedure-rule
      (seq-map #'phony-pattern--rule-name
@@ -369,11 +369,11 @@ This does not resolve interfaces nor contributions to open rules."
                #'phony-pattern--rule-p
                (phony--procedure-rule-pattern rule))))
     (phony--open-rule
-     (phony--open-rule-alternatives rule))
+     (phony--open-rule-effective-alternatives rule))
     (phony--dictionary
      '())
     (phony--interface-rule
-     '())
+     (list (phony--rule-name (phony--resolved-rule rule))))
     (t
      (error "Internal phony error, please submit a bug report: `phony--products' typecase failed for %s"
             rule))))
@@ -1019,13 +1019,6 @@ rule types.
                (:constructor nil)
                (:constructor phony--make-analysis-data))
   "Storage struct for results of statically analyzing the grammar."
-  (productions
-   (make-hash-table)
-   :type hash-table
-   :documentation "Hash table mapping a rule to a list of its submatches.
-A production of a rule is a rule whose match is included in the
-producing rule's match.  If a production is matched multiple times, it
-is duplicated.")
   (producers
    (make-hash-table)
    :type hash-table
@@ -1041,14 +1034,6 @@ If a rule is produced multiple times, it is duplicated.")
    :type phony--grammar
    :documentation "The grammar that was analyzed."))
 
-(defun phony--get-productions (analysis-data rule)
-  ;; checkdoc-params: (analysis-data)
-  "Get list of rules that are submatches of RULE.
-
-If a rule is a submatch multiple times, it will also occur as many times
-in the returned list."
-  (gethash rule (phony--analysis-data-productions analysis-data)))
-
 (defun phony--get-producers (analysis-data rule)
   ;; checkdoc-params: (analysis-data)
   "Get list of rules whose match includes RULE as a submatch.
@@ -1062,21 +1047,17 @@ in the returned list."
 
 If an undefined rule is mentioned in some pattern, a warning will be
 emitted."
-  (let ((productions (make-hash-table))
-        (producers (make-hash-table))
+  (let ((producers (make-hash-table))
         (undefined-references (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
-      (puthash rule '() productions)
       (puthash rule '() producers))
     (seq-doseq (rule (phony--get-rules grammar))
       (seq-doseq (reference (phony--products rule))
         (if-let* ((reference-rule (phony--get-rule reference grammar)))
             (progn
-              (push reference-rule (gethash rule productions))
               (push rule (gethash reference-rule producers)))
           (cl-pushnew (phony--rule-name rule)
                       (gethash reference undefined-references)))))
-    (oset analysis-data productions productions)
     (oset analysis-data producers producers)
     (maphash
      (lambda (name mentioner-names)
@@ -1088,11 +1069,8 @@ emitted."
                            mentioner-names ", "))))
      undefined-references)))
 
-(defun phony--confirm-dag-impl (rule visited finished analysis-data)
-  "Ensure grammar rule dependencies in ANALYSIS-DATA forms a DAG.
-
-This function assumes that `phony--analysis-data-productions' has been
-populated in ANALYSIS-DATA.
+(defun phony--confirm-dag-impl (rule visited finished)
+  "Ensure grammar rule dependencies forms a DAG.
 
 If a cycle is detected it is returned without visiting any more rules.
 Otherwise, this function returns nil.
@@ -1101,7 +1079,10 @@ RULE is the currently visited rule.  VISITED is a hash table of the
 already visited rules.  FINISHED is a hash table of rules that have been
 fully processed.  This function adds RULE to VISITED before recusing to
 its children, and to FINISHED afterwards."
-  (let ((dependencies (oref analysis-data productions)))
+  (let ((dependencies (seq-map
+                       (lambda (name)
+                         (phony--get-rule name (phony--containing-grammar rule)))
+                       (phony--products rule))))
     (cl-block nil
       (when (gethash rule finished)
         (cl-return nil))
@@ -1109,9 +1090,9 @@ its children, and to FINISHED afterwards."
         (cl-return (list rule)))
 
       (puthash rule t visited)
-      (seq-doseq (dependency (gethash rule dependencies))
+      (seq-doseq (dependency dependencies)
         (when-let* ((path (phony--confirm-dag-impl
-                           dependency visited finished analysis-data)))
+                           dependency visited finished)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
               (cl-return path)
@@ -1123,17 +1104,13 @@ its children, and to FINISHED afterwards."
 (cl-defun phony--analysis-confirm-dag (analysis-data grammar)
   "Ensure rule dependencies of GRAMMAR forms a DAG.
 
-This function assumes that `phony--analysis-data-productions' has been
-populated in ANALYSIS-DATA.
-
 If it is not possible to create a linear extension because of a cycle,
 `phony--analysis-data-cycle' of ANALYSIS-DATA is set to that cycle."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
       (when-let* ((cycle (phony--confirm-dag-impl
-                          rule visited finished
-                          analysis-data)))
+                          rule visited finished)))
         (oset analysis-data cycle (seq-map #'phony--rule-name cycle))
         (cl-return-from phony--analysis-confirm-dag)))))
 
