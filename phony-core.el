@@ -374,7 +374,8 @@ This function assumes that contributions have been internalized.  See
     (phony--dictionary
      '())
     (phony--interface-rule
-     (list (phony--rule-name (phony--resolved-rule rule))))
+     (and-let* ((resolved (phony--resolved-rule rule)))
+       (list (phony--rule-name resolved))))
     (t
      (error "Internal phony error, please submit a bug report: `phony--products' typecase failed for %s"
             rule))))
@@ -386,49 +387,46 @@ A rule is a user rule when it is not part of a module.  This is
 interpreted as the rule being part of the user's personal configuration."
   (not (phony--rule-module rule)))
 
-(defun phony--remove-unreachable-resolve-interfaces (grammar)
-  "Remove unreachable rules and replace interfaces with their providers.
-
-This mutates GRAMMAR so that references to an interface rule instead
-reference the provider of the interface.  The interface rules are
-removed from the grammar.  In addition, any rules that cannot be reached
-are removed.
-
-This function assumes `phony--internalize-contributions' has been
-applied to the grammar."
-  ;; Removing unreachables and resolving interfaces must be done as
-  ;; one, because we should only error on unresolved interfaces if
-  ;; they are reachable, but reachability in turn depends on interface
-  ;; resolution.
-  (let* ((worklist (mapcar #'phony--rule-name
-                           (phony--interactive-rules grammar)))
+(phony-ag--define-synthesized phony--reachable-rule-table (grammar)
+  "Return a hash map containing rules mapping to t if reachable in GRAMMAR."
+  (let* ((worklist (phony--interactive-rules grammar))
          (reachable (make-hash-table :test 'eq)))
     (while worklist
-      (let* ((current (pop worklist)))
-        (unless (gethash current reachable)
-          (puthash current current reachable)
-          (dolist (task (phony--products (phony--get-rule current grammar)))
-            (unless (phony--get-rule task grammar)
+      (let ((current-rule (pop worklist)))
+        (unless (gethash current-rule reachable)
+          (puthash current-rule t reachable)
+          (dolist (task-name (phony--products current-rule))
+            (if-let* ((task (phony--get-rule task-name grammar)))
+                (unless (gethash task reachable)
+                  (push task worklist))
+              ;; TODO: Signal in a way that a diagnostic is created.
               (error "Rule `%s' references undefined rule `%s'"
-                     current task))
-            (unless (gethash task reachable)
-              (push task worklist)))
-          (when (phony--interface-rule-p (phony--get-rule current grammar))
-            (when-let* ((provider (phony--interface-resolved-provider
-                                   (phony--get-rule current grammar))))
-              (unless (gethash (phony--rule-name provider) reachable)
-                (push (phony--rule-name provider) worklist)))))))
-    (dolist (rule (phony--get-rules grammar))
-      (let ((name (phony--rule-name rule)))
-        (unless (gethash name reachable)
-          (remhash name (phony--grammar-rules grammar)))))
-    (dolist (interface (seq-filter #'phony--interface-rule-p
-                                   (phony--get-rules grammar)))
-      (let ((provider (phony--interface-resolved-provider interface)))
-        (phony--replace-in-grammar
-         grammar
-         (phony--rule-name interface)
-         (phony--rule-name provider))))))
+                     (phony--rule-name current-rule) task-name))))))
+    reachable))
+
+(phony-ag--define-synthesized phony--rule-reachable-p (rule)
+  "Return t if RULE is reachable."
+  (gethash
+   rule
+   (phony--reachable-rule-table
+    (phony--containing-grammar rule))))
+
+(defun phony--remove-unreachable-rules (grammar)
+  "Remove unreachable rules in GRAMMAR."
+  (dolist (rule (phony--get-rules grammar))
+    (unless (phony--rule-reachable-p rule)
+      (remhash (phony--rule-name rule)
+               (phony--grammar-rules grammar)))))
+
+(defun phony--resolve-interfaces (grammar)
+  "Replace interfaces with their resolved rules in GRAMMAR."
+  (dolist (interface (seq-filter #'phony--interface-rule-p
+                                 (phony--get-rules grammar)))
+    (let ((provider (phony--interface-resolved-provider interface)))
+      (phony--replace-in-grammar
+       grammar
+       (phony--rule-name interface)
+       (phony--rule-name provider)))))
 
 (defun phony--seal-disabled-modules (grammar)
   "Remove external impact of disabled modules in GRAMMAR.
@@ -572,42 +570,68 @@ If the resolution fails or there is no default, this returns nil."
   "Return resolution of RULE."
   rule)
 
+(phony-ag--define-synthesized phony--interface-resolved-provider-or-diagnostic (interface)
+  "Return the resolved provider for INTERFACE.
+
+If it fails to resolve, a diagnostic is returned instead."
+  (cl-block nil
+    (let ((providers (phony--interface-provider-candidates interface)))
+      ;; If rules in the user's configuration provide for the
+      ;; interface, they take precedence.
+      (when-let* ((user-providers (seq-filter #'phony--user-rule-p providers)))
+        (setq providers user-providers))
+      ;; :default provider has lowest priority
+      (unless providers
+        (when-let* ((default-name (phony--interface-rule-default interface)))
+          (let ((default (phony--interface-default-resolved interface)))
+            (unless default
+              (cl-return
+               (phony--make-diagnostic
+                :type 'phony--undefined-interface-default
+                :message
+                (format "The default provider `%s' for interface `%s' is not defined"
+                        default-name
+                        (phony--rule-name interface)))))
+            (setq providers (list default)))))
+      (when (> (length providers) 1)
+        (cl-return
+         (phony--make-diagnostic
+          :type 'phony--ambiguous-interface
+          :message
+          (format "More than one eligible provider available for interface `%s'\nProviders: `%s'"
+                  (phony--rule-name interface)
+                  (mapconcat
+                   (lambda (provider) (symbol-name (phony--rule-name provider)))
+                   providers
+                   ", ")))))
+      (when (= (length providers) 0)
+        ;; TODO: Hint about providers in non-selected modules
+        (cl-return
+         (phony--make-diagnostic
+          :type 'phony--provider-not-found
+          :message
+          (format "No eligible provider available for interface `%s'"
+                  (phony--rule-name interface)))))
+      (phony--resolved-rule (car providers)))))
+
+(defun phony--result-value (result)
+  "Return RESULT if it is not a diagnostic, otherwise nil."
+  (and (not (phony--diagnostic-p result)) result))
+
+(defun phony--result-diagnostic (result)
+  "Return RESULT if it is a diagnostic, otherwise nil."
+  (and (phony--diagnostic-p result) result))
+
 (phony-ag--define-synthesized phony--interface-resolved-provider (interface)
-  "Return the resolved provider for INTERFACE."
-  (let ((providers (phony--interface-provider-candidates interface)))
-    ;; If rules in the user's configuration provide for the
-    ;; interface, they take precedence.
-    (when-let* ((user-providers (seq-filter #'phony--user-rule-p providers)))
-      (setq providers user-providers))
-    ;; :default provider has lowest priority
-    (unless providers
-      (when-let* ((default-name (phony--interface-rule-default interface)))
-        (let ((default (phony--interface-default-resolved interface)))
-          (unless default
-            (signal
-             'phony--undefined-interface-default
-             (list
-              (format "The default provider `%s' for interface `%s' is not defined"
-                      default-name
-                      (phony--rule-name interface)))))
-          (setq providers (list default)))))
-    (when (> (length providers) 1)
-      (signal
-       'phony--ambiguous-interface
-       (list
-        (format "More than one eligible provider available for interface `%s'\nProviders: `%s'"
-                (phony--rule-name interface)
-                (mapconcat
-                 (lambda (provider) (symbol-name (phony--rule-name provider)))
-                 providers
-                 ", ")))))
-    (when (= (length providers) 0)
-      ;; TODO: Hint about providers in non-selected modules
-      (signal
-       'phony--provider-not-found
-       (list (format "No eligible provider available for interface `%s'"
-                     (phony--rule-name interface)))))
-    (phony--resolved-rule (car providers))))
+  "Return the resolved provider for INTERFACE, or nil if resolution fails."
+  (phony--result-value
+   (phony--interface-resolved-provider-or-diagnostic interface)))
+
+(phony-ag--define-synthesized phony--interface-resolved-provider-diagnostics (interface)
+  "Return diagnostics for provider resolution of INTERFACE."
+  (ensure-list
+   (phony--result-diagnostic
+    (phony--interface-resolved-provider-or-diagnostic interface))))
 
 (cl-defmethod phony--resolved-rule ((interface phony--interface-rule))
   "Return resolution of INTERFACE."
@@ -631,29 +655,39 @@ The returned grammar must not be mutated.
 
 If preparation yields any errors, this function instead returns a list
 of diagnostics."
-  (condition-case e
-      (let ((prepared (phony--copy-grammar grammar)))
-        ;; HACK: We re-initialize the ag and clone wherever ag
-        ;; functionality is useful, even though we are performing
-        ;; rewrite.  This will slowly be scrubbed from mutation.
-        (phony--seal-disabled-modules prepared)
-        (phony--detect-non-open-contributions prepared)
-        (phony-ag--initialize prepared)
-        (phony--internalize-contributions prepared)
-        (setq prepared (phony--copy-grammar prepared))
-        (phony-ag--initialize prepared)
-        (phony--detect-interface-cycles prepared)
-        (phony--remove-unreachable-resolve-interfaces prepared)
-        (setq prepared (phony--copy-grammar prepared))
-        (phony--canonicalize-grammar prepared)
-        (phony-ag--initialize prepared)
-        (phony--detect-dependency-cycle prepared)
-        prepared)
-    (phony--grammar-error
-     (list (phony--make-diagnostic
-            ;; Emacs 31: error-type
-            :type (car e)
-            :message (cadr e))))))
+  (cl-block nil
+    (condition-case e
+        (let ((prepared (phony--copy-grammar grammar)))
+          ;; HACK: We re-initialize the ag and clone wherever ag
+          ;; functionality is useful, even though we are performing
+          ;; rewrite.  This will slowly be scrubbed from mutation.
+          (phony--seal-disabled-modules prepared)
+          (phony--detect-non-open-contributions prepared)
+          (phony-ag--initialize prepared)
+          (phony--internalize-contributions prepared)
+          (setq prepared (phony--copy-grammar prepared))
+          (phony-ag--initialize prepared)
+          ;; TODO: Move cycle detection to diagnostics function below
+          (phony--detect-interface-cycles prepared)
+          (when-let* ((interface-resolution-diagnostics
+                       (seq-mapcat (lambda (rule)
+                                     (and (phony--interface-rule-p rule)
+                                          (phony--rule-reachable-p rule)
+                                          (phony--interface-resolved-provider-diagnostics rule)))
+                                   (phony--get-rules prepared))))
+            (cl-return interface-resolution-diagnostics))
+          (phony--remove-unreachable-rules prepared)
+          (phony--resolve-interfaces prepared)
+          (setq prepared (phony--copy-grammar prepared))
+          (phony--canonicalize-grammar prepared)
+          (phony-ag--initialize prepared)
+          (phony--detect-dependency-cycle prepared)
+          prepared)
+      (phony--grammar-error
+       (list (phony--make-diagnostic
+              ;; Emacs 31: error-type
+              :type (car e)
+              :message (cadr e)))))))
 
 (defun phony--add-rule (rule grammar)
   "Add RULE to GRAMMAR.
