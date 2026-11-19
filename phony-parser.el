@@ -495,7 +495,8 @@ corresponding match."
   "Return a parser matching the rule named by RULE."
   (let ((grammar (phony--containing-grammar rule))
         (name (phony-pattern--rule-name rule)))
-    (phony-parser--parser (phony--get-rule name grammar))))
+    (phony-parser--parser
+     (phony--resolved-rule (phony--get-rule name grammar)))))
 
 (cl-defmethod phony-parser--parser ((_ phony-pattern--builtin-word))
   "Return parser accepting an arbitrary word."

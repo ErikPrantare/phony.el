@@ -374,8 +374,8 @@ This function assumes that contributions have been internalized.  See
     (phony--dictionary
      '())
     (phony--interface-rule
-     (and-let* ((resolved (phony--resolved-rule rule)))
-       (list (phony--rule-name resolved))))
+     (and-let* ((provider (phony--interface-resolved-provider rule)))
+       (list (phony--rule-name provider))))
     (t
      (error "Internal phony error, please submit a bug report: `phony--products' typecase failed for %s"
             rule))))
@@ -567,8 +567,18 @@ If the resolution fails or there is no default, this returns nil."
                    (phony--containing-grammar interface)))
 
 (cl-defgeneric phony--resolved-rule (rule)
-  "Return resolution of RULE."
+  "Return resolution of RULE.
+
+If it cannot be resolved, this function returns nil."
   rule)
+
+(cl-defmethod phony--resolved-rule ((interface phony--interface-rule))
+  "Return resolution of INTERFACE.
+
+Returns nil if the interface could not be resolved.  This resolution is
+transitive."
+  (and-let* ((resolved (phony--interface-resolved-provider interface)))
+    (phony--resolved-rule resolved)))
 
 (phony-ag--define-synthesized phony--interface-resolved-provider-or-diagnostic (interface)
   "Return the resolved provider for INTERFACE.
@@ -612,7 +622,7 @@ If it fails to resolve, a diagnostic is returned instead."
           :message
           (format "No eligible provider available for interface `%s'"
                   (phony--rule-name interface)))))
-      (phony--resolved-rule (car providers)))))
+      (car providers))))
 
 (defun phony--result-value (result)
   "Return RESULT if it is not a diagnostic, otherwise nil."
@@ -623,7 +633,9 @@ If it fails to resolve, a diagnostic is returned instead."
   (and (phony--diagnostic-p result) result))
 
 (phony-ag--define-synthesized phony--interface-resolved-provider (interface)
-  "Return the resolved provider for INTERFACE, or nil if resolution fails."
+  "Return the resolved provider for INTERFACE, or nil if resolution fails.
+
+This returns the immediate resolution, not the transitive one."
   (phony--result-value
    (phony--interface-resolved-provider-or-diagnostic interface)))
 
@@ -632,10 +644,6 @@ If it fails to resolve, a diagnostic is returned instead."
   (ensure-list
    (phony--result-diagnostic
     (phony--interface-resolved-provider-or-diagnostic interface))))
-
-(cl-defmethod phony--resolved-rule ((interface phony--interface-rule))
-  "Return resolution of INTERFACE."
-  (phony--interface-resolved-provider interface))
 
 (cl-defstruct (phony--diagnostic
                (:constructor phony--make-diagnostic)
@@ -677,7 +685,6 @@ of diagnostics."
                                    (phony--get-rules prepared))))
             (cl-return interface-resolution-diagnostics))
           (phony--remove-unreachable-rules prepared)
-          (phony--resolve-interfaces prepared)
           (setq prepared (phony--copy-grammar prepared))
           (phony--canonicalize-grammar prepared)
           (phony-ag--initialize prepared)

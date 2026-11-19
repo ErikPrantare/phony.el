@@ -314,9 +314,9 @@ If there is no parse, an error is thrown."
 (ert-deftest phony-open-rule-contribution-to-module ()
   "Rule contributions work."
   (phony-test
-   (phony-define-module module)
-   (phony-define-open-rule number
-     :module module)
+    (phony-define-module module)
+    (phony-define-open-rule number
+      :module module)
     (phony-defun three "three"
       :contributes-to number
       3)
@@ -350,28 +350,39 @@ If there is no parse, an error is thrown."
 (ert-deftest phony-interface-uses-provider ()
   "Providers are used in place of interfaces."
   (phony-test
-   (phony-define-interface number)
-   (phony-defun my-number "three"
-     :provides number
-     3)
-   (phony-defun double ("double" number)
-     (* 2 number))
-   (phony--export-all)
-   (should (= (phony-test--evaluate "double three") 6))))
+    (phony-define-interface number)
+    (phony-defun my-number "three"
+      :provides number
+      3)
+    (phony-defun double ("double" number)
+      (* 2 number))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "double three") 6))))
 
 (ert-deftest phony-interface-nestled ()
   "Nestled interfaces resolve."
   (phony-test
-   (phony-define-interface number)
-   (phony-define-interface real
-     :provides number)
-   (phony-define-dictionary natural
-     :provides real
-     '(("elite" . 1337)))
-   (phony-defun double ("double" number)
-     (* 2 number))
-   (phony--export-all)
-   (should (= (phony-test--evaluate "double elite") 2674))))
+    (phony-define-interface number)
+    (phony-define-interface real
+      :provides number)
+    (phony-define-dictionary natural
+      :provides real
+      '(("elite" . 1337)))
+    (phony-defun double ("double" number)
+      (* 2 number))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "double elite") 2674))))
+
+(ert-deftest phony-interface-nestled-without-provider ()
+  "Nestled interfaces without a provider yield a diagnostic."
+  (phony-test
+    (phony-define-interface number)
+    (phony-define-interface real
+      :provides number)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics phony--provider-not-found)))
 
 (ert-deftest phony-interface-cycle-detection ()
   "Cyclic interfaces error."
@@ -784,6 +795,10 @@ If there is no parse, an error is thrown."
               :contributes-to number
               :module some-module
               3)
+            (phony-define-interface additional-number
+              :contributes-to number)
+            (phony-defun four "four"
+              :provides additional-number)
             (phony-defun five "five"
               :contributes-to number
               3)

@@ -28,6 +28,13 @@
 
 (require 'phony-core)
 
+(defun phony-talon--rule-pattern-resolved (pattern)
+  "Return the rule referred to by rule pattern PATTERN."
+  ;; TODO: Move this to phony-core, it is a generally useful function.
+  (phony--resolved-rule
+   (phony--get-rule (phony-pattern--rule-name pattern)
+                    (phony--containing-grammar pattern))))
+
 (cl-defgeneric phony-talon--pattern-match-string (pattern)
   "Return the Talon pattern string for matching PATTERN.")
 
@@ -39,7 +46,7 @@
   "Return the Talon pattern string for matching PATTERN."
   (format "<user.%s>"
           (phony--rule-external-name
-           (phony-pattern--rule-name pattern))))
+           (phony-talon--rule-pattern-resolved pattern))))
 
 (cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--sequence))
   "Return the Talon pattern string for matching PATTERN."
@@ -98,7 +105,10 @@
        (string-join (seq-map
                      (lambda (alternative)
                        (format "<user.%s>'"
-                               (phony--rule-external-name alternative)))
+                               (phony--rule-external-name
+                                (phony--resolved-rule
+                                 (phony--get-rule
+                                  alternative (phony--containing-grammar rule))))))
                      alternatives)
                     "\n        '| "))
     "'{user.phony_disabled_rule}'"))
@@ -262,7 +272,7 @@ This function creates .talon and .py files in the output directory."
               "        lambda x, y: update_active_tags())\n"
               "\n"
               "module.list(\"phony_disabled_rule\", desc=\"This cannot match\")\n")
-      (seq-doseq (rule rules)
+      (seq-doseq (rule (seq-remove #'phony--interface-rule-p rules))
         (insert "\n")
         (unless (phony--rule-always-active-p rule)
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
