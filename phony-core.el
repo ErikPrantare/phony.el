@@ -361,7 +361,7 @@ This function assumes that contributions have been internalized.  See
                        (phony--procedure-rule-interactive-p rule)))
    (phony--get-rules grammar)))
 
-(defun phony--products (rule)
+(defun phony--product-names (rule)
   "Return the names of the rules that may occur as submatches of RULE."
   (cl-typecase rule
     (phony--procedure-rule
@@ -377,8 +377,32 @@ This function assumes that contributions have been internalized.  See
      (and-let* ((provider (phony--interface-resolved-provider rule)))
        (list (phony--rule-name provider))))
     (t
-     (error "Internal phony error, please submit a bug report: `phony--products' typecase failed for %s"
+     (error "Internal phony error, please submit a bug report: `phony--product-names' typecase failed for %s"
             rule))))
+
+(defun phony--undefined-product-diagnostics (rule)
+  "Return list of diagnostics for undefined possible submatches of RULE."
+  ;; TODO: dedup across rules, see test
+  ;; phony-undefined-rule-diagnostic-deduplication
+  (let ((undefined-names
+         (seq-uniq (seq-remove
+                    (lambda (name) (phony--get-rule name (phony--containing-grammar rule)))
+                    (phony--product-names rule)))))
+    (seq-map (lambda (undefined)
+               (phony--make-diagnostic
+                :type 'phony--undefined-rule
+                :message (format
+                          "Rule `%s' references undefined rule `%s'"
+                          (phony--rule-name rule) undefined)))
+             undefined-names)))
+
+(defun phony--products (rule)
+  "Return the rules that may occur as submatches of RULE.
+
+References to undefined rules are not included in the return value."
+  (seq-keep
+   (lambda (name) (phony--get-rule name (phony--containing-grammar rule)))
+   (phony--product-names rule)))
 
 (defun phony--user-rule-p (rule)
   "Return non-nil if RULE is a user rule.
@@ -395,17 +419,9 @@ interpreted as the rule being part of the user's personal configuration."
       (let ((current-rule (pop worklist)))
         (unless (gethash current-rule reachable)
           (puthash current-rule t reachable)
-          (dolist (task-name (phony--products current-rule))
-            (if-let* ((task (phony--get-rule task-name grammar)))
-                (unless (gethash task reachable)
-                  (push task worklist))
-              ;; TODO: Do not throw inside attribute.  Return a Result
-              ;; instead.
-              (signal
-               'phony--undefined-rule
-               (list (format
-                      "Rule `%s' references undefined rule `%s'"
-                      (phony--rule-name current-rule) task-name))))))))
+          (dolist (task (phony--products current-rule))
+            (unless (gethash task reachable)
+              (push task worklist))))))
     reachable))
 
 (phony-ag--define-synthesized phony--rule-reachable-p (rule)
@@ -663,6 +679,12 @@ of diagnostics."
           (phony--seal-disabled-modules prepared)
           (phony--detect-non-open-contributions prepared)
           (phony-ag--initialize prepared)
+          (when-let* ((undefined-reference-diagnostics
+                       (seq-mapcat (lambda (rule)
+                                     (and (phony--rule-reachable-p rule)
+                                          (phony--undefined-product-diagnostics rule)))
+                                   (phony--get-rules prepared))))
+            (cl-return undefined-reference-diagnostics))
           (phony--internalize-contributions prepared)
           (setq prepared (phony--copy-grammar prepared))
           (phony-ag--initialize prepared)
@@ -1057,11 +1079,7 @@ given by SUCCESSOR-FUNCTION."
 
 (phony-ag--define-synthesized phony--get-producers-table (grammar)
   "Return hash table mapping rules to rules that produce them in GRAMMAR."
-  (phony--inverse-rule-graph
-   grammar
-   (lambda (rule)
-     (seq-map (lambda (product) (phony--get-rule product grammar))
-              (phony--products rule)))))
+  (phony--inverse-rule-graph grammar #'phony--products))
 
 (defun phony--get-producers (rule)
   "Get list of rules whose match includes RULE as a submatch."
@@ -1078,10 +1096,7 @@ RULE is the currently visited rule.  VISITED is a hash table of the
 already visited rules.  FINISHED is a hash table of rules that have been
 fully processed.  This function adds RULE to VISITED before recusing to
 its children, and to FINISHED afterwards."
-  (let ((dependencies (seq-map
-                       (lambda (name)
-                         (phony--get-rule name (phony--containing-grammar rule)))
-                       (phony--products rule))))
+  (let ((dependencies (phony--products rule)))
     (cl-block nil
       (when (gethash rule finished)
         (cl-return nil))

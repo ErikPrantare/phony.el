@@ -49,21 +49,63 @@ exporters do nothing, and export request debounce is turned off."
            (phony-mode 1)
          (phony-mode 0)))))
 
-(defmacro phony-test-should-have-diagnostics (&rest diagnostic-types)
-  "Fail if diagnostics of current grammar are not DIAGNOSTIC-TYPES.
+(cl-defstruct (phony-test--diagnostic-specification
+               (:constructor phony-test--make-diagnostic-specification)
+               (:copier nil))
+  "A specification for how diagnostics should be reported."
+  ( type 'phony--grammar-error
+    :type symbol
+    :documentation "The diagnostic type.")
+  ( cardinality 1
+    :type integer
+    :documentation "How many times the diagnostic should appear."))
 
-This checks that the types of the diagnostics match exactly with those
-given by DIAGNOSTIC-TYPES."
-  `(let ((diagnostics (phony--prepare-grammar phony--default-grammar)))
+(defmacro phony-test-should-have-diagnostics (&rest diagnostic-specs)
+  "Fail if diagnostics of current grammar are not DIAGNOSTIC-SPECS.
+
+DIAGNOSTIC-SPECS is a list of elements (TYPE . ARGS), where TYPE is the
+diagnostic type and ARGS is a plist with the following entries:
+
+  :cardinality          How many times the diagnostic should appear.
+
+If an entry is a symbol, :cardinality defaults to 1.
+
+This macro fails the test if the real diagnostics don't match the
+specification exactly."
+  `(let ((specs (seq-map
+                 (lambda (spec-entry)
+                   (when (symbolp spec-entry)
+                     (setq spec-entry
+                           `(,spec-entry :cardinality 1)))
+                   (pcase-let* ((`(,type . ,args) spec-entry))
+                     (phony-test--make-diagnostic-specification
+                      :type type
+                      :cardinality (plist-get args :cardinality))))
+                 ',diagnostic-specs))
+         (diagnostics (phony--prepare-grammar phony--default-grammar)))
      (when (phony--grammar-p diagnostics)
        (setq diagnostics '()))
-     (unless  (seq-set-equal-p
-               (seq-map #'phony--diagnostic-type diagnostics)
-               '(,@diagnostic-types))
-       (ert-fail
-        (format "Expected diagnostics %s, got %s"
-                '(,@diagnostic-types)
-                (seq-map #'phony--diagnostic-type diagnostics))))))
+     (while-let ((diagnostic (pop diagnostics)))
+       (let ((spec (seq-find
+                    (lambda (spec) (eq (phony--diagnostic-type diagnostic)
+                                       (phony-test--diagnostic-specification-type spec)))
+                    specs)))
+         (unless spec
+           (ert-fail
+            (format "Got unexpected diagnostic %s"
+                    (phony--diagnostic-type diagnostic))))
+         (cl-decf (phony-test--diagnostic-specification-cardinality spec))))
+     (dolist (spec specs)
+       (let ((cardinality (phony-test--diagnostic-specification-cardinality
+                           spec)))
+         (when (> cardinality 0)
+           (ert-fail
+            (format "Too few diagnostics of type %s"
+                    (phony-test--diagnostic-specification-type spec))))
+         (when (< cardinality 0)
+           (ert-fail
+            (format "Too many diagnostics of type %s"
+                    (phony-test--diagnostic-specification-type spec))))))))
 
 (ert-deftest phony-dictionary-get-setf-roundtrip ()
   "Setting a dictionary entry via setf is readable via the getter."
@@ -326,6 +368,38 @@ If there is no parse, an error is thrown."
     (phony-defun some-rule ("hah")
       5)
     (phony-test-should-have-diagnostics)))
+
+(ert-deftest phony-multiple-undefined-rule-diagnostics ()
+  "References to different undefined rules gets a diagnostic each."
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule))
+      x)
+    (phony-defun some-other-rule ("hah" (x other-undefined-rule))
+      x)
+    (phony-test-should-have-diagnostics
+     (phony--undefined-rule
+      :cardinality 2))))
+
+(ert-deftest phony-undefined-rule-diagnostic-deduplication-one-rule ()
+  "Multiple references to undefined rule in one rule gets deduplicated."
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule) (y undefined-rule))
+      (cons x y))
+    (phony-test-should-have-diagnostics
+     (phony--undefined-rule
+      :cardinality 1))))
+
+(ert-deftest phony-undefined-rule-diagnostic-deduplication ()
+  "Multiple references to same undefined rule gets deduplicated."
+  (ert-skip "Not implemented")
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule))
+      x)
+    (phony-defun some-other-rule ("hah" (x undefined-rule))
+      x)
+    (phony-test-should-have-diagnostics
+     (phony--undefined-rule
+      :cardinality 1))))
 
 (ert-deftest phony-open-rule-contribution ()
   "Rule contributions work."
