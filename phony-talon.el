@@ -261,7 +261,7 @@ This function creates .talon and .py files in the output directory."
               "        lambda x, y: update_active_tags())\n"
               "\n"
               "module.list(\"phony_disabled_rule\", desc=\"This cannot match\")\n")
-      (seq-doseq (rule rules)
+      (seq-doseq (rule (seq-filter #'phony--rule-reachable-p rules))
         (insert "\n")
         (unless (phony--rule-always-active-p rule)
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"

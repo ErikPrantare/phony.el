@@ -431,13 +431,6 @@ interpreted as the rule being part of the user's personal configuration."
    (phony--reachable-rule-table
     (phony--containing-grammar rule))))
 
-(defun phony--remove-unreachable-rules (grammar)
-  "Remove unreachable rules in GRAMMAR."
-  (dolist (rule (phony--get-rules grammar))
-    (unless (phony--rule-reachable-p rule)
-      (remhash (phony--rule-name rule)
-               (phony--grammar-rules grammar)))))
-
 (defun phony--seal-disabled-modules (grammar)
   "Remove external impact of disabled modules in GRAMMAR.
 
@@ -697,8 +690,6 @@ of diagnostics."
                                           (phony--interface-resolved-provider-diagnostics rule)))
                                    (phony--get-rules prepared))))
             (cl-return interface-resolution-diagnostics))
-          (phony--remove-unreachable-rules prepared)
-          (setq prepared (phony--copy-grammar prepared))
           (phony--canonicalize-grammar prepared)
           (phony-ag--initialize prepared)
           (phony--detect-dependency-cycle prepared)
@@ -870,8 +861,10 @@ dictionaries."
   (with-temp-file (phony--output-directory "dictionaries.json")
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
-             (seq-filter #'phony--dictionary-p
-                         (phony--get-rules grammar))))))
+             (thread-last
+               (phony--get-rules grammar)
+               (seq-filter #'phony--dictionary-p)
+               (seq-filter #'phony--rule-reachable-p))))))
 
 (defvar phony--dictionary-export-function #'phony--write-dictionaries-to-file
   "Function called to export dictionaries.")
@@ -1123,6 +1116,8 @@ The error signalled is `phony--dependency-cycle'."
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
       (when-let* ((cycle (phony--find-dependency-cycle-impl rule visited finished)))
+        ;; TODO: Only diagnose if reachable (eventually categorize
+        ;; severity by reachability instead)
         (signal
          'phony--dependency-cycle
          (list
@@ -1441,14 +1436,14 @@ dictionary."
   "Export information about which rules are currently active."
   ;; We must filter the enabled rules /before/ doing with-temp-file,
   ;; as the temporary buffer may influence which rules are enabled.
-  (let ((active-rules (seq-filter #'phony--rule-active-p
-                                  (phony--get-rules phony--exported-grammar))))
+  (let ((active-rules
+         (thread-last
+           (phony--get-rules phony--exported-grammar)
+           (seq-filter #'phony--rule-active-p)
+           (seq-filter #'phony--rule-reachable-p)
+           (seq-remove #'phony--rule-always-active-p))))
     (with-temp-file (phony--output-directory "active-rules")
-      (insert (mapconcat
-               #'phony--rule-external-name
-               (seq-remove #'phony--rule-always-active-p
-                           active-rules)
-               "\n")
+      (insert (mapconcat #'phony--rule-external-name active-rules "\n")
               "\n"))))
 
 (defun phony--evaluate-ast (ast)
