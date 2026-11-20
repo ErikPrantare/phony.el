@@ -468,6 +468,10 @@ module from rules in disabled modules."
               "Undefined default parameter to interface"
               'phony--undefined-rule)
 
+(define-error 'phony--contribution-to-non-open-rule
+              "Contribution to non-open rule"
+              'phony--grammar-error)
+
 (defun phony--detect-interface-cycles (grammar)
   "Error if there is an interface cycle in GRAMMAR."
   (cl-flet ((successors (node)
@@ -483,6 +487,8 @@ module from rules in disabled modules."
           (cl-labels ((dfs (node)
                         (push node stack)
                         (when (memq node (cdr stack))
+                          ;; TODO: Make this diagnostic non-blocking
+                          ;; for unreachables
                           (signal 'phony--interface-cycle
                                   (list
                                    (format
@@ -524,12 +530,17 @@ This function also checks for contributions to non-existent rules."
   (dolist (rule (phony--get-rules grammar))
     (dolist (contribution (phony--rule-contributes-to rule))
       (let ((lookup (phony--get-rule contribution grammar)))
+        ;; TODO: Make these diagnostics non-blocking
         (unless lookup
-          (error "Rule `%s' contributes to undefined rule `%s'"
-                 (phony--rule-name rule) contribution))
+          (signal
+           'phony--undefined-rule
+           (list (format "Rule `%s' contributes to undefined rule `%s'"
+                         (phony--rule-name rule) contribution))))
         (unless (phony--open-rule-p lookup)
-          (error "Rule `%s' contributes to non-open rule `%s'"
-                 (phony--rule-name rule) contribution))))))
+          (signal
+           'phony--contribution-to-non-open-rule
+           (list (format "Rule `%s' contributes to non-open rule `%s'"
+                         (phony--rule-name rule) contribution))))))))
 
 (phony-ag--define-synthesized phony--interface-provider-candidates-table (grammar)
   "Return hash table mapping interfaces to the providers of it in GRAMMAR."

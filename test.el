@@ -344,6 +344,29 @@ If there is no parse, an error is thrown."
     (should (= (phony-test--evaluate "add five and five") 10))
     (should (= (phony-test--evaluate "add three and three") 6))))
 
+(ert-deftest phony-contribution-to-undefined-rule ()
+  "Contribution to undefined rule yields diagnostic."
+  (phony-test
+    (phony-defun three "three"
+      :contributes-to number
+      3)
+    (phony-defun add ("add" (first three) "and" (second three))
+      (+ first second))
+
+    (phony-test-should-have-diagnostics phony--undefined-rule)))
+
+(ert-deftest phony-contribution-to-non-open-rule ()
+  "Contribution to non-open rule yields diagnostic."
+  (phony-test
+    (phony-defun number "five" 5)
+    (phony-defun three "three"
+      :contributes-to number
+      3)
+    (phony-defun add ("add" (first number) "and" (second number))
+      (+ first second))
+
+    (phony-test-should-have-diagnostics phony--contribution-to-non-open-rule)))
+
 (ert-deftest phony-open-rule-contribution-to-module ()
   "Rule contributions work."
   (phony-test
