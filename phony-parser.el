@@ -597,7 +597,7 @@ length of ENTRIES."
   (let* ((rules (seq-filter
                  (lambda (rule)
                    (and (phony--procedure-rule-p rule)
-                        (phony--procedure-rule-interactive-p rule)))
+                        (phony--interactive-p rule)))
                  (phony--get-rules grammar)))
          (anchor-groups
           (seq-group-by

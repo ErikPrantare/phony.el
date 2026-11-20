@@ -395,7 +395,9 @@ grammars."
   grammar)
 
 (phony-ag--define-inherited phony--containing-module (node)
-                            "Return the module containing NODE.")
+  "Return the module containing NODE.
+
+If NODE does not belong to a module, this function returns nil.")
 
 (phony-ag--define-equation phony--containing-module ((grammar phony--grammar)
                                                      (rule-slot (head rule)))

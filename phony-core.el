@@ -277,15 +277,24 @@ contribute to open rules."
 A rule is always active if it is global."
   (memq 'global (phony--rule-modes rule)))
 
-(phony-ag--define-synthesized phony--grammar-contributions-lookup (grammar)
-  "Return hash table mapping open rules of GRAMMAR to a list of contributors.
+(phony-ag--define-synthesized phony--rule-sealed-p (rule)
+  "Return non-nil if RULE is in a sealed module."
+  (and-let* ((module (phony--containing-module rule)))
+    (not (phony--module-enabled-p module))))
 
-The table operates on rule objects."
+(phony-ag--define-synthesized phony--grammar-contributions-lookup (grammar)
+  "Return hash table mapping open rules of GRAMMAR to their contributors."
   (phony--inverse-rule-graph
    grammar
    (lambda (rule)
-     (seq-map (lambda (name) (phony--get-rule name grammar))
-              (phony--rule-contributes-to rule)))))
+     (seq-keep (lambda (name)
+                 (and-let* ((target (phony--get-rule name grammar)))
+                   (and
+                    (or (not (phony--rule-sealed-p rule))
+                        (eq (phony--containing-module target)
+                            (phony--containing-module rule)))
+                    target)))
+               (phony--rule-contributes-to rule)))))
 
 (phony-ag--define-synthesized phony--open-rule-effective-alternatives-names (open)
   "Return list of alternatives for OPEN as a list of names."
@@ -316,7 +325,7 @@ undefined rules."
   "Return the interactive rules of GRAMMAR."
   (seq-filter
    (lambda (rule) (and (phony--procedure-rule-p rule)
-                       (phony--procedure-rule-interactive-p rule)))
+                       (phony--interactive-p rule)))
    (phony--get-rules grammar)))
 
 (defun phony--product-names (rule)
@@ -389,25 +398,10 @@ interpreted as the rule being part of the user's personal configuration."
    (phony--reachable-rule-table
     (phony--containing-grammar rule))))
 
-(defun phony--seal-disabled-modules (grammar)
-  "Remove external impact of disabled modules in GRAMMAR.
-
-This removes interactivity and contributions to rules external to the
-module from rules in disabled modules."
-  (dolist (rule (phony--get-rules grammar))
-    (when (and (phony--rule-module rule)
-               (not (phony--module-enabled-p (phony--get-module
-                                              (phony--rule-module rule)
-                                              grammar))))
-      (setf (phony--rule-contributes-to rule)
-            (seq-filter (lambda (name)
-                          (eq
-                           (phony--rule-module rule)
-                           (phony--rule-module
-                            (phony--get-rule name grammar))))
-                        (phony--rule-contributes-to rule)))
-      (when (phony--procedure-rule-p rule)
-        (setf (phony--procedure-rule-interactive-p rule) nil)))))
+(phony-ag--define-synthesized phony--interactive-p (procedure-rule)
+  "Return non-nil if PROCEDURE-RULE is interactive."
+  (and (phony--procedure-rule-interactive-p procedure-rule)
+       (not (phony--rule-sealed-p procedure-rule))))
 
 (define-error 'phony--grammar-error "Error in grammar")
 
@@ -610,10 +604,6 @@ of diagnostics."
   (cl-block nil
     (condition-case e
         (let ((prepared (phony--copy-grammar grammar)))
-          ;; HACK: We re-initialize the ag and clone wherever ag
-          ;; functionality is useful, even though we are performing
-          ;; rewrite.  This will slowly be scrubbed from mutation.
-          (phony--seal-disabled-modules prepared)
           (phony-ag--initialize prepared)
           (when-let* ((undefined-reference-diagnostics
                        (seq-mapcat (lambda (rule)

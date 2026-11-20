@@ -164,7 +164,7 @@ If you are using EXWM, you probably want this to be t.")
   (seq-doseq (rule rules)
     (when (and
            (phony--procedure-rule-p rule)
-           (phony--procedure-rule-interactive-p rule))
+           (phony--interactive-p rule))
       (phony-talon--speech-insert-rule rule))))
 
 (defun phony-talon--output-path (&rest components)

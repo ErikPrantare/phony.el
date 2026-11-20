@@ -894,15 +894,30 @@ If there is no parse, an error is thrown."
 (ert-deftest phony-disabled-rules-may-be-used-explicitly ()
   "Disabled rules can still be used explicitly."
   (phony-test
+    (phony-define-module x)
+    (phony-defun x "x"
+      :module x
+      5)
+    (phony-defun y ("y" x)
+      (+ x 3))
+    (phony-disable-module 'x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "y x") 8))))
+
+(ert-deftest phony-disabled-rules-not-interactive ()
+  "Disabled rules are not interactive."
+  (phony-test
    (phony-define-module x)
    (phony-defun x "x"
+     :interactive t
      :module x
      5)
-   (phony-defun y ("y" x)
-     (+ x 3))
    (phony-disable-module 'x)
    (phony--export-all)
-   (should (equal (phony-test--evaluate "y x") 8))))
+   (should-error (phony-test--evaluate "x"))
+   (phony-enable-module 'x)
+   (phony--export-all)
+   (should (equal (phony-test--evaluate "x") 5))))
 
 (ert-deftest phony-anchors ()
   "Anchors limit parses correctly."
