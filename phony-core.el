@@ -486,20 +486,6 @@ module from rules in disabled modules."
                         (puthash node t done)))
             (dfs interface)))))))
 
-(defun phony--canonicalize-grammar (grammar)
-  "Rewrite GRAMMAR into canonical form.
-
-In canonical form, all alternatives in open rules are order
-lexicographically on name."
-  (maphash
-   (lambda (_name rule)
-     (when (phony--open-rule-p rule)
-       (setf (phony--open-rule-alternatives rule)
-             (seq-sort-by
-              #'symbol-name #'string<
-              (phony--open-rule-alternatives rule)))))
-   (phony--grammar-rules grammar)))
-
 (defun phony--detect-non-open-contributions (grammar)
   "Throw error if GRAMMAR contains rules who contribute to non-open rules.
 
@@ -658,7 +644,6 @@ of diagnostics."
                                           (phony--interface-resolved-provider-diagnostics rule)))
                                    (phony--get-rules prepared))))
             (cl-return interface-resolution-diagnostics))
-          (phony--canonicalize-grammar prepared)
           (phony-ag--initialize prepared)
           (phony--detect-dependency-cycle prepared)
           prepared)
