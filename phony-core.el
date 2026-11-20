@@ -70,7 +70,8 @@ recognition backend."
       (progn
         (phony-request-export)
         (keymap-global-set "<phony-command>" #'phony--evaluate-ast-command))
-    (keymap-global-unset "<phony-command>" t)))
+    (keymap-global-unset "<phony-command>" t)
+    (cancel-function-timers #'phony--sync-state)))
 
 (defun phony-generate-event (ast)
   "Evaluate AST via `simulacrum-generate-event'."
