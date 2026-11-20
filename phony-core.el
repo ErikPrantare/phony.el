@@ -310,50 +310,6 @@ the `phony--open-rule-alternatives' field."
       (setf (phony--open-rule-alternatives rule)
             (phony--open-rule-effective-alternatives rule)))))
 
-(cl-defgeneric phony--substitute-in-rule (rule from to)
-  "Change references to rule FROM to rule TO in RULE.
-
-This function assumes that contributions have been internalized.  See
-`phony--internalize-contributions'.")
-
-(cl-defmethod phony--substitute-in-rule ((rule phony--open-rule) from to)
-  "Change references to rule FROM to rule TO in RULE."
-  (setf (phony--open-rule-alternatives rule)
-        (seq-map (lambda (alternative)
-                   (if (eq alternative from)
-                       to
-                     alternative))
-                 (phony--open-rule-alternatives rule))))
-
-(cl-defmethod phony--substitute-in-rule ((rule phony--dictionary) _from _to)
-  "Change references to rule FROM to rule TO in RULE."
-  rule)
-
-(cl-defmethod phony--substitute-in-rule ((rule phony--procedure-rule) from to)
-  "Change references to rule FROM to rule TO in RULE."
-  (setf (phony--procedure-rule-pattern rule)
-        (phony-pattern--transform
-         (lambda (pattern)
-           (if (and (phony-pattern--rule-p pattern)
-                    (eq (phony-pattern--rule-name pattern) from))
-               (phony-pattern--make-rule :name to)
-             pattern))
-         (phony--procedure-rule-pattern rule))))
-
-(cl-defmethod phony--substitute-in-rule ((rule phony--interface-rule) _from _to)
-  "Change references to rule FROM to rule TO in RULE."
-  rule)
-
-(defun phony--substitute-in-grammar (grammar from to)
-  "Change references to rule FROM to rule TO in GRAMMAR."
-  (seq-doseq (rule (map-values (phony--grammar-rules grammar)))
-    (phony--substitute-in-rule rule from to)))
-
-(defun phony--replace-in-grammar (grammar from to)
-  "Remove FROM and change references to rule FROM to rule TO in GRAMMAR."
-  (phony--substitute-in-grammar grammar from to)
-  (remhash from (phony--grammar-rules grammar)))
-
 (defun phony--interactive-rules (grammar)
   "Return the interactive rules of GRAMMAR."
   (seq-filter
