@@ -28,11 +28,6 @@
 
 (require 'phony-core)
 
-(defun phony-talon--rule-pattern-resolved (pattern)
-  "Return the rule referred to by rule pattern PATTERN."
-  (phony--get-rule (phony-pattern--rule-name pattern)
-                   (phony--containing-grammar pattern)))
-
 (cl-defgeneric phony-talon--pattern-match-string (pattern)
   "Return the Talon pattern string for matching PATTERN.")
 
@@ -44,7 +39,8 @@
   "Return the Talon pattern string for matching PATTERN."
   (format "<user.%s>"
           (phony--rule-external-name
-           (phony-talon--rule-pattern-resolved pattern))))
+           (phony--resolved
+            (phony-pattern--rule-reference pattern)))))
 
 (cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--sequence))
   "Return the Talon pattern string for matching PATTERN."

@@ -332,10 +332,10 @@ undefined rules."
   "Return the names of the rules that may occur as submatches of RULE."
   (cl-typecase rule
     (phony--procedure-rule
-     (seq-map #'phony-pattern--rule-name
-              (phony-pattern--collect
-               #'phony-pattern--rule-p
-               (phony--procedure-rule-pattern rule))))
+     (thread-last
+       (phony--procedure-rule-pattern rule)
+       (phony-pattern--collect #'phony-pattern--rule-p)
+       (seq-map #'phony-pattern--rule-name)))
     (phony--open-rule
      (phony--open-rule-effective-alternatives-names rule))
     (phony--dictionary

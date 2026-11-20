@@ -82,9 +82,9 @@
 (cl-defstruct (phony-pattern--rule
                (:constructor phony-pattern--make-rule))
   "Pattern matching another rule."
-  ( name nil
-    :type symbol
-    :documentation "Symbol naming the phony rule that this pattern matches."))
+  ( reference nil
+    :type phony--rule-reference
+    :documentation "Reference to the rule."))
 
 (cl-defstruct (phony-pattern--builtin-word
                (:constructor phony-pattern--make-builtin-word))
@@ -93,6 +93,20 @@
 (cl-defstruct (phony-pattern--builtin-phrase
                (:constructor phony-pattern--make-builtin-phrase))
   "Pattern matching any phrase.")
+
+;; TODO: We should factor out the grammar AST datastructure into one
+;; file.  The following structure is awkwardly placed.
+(cl-defstruct (phony--rule-reference
+               (:constructor phony--make-rule-reference)
+               (:copier phony--copy-rule-reference))
+  "A reference to a rule."
+  ( name nil
+    :type symbol
+    :documentation "The name of the referenced rule."))
+
+(defun phony-pattern--rule-name (pattern)
+  "Return the name of the rule referenced by PATTERN."
+  (phony--rule-reference-name (phony-pattern--rule-reference pattern)))
 
 (defun phony-pattern--parse-implicit-sequence (pattern-forms arglist)
   "Parse implicit sequence form PATTERN-FORMS.
@@ -168,7 +182,8 @@ This is required for recognizing if a form should bind to an argument."
     (phony-pattern--make-builtin-phrase))
    ((symbolp pattern-form)
     (phony-pattern--make-rule
-     :name pattern-form))
+     :reference (phony--make-rule-reference
+                 :name pattern-form)))
    ((symbolp (car pattern-form))
     (error "Not an argument nor pattern type: `%S' in form `%S'"
            (car pattern-form)
@@ -199,8 +214,9 @@ This is required for recognizing if a form should bind to an argument."
       :pattern (funcall f child)))
     ((cl-struct phony-pattern--literal string)
      (phony-pattern--make-literal :string string))
-    ((cl-struct phony-pattern--rule name)
-     (phony-pattern--make-rule :name name))
+    ((cl-struct phony-pattern--rule reference)
+     (phony-pattern--make-rule
+      :reference (phony--copy-rule-reference reference)))
     ((cl-struct phony-pattern--builtin-word)
      (phony-pattern--make-builtin-word))
     ((cl-struct phony-pattern--builtin-phrase)

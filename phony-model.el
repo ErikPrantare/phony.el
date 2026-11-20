@@ -407,6 +407,14 @@ If NODE does not belong to a module, this function returns nil.")
              (module (gethash module-name (phony--grammar-modules grammar))))
     module))
 
+(phony-ag--define-synthesized phony--resolved (reference)
+  "Return the resolution to REFERENCE, or nil if it cannot be resolved.")
+
+(cl-defmethod phony--resolved ((reference phony--rule-reference))
+  "Return the rule referred to by REFERENCE, or nil if no such rule exists."
+  (phony--get-rule (phony--rule-reference-name reference)
+                   (phony--containing-grammar reference)))
+
 (provide 'phony-model)
 
 ;;; phony-model.el ends here
