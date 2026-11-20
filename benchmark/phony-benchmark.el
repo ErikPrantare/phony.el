@@ -9,8 +9,7 @@
            (expand-file-name
             "benchmark/big-grammar.el"
             (file-name-directory (locate-library "phony")))))
-         (phony--exported-grammar
-          (phony--prepare-grammar phony--default-grammar))
+         (phony--exported-grammar (phony--finalize-grammar))
          (utterances '("bring air to boff"
                        "go up twice"
                        "swap air and boff and plex and yank outside with its outside outside")))

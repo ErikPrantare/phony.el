@@ -594,35 +594,28 @@ This returns the immediate resolution, not the transitive one."
     :type symbol
     :documentation "The diagnostic type."))
 
-(defun phony--prepare-grammar (grammar)
-  "Prepare GRAMMAR for export.
-
-The returned grammar must not be mutated.
-
-If preparation yields any errors, this function instead returns a list
-of diagnostics."
+(phony-ag--define-synthesized phony--grammar-diagnostics (grammar)
+  "Return diagnostics for GRAMMAR."
   (cl-block nil
     (condition-case e
-        (let ((prepared (phony--copy-grammar grammar)))
-          (phony-ag--initialize prepared)
+        (progn
           (when-let* ((undefined-reference-diagnostics
                        (seq-mapcat (lambda (rule)
                                      (and (phony--rule-reachable-p rule)
                                           (phony--undefined-product-diagnostics rule)))
-                                   (phony--get-rules prepared))))
+                                   (phony--get-rules grammar))))
             (cl-return undefined-reference-diagnostics))
           (when-let* ((interface-resolution-diagnostics
                        (seq-mapcat (lambda (rule)
                                      (and (phony--interface-rule-p rule)
                                           (phony--rule-reachable-p rule)
                                           (phony--interface-resolved-provider-diagnostics rule)))
-                                   (phony--get-rules prepared))))
+                                   (phony--get-rules grammar))))
             (cl-return interface-resolution-diagnostics))
           ;; TODO: Move cycle detection to diagnostics function above
-          (phony--detect-interface-cycles prepared)
-          (phony--detect-non-open-contributions prepared)
-          (phony--detect-dependency-cycle prepared)
-          prepared)
+          (phony--detect-interface-cycles grammar)
+          (phony--detect-non-open-contributions grammar)
+          (phony--detect-dependency-cycle grammar))
       (phony--grammar-error
        (list (phony--make-diagnostic
               ;; Emacs 31: error-type
@@ -1066,6 +1059,16 @@ The error signalled is `phony--dependency-cycle'."
   :risky t
   :group 'phony)
 
+(defun phony--finalize-grammar ()
+  "Return copy of `phony--default-grammar'.
+
+The returned grammar should not be mutated.  The attribute grammar has
+been initialized on it."
+  (let ((grammar
+         (phony--copy-grammar phony--default-grammar)))
+    (phony-ag--initialize grammar)
+    grammar))
+
 (defun phony--export-all ()
   "Export all rules to the speech recognition engine.
 
@@ -1073,9 +1076,9 @@ If any errors are detected in the grammar, the rules are not exported.
 
 If no rules are defined, this function does nothing."
   (when (phony--get-rules phony--default-grammar)
-    (let* ((prepared-grammar (phony--prepare-grammar phony--default-grammar)))
-      (if (not (phony--grammar-p prepared-grammar))
-          (progn (dolist (diagnostic prepared-grammar)
+    (let* ((grammar (phony--finalize-grammar)))
+      (if-let* ((diagnostics (phony--grammar-diagnostics grammar)))
+          (progn (dolist (diagnostic diagnostics)
                    (display-warning
                     'phony (phony--diagnostic-message diagnostic)))
                  (display-warning
@@ -1086,9 +1089,9 @@ If no rules are defined, this function does nothing."
           (server-start))
         (cancel-function-timers #'phony--sync-state)
         (run-with-idle-timer 0.1 t #'phony--sync-state)
-        (funcall phony-export-function prepared-grammar)
-        (phony--export-dictionaries prepared-grammar)
-        (setq phony--exported-grammar prepared-grammar)))))
+        (funcall phony-export-function grammar)
+        (phony--export-dictionaries grammar)
+        (setq phony--exported-grammar grammar)))))
 
 (defun phony--debounce (f &rest args)
   "Debounce the invocation of F by waiting until next idle.

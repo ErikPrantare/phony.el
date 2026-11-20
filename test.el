@@ -82,9 +82,8 @@ specification exactly."
                       :type type
                       :cardinality (plist-get args :cardinality))))
                  ',diagnostic-specs))
-         (diagnostics (phony--prepare-grammar phony--default-grammar)))
-     (when (phony--grammar-p diagnostics)
-       (setq diagnostics '()))
+         (diagnostics (phony--grammar-diagnostics
+                       (phony--finalize-grammar))))
      (while-let ((diagnostic (pop diagnostics)))
        (let ((spec (seq-find
                     (lambda (spec) (eq (phony--diagnostic-type diagnostic)

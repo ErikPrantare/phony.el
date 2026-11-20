@@ -635,7 +635,7 @@ length of ENTRIES."
   "Parse UTTERANCE string into a list of possible parse results.
 
 Rules are taken from GRAMMAR or `phony--exported-grammar' if it is nil
-or not given.  GRAMMAR must be a prepared grammar."
+or not given.  GRAMMAR must be a finalized grammar."
   (setq grammar (or grammar phony--exported-grammar))
   (cl-incf phony-parser--current-generation)
   (phony-parser--parse
