@@ -301,7 +301,8 @@ A rule is always active if it is global."
   ;; TODO: Warn about duplicate :contributes-to and :alternatives
   (thread-last
     (append
-     (phony--open-rule-alternatives open)
+     (seq-map #'phony--rule-reference-name
+              (phony--open-rule-alternatives open))
      (seq-map
       #'phony--rule-name
       (gethash
@@ -650,7 +651,10 @@ This function must be invoked every time a rule is declared."
                            #'phony--open-rule-p
                            (phony--get-rules grammar)))
       (setf (phony--open-rule-alternatives open-rule)
-            (remove rule-name (phony--open-rule-alternatives open-rule))))
+            (seq-remove (lambda (reference)
+                          (eq (phony--rule-reference-name reference)
+                              rule-name))
+                        (phony--open-rule-alternatives open-rule))))
     (phony-request-export)))
 
 (defun phony--add-new-rule (constructor parameters)
@@ -899,7 +903,12 @@ rule types.
 See documentation of `phony-define-open-rule' for more information."
   (when-let* ((alternatives (plist-get arguments :alternatives)))
     (unless (and (listp alternatives) (not (eq (car alternatives) 'quote)))
-      (error ":alternatives keyword argument must be an unquoted list")))
+      (error ":alternatives keyword argument must be an unquoted list"))
+    (setf (plist-get arguments :alternatives)
+          (seq-map (lambda (name)
+                     (phony--make-rule-reference
+                      :name name))
+                   alternatives)))
   (phony--add-new-rule #'phony--make-open-rule arguments)
   (phony-request-export)
   (map-elt arguments :name))

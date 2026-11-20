@@ -182,8 +182,8 @@ Constrain matching to the end of an utterance, like `$' in regex."))
                (:constructor phony--make-open-rule))
   "A rule that matches any of its alternatives."
   ( alternatives nil
-    :type (repeat symbol)
-    :documentation "List of symbols naming the alternative rules."))
+    :type (repeat phony--rule-reference)
+    :documentation "List of references to the alternative rules."))
 
 (cl-defstruct (phony--dictionary-storage
                (:constructor phony--make-dictionary-storage)
@@ -314,8 +314,10 @@ If this is nil, there is no default provider."))
 (cl-defmethod phony--copy-rule ((rule phony--open-rule))
   "Return a deep copy of RULE."
   (let ((copy (phony--make-open-rule
-               :alternatives (copy-sequence
-                              (phony--open-rule-alternatives rule)))))
+               :alternatives
+               (seq-map
+                #'phony--copy-rule-reference
+                (phony--open-rule-alternatives rule)))))
     (phony--copy-rule-base-inplace rule copy)))
 
 (cl-defmethod phony--copy-rule ((rule phony--dictionary))
@@ -367,6 +369,16 @@ grammars."
   (let ((children (cl-call-next-method)))
     (setf (alist-get 'storage children nil t) nil)
     children))
+
+(cl-defmethod phony-ag--children ((open phony--open-rule))
+  "Return the children of open rule OPEN."
+  (let ((children (cl-call-next-method)))
+    (append
+     (seq-map-indexed (lambda (alternative index)
+                        (cons (cons 'alternative index)
+                              alternative))
+                      (phony--open-rule-alternatives open))
+     children)))
 
 (cl-defmethod phony-ag--children ((pattern phony-pattern--sequence))
   "Return the children of PATTERN."
