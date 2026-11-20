@@ -1,3 +1,7 @@
+* NEXT
+- Presentation of diagnostics has improved.  All issues are now
+  displayed in the ~*Warnings*~ buffer.
+
 * 3.0.0 [2026-11-15 Sun]
 - New pattern for ~phony-defun~: You can now specify a match of one of
   multiple alternatives using |.  See ~phony-defun~ documentation for
