@@ -142,30 +142,10 @@
     (insert "@context.capture('user." (phony--rule-external-name rule)
             "', rule=" (phony-talon--rule-match-string rule) ")\n")))
 
-(cl-defgeneric phony-talon--insert-python (rule)
-  "Insert python code for capturing RULE.")
-
-(cl-defmethod phony-talon--insert-python ((rule phony--open-rule))
-  "Insert python code for capturing RULE."
-  (insert
-   (format "def %s(m) -> str:\n    return %s\n"
-           (phony--rule-external-name rule)
-           "m[0]")))
-
-(cl-defmethod phony-talon--insert-python ((rule phony--procedure-rule))
+(defun phony-talon--insert-python (rule)
   "Insert python code for capturing RULE."
   (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
           "     return ' '.join(str(x) for x in m)\n"))
-
-(cl-defmethod phony-talon--insert-python ((rule phony--dictionary))
-  "Insert python code for capturing RULE."
-  (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
-          "    return m[0]"))
-
-(cl-defmethod phony-talon--insert-python ((rule phony--interface-rule))
-  "Insert python code for capturing RULE."
-  (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
-          "    return m[0]"))
 
 (defun phony-talon--insert-python-disabled (rule)
   "Insert a Python stub for disabled RULE returning False."
