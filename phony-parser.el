@@ -29,6 +29,8 @@
 (require 'map)
 (require 'seq)
 
+;; TODO: We actually need phony-core for some functions.  See flymake
+;; diagnostics and fix.
 (require 'phony-model)
 (require 'phony-ag)
 
@@ -581,8 +583,7 @@ length of ENTRIES."
   (phony-parser--then
    (phony-parser--rule-active-guard rule)
    (phony-parser--alternative
-    (seq-map #'phony-parser--parser
-             (phony--resolved-alternatives rule)))))
+    (seq-map #'phony-parser--parser (phony--products rule)))))
 
 (cl-defmethod phony-parser--parser ((interface phony--interface-rule))
   "Return a parser matching the resolution of INTERFACE."

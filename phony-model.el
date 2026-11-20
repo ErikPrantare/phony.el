@@ -405,12 +405,6 @@ grammars."
              (module (gethash module-name (phony--grammar-modules grammar))))
     module))
 
-(phony-ag--define-synthesized phony--resolved-alternatives (open-rule)
-  "Return alternatives of OPEN-RULE as a list of rules."
-  (let ((grammar (phony--containing-grammar open-rule)))
-    (mapcar (lambda (name) (phony--get-rule name grammar))
-            (phony--open-rule-alternatives open-rule))))
-
 (provide 'phony-model)
 
 ;;; phony-model.el ends here
