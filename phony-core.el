@@ -418,16 +418,6 @@ interpreted as the rule being part of the user's personal configuration."
       (remhash (phony--rule-name rule)
                (phony--grammar-rules grammar)))))
 
-(defun phony--resolve-interfaces (grammar)
-  "Replace interfaces with their resolved rules in GRAMMAR."
-  (dolist (interface (seq-filter #'phony--interface-rule-p
-                                 (phony--get-rules grammar)))
-    (let ((provider (phony--interface-resolved-provider interface)))
-      (phony--replace-in-grammar
-       grammar
-       (phony--rule-name interface)
-       (phony--rule-name provider)))))
-
 (defun phony--seal-disabled-modules (grammar)
   "Remove external impact of disabled modules in GRAMMAR.
 
@@ -565,20 +555,6 @@ This function also checks for contributions to non-existent rules."
 If the resolution fails or there is no default, this returns nil."
   (phony--get-rule (phony--interface-rule-default interface)
                    (phony--containing-grammar interface)))
-
-(cl-defgeneric phony--resolved-rule (rule)
-  "Return resolution of RULE.
-
-If it cannot be resolved, this function returns nil."
-  rule)
-
-(cl-defmethod phony--resolved-rule ((interface phony--interface-rule))
-  "Return resolution of INTERFACE.
-
-Returns nil if the interface could not be resolved.  This resolution is
-transitive."
-  (and-let* ((resolved (phony--interface-resolved-provider interface)))
-    (phony--resolved-rule resolved)))
 
 (phony-ag--define-synthesized phony--interface-resolved-provider-or-diagnostic (interface)
   "Return the resolved provider for INTERFACE.

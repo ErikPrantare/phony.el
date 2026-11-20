@@ -496,7 +496,7 @@ corresponding match."
   (let ((grammar (phony--containing-grammar rule))
         (name (phony-pattern--rule-name rule)))
     (phony-parser--parser
-     (phony--resolved-rule (phony--get-rule name grammar)))))
+     (phony--get-rule name grammar))))
 
 (cl-defmethod phony-parser--parser ((_ phony-pattern--builtin-word))
   "Return parser accepting an arbitrary word."
@@ -583,6 +583,13 @@ length of ENTRIES."
    (phony-parser--alternative
     (seq-map #'phony-parser--parser
              (phony--resolved-alternatives rule)))))
+
+(cl-defmethod phony-parser--parser ((interface phony--interface-rule))
+  "Return a parser matching the resolution of INTERFACE."
+  (phony-parser--then
+   (phony-parser--rule-active-guard interface)
+   (phony-parser--parser
+    (phony--interface-resolved-provider interface))))
 
 (cl-defmethod phony-parser--parser ((grammar phony--grammar))
   "Return parser matching active interactive procedure rules of GRAMMAR."

@@ -30,10 +30,8 @@
 
 (defun phony-talon--rule-pattern-resolved (pattern)
   "Return the rule referred to by rule pattern PATTERN."
-  ;; TODO: Move this to phony-core, it is a generally useful function.
-  (phony--resolved-rule
-   (phony--get-rule (phony-pattern--rule-name pattern)
-                    (phony--containing-grammar pattern))))
+  (phony--get-rule (phony-pattern--rule-name pattern)
+                   (phony--containing-grammar pattern)))
 
 (cl-defgeneric phony-talon--pattern-match-string (pattern)
   "Return the Talon pattern string for matching PATTERN.")
@@ -106,9 +104,8 @@
                      (lambda (alternative)
                        (format "<user.%s>'"
                                (phony--rule-external-name
-                                (phony--resolved-rule
-                                 (phony--get-rule
-                                  alternative (phony--containing-grammar rule))))))
+                                (phony--get-rule
+                                 alternative (phony--containing-grammar rule)))))
                      alternatives)
                     "\n        '| "))
     "'{user.phony_disabled_rule}'"))
@@ -116,6 +113,13 @@
 (cl-defmethod phony-talon--rule-match-string ((rule phony--dictionary))
   "Return the full Talon rule pattern for RULE."
   (concat "'{user." (phony--rule-external-name rule) "}'"))
+
+(cl-defmethod phony-talon--rule-match-string ((rule phony--interface-rule))
+  "Return the full Talon rule pattern for RULE."
+  (format
+   "'<user.%s>'"
+   (phony--rule-external-name
+    (phony--interface-resolved-provider rule))))
 
 (defun phony-talon--speech-insert-rule (rule)
   "Insert a .talon rule entry for procedure RULE."
@@ -154,6 +158,11 @@
           "     return ' '.join(str(x) for x in m)\n"))
 
 (cl-defmethod phony-talon--insert-python ((rule phony--dictionary))
+  "Insert python code for capturing RULE."
+  (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
+          "    return m[0]"))
+
+(cl-defmethod phony-talon--insert-python ((rule phony--interface-rule))
   "Insert python code for capturing RULE."
   (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
           "    return m[0]"))
@@ -272,7 +281,7 @@ This function creates .talon and .py files in the output directory."
               "        lambda x, y: update_active_tags())\n"
               "\n"
               "module.list(\"phony_disabled_rule\", desc=\"This cannot match\")\n")
-      (seq-doseq (rule (seq-remove #'phony--interface-rule-p rules))
+      (seq-doseq (rule rules)
         (insert "\n")
         (unless (phony--rule-always-active-p rule)
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"

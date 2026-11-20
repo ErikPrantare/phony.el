@@ -359,19 +359,55 @@ If there is no parse, an error is thrown."
     (phony--export-all)
     (should (= (phony-test--evaluate "double three") 6))))
 
-(ert-deftest phony-interface-nestled ()
-  "Nestled interfaces resolve."
+(ert-deftest phony-interface-honors-mode ()
+  "Interfaces honor the mode parameter."
   (phony-test
-    (phony-define-interface number)
-    (phony-define-interface real
-      :provides number)
-    (phony-define-dictionary natural
-      :provides real
-      '(("elite" . 1337)))
+    (phony-define-interface number
+      :mode text-mode)
+    (phony-defun my-number "three"
+      :provides number
+      3)
     (phony-defun double ("double" number)
       (* 2 number))
     (phony--export-all)
-    (should (= (phony-test--evaluate "double elite") 2674))))
+    (should-error (phony-test--evaluate "double three"))
+    (text-mode)
+    (should (= (phony-test--evaluate "double three") 6))))
+
+(ert-deftest phony-nestled-interface-honors-mode ()
+  "Nestled interfaces honor the mode parameter."
+  (phony-test
+    (phony-define-interface number
+      :mode (fundamental-mode text-mode))
+    (phony-define-interface number-indirection
+      :mode (fundamental-mode prog-mode)
+      :provides number)
+    (phony-defun my-number "three"
+      :provides number-indirection
+      3)
+    (phony-defun double ("double" number)
+      (* 2 number))
+    (phony--export-all)
+    (prog-mode)
+    (should-error (phony-test--evaluate "double three"))
+    (text-mode)
+    (should-error (phony-test--evaluate "double three"))
+    (fundamental-mode)
+    (should (= (phony-test--evaluate "double three") 6))))
+
+(ert-deftest phony-interface-nestled ()
+  "Nestled interfaces resolve."
+  (phony-test
+   (phony-define-interface number)
+   (phony-define-interface real
+     :provides number)
+   (phony-define-dictionary natural
+     :provides real
+     '(("elite" . 1337)))
+   (phony-defun double ("double" number)
+     (* 2 number))
+   (phony--export-all)
+   (should (= (phony-test--evaluate "double elite") 2674))))
 
 (ert-deftest phony-interface-nestled-without-provider ()
   "Nestled interfaces without a provider yield a diagnostic."
