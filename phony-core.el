@@ -311,17 +311,6 @@ undefined rules."
      (phony--get-rule name (phony--containing-grammar open)))
    (phony--open-rule-effective-alternatives-names open)))
 
-(defun phony--internalize-contributions (grammar)
-  "Insert all contributions to open rules as alternatives.
-
-This mutates GRAMMAR so that all contributions are directly reflected by
-the `phony--open-rule-alternatives' field."
-  (dolist (rule (phony--get-rules grammar))
-    (when (phony--open-rule-p rule)
-      (setf (phony--open-rule-alternatives rule)
-            (seq-map #'phony--rule-name
-                     (phony--open-rule-effective-alternatives rule))))))
-
 (defun phony--interactive-rules (grammar)
   "Return the interactive rules of GRAMMAR."
   (seq-filter
@@ -624,7 +613,6 @@ of diagnostics."
           ;; functionality is useful, even though we are performing
           ;; rewrite.  This will slowly be scrubbed from mutation.
           (phony--seal-disabled-modules prepared)
-          (phony--detect-non-open-contributions prepared)
           (phony-ag--initialize prepared)
           (when-let* ((undefined-reference-diagnostics
                        (seq-mapcat (lambda (rule)
@@ -632,11 +620,6 @@ of diagnostics."
                                           (phony--undefined-product-diagnostics rule)))
                                    (phony--get-rules prepared))))
             (cl-return undefined-reference-diagnostics))
-          (phony--internalize-contributions prepared)
-          (setq prepared (phony--copy-grammar prepared))
-          (phony-ag--initialize prepared)
-          ;; TODO: Move cycle detection to diagnostics function below
-          (phony--detect-interface-cycles prepared)
           (when-let* ((interface-resolution-diagnostics
                        (seq-mapcat (lambda (rule)
                                      (and (phony--interface-rule-p rule)
@@ -644,7 +627,9 @@ of diagnostics."
                                           (phony--interface-resolved-provider-diagnostics rule)))
                                    (phony--get-rules prepared))))
             (cl-return interface-resolution-diagnostics))
-          (phony-ag--initialize prepared)
+          ;; TODO: Move cycle detection to diagnostics function above
+          (phony--detect-interface-cycles prepared)
+          (phony--detect-non-open-contributions prepared)
           (phony--detect-dependency-cycle prepared)
           prepared)
       (phony--grammar-error
