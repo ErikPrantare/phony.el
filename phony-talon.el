@@ -103,9 +103,7 @@
        (string-join (seq-map
                      (lambda (alternative)
                        (format "<user.%s>'"
-                               (phony--rule-external-name
-                                (phony--get-rule
-                                 alternative (phony--containing-grammar rule)))))
+                               (phony--rule-external-name alternative)))
                      alternatives)
                     "\n        '| "))
     "'{user.phony_disabled_rule}'"))

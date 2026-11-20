@@ -286,19 +286,30 @@ The table operates on rule objects."
      (seq-map (lambda (name) (phony--get-rule name grammar))
               (phony--rule-contributes-to rule)))))
 
-(phony-ag--define-synthesized phony--open-rule-effective-alternatives (open)
-  "Return list of alternatives for OPEN, including contributions."
+(phony-ag--define-synthesized phony--open-rule-effective-alternatives-names (open)
+  "Return list of alternatives for OPEN as a list of names."
   ;; TODO: Warn about duplicate :contributes-to and :alternatives
-  (seq-uniq
-   (seq-sort
-    #'string<
+  (thread-last
     (append
      (phony--open-rule-alternatives open)
-     (seq-map #'phony--rule-name
-              (gethash
-               open
-               (phony--grammar-contributions-lookup
-                (phony--containing-grammar open))))))))
+     (seq-map
+      #'phony--rule-name
+      (gethash
+       open
+       (phony--grammar-contributions-lookup
+        (phony--containing-grammar open)))))
+    (seq-sort #'string<)
+    seq-uniq))
+
+(phony-ag--define-synthesized phony--open-rule-effective-alternatives (open)
+  "Return list of alternatives for OPEN, including contributions.
+
+This function returns the rule objects, filtering out references to
+undefined rules."
+  (seq-keep
+   (lambda (name)
+     (phony--get-rule name (phony--containing-grammar open)))
+   (phony--open-rule-effective-alternatives-names open)))
 
 (defun phony--internalize-contributions (grammar)
   "Insert all contributions to open rules as alternatives.
@@ -308,7 +319,8 @@ the `phony--open-rule-alternatives' field."
   (dolist (rule (phony--get-rules grammar))
     (when (phony--open-rule-p rule)
       (setf (phony--open-rule-alternatives rule)
-            (phony--open-rule-effective-alternatives rule)))))
+            (seq-map #'phony--rule-name
+                     (phony--open-rule-effective-alternatives rule))))))
 
 (defun phony--interactive-rules (grammar)
   "Return the interactive rules of GRAMMAR."
@@ -326,7 +338,7 @@ the `phony--open-rule-alternatives' field."
                #'phony-pattern--rule-p
                (phony--procedure-rule-pattern rule))))
     (phony--open-rule
-     (phony--open-rule-effective-alternatives rule))
+     (phony--open-rule-effective-alternatives-names rule))
     (phony--dictionary
      '())
     (phony--interface-rule
