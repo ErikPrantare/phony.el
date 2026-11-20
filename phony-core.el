@@ -399,9 +399,13 @@ interpreted as the rule being part of the user's personal configuration."
             (if-let* ((task (phony--get-rule task-name grammar)))
                 (unless (gethash task reachable)
                   (push task worklist))
-              ;; TODO: Signal in a way that a diagnostic is created.
-              (error "Rule `%s' references undefined rule `%s'"
-                     (phony--rule-name current-rule) task-name))))))
+              ;; TODO: Do not throw inside attribute.  Return a Result
+              ;; instead.
+              (signal
+               'phony--undefined-rule
+               (list (format
+                      "Rule `%s' references undefined rule `%s'"
+                      (phony--rule-name current-rule) task-name))))))))
     reachable))
 
 (phony-ag--define-synthesized phony--rule-reachable-p (rule)

@@ -294,6 +294,39 @@ If there is no parse, an error is thrown."
     (should (= (phony-test--evaluate "one two three") 3))
     (should (= (phony-test--evaluate "wild white space") 42))))
 
+(ert-deftest phony-undefined-rule-in-pattern ()
+  "Undefined rules in patterns yield diagnostics."
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule))
+      x)
+    (phony-test-should-have-diagnostics phony--undefined-rule)))
+
+(ert-deftest phony-unreachable-undefined-rule-in-pattern ()
+  "Undefined rules in unreachable patterns do not yield diagnostics."
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule))
+      :interactive nil
+      x)
+    (phony-test-should-have-diagnostics)))
+
+(ert-deftest phony-undefined-rule-in-alternatives ()
+  "Undefined rules in open rule alternatives yield diagnostics."
+  (phony-test
+    (phony-define-open-rule open-rule
+      :alternatives (undefined-rule))
+    (phony-defun some-rule ("hah" (x open-rule))
+      x)
+    (phony-test-should-have-diagnostics phony--undefined-rule)))
+
+(ert-deftest phony-unreachable-undefined-rule-in-alternatives ()
+  "Undefined rules in unreachable alternatives do not yield diagnostics."
+  (phony-test
+    (phony-define-open-rule open-rule
+      :alternatives (undefined-rule))
+    (phony-defun some-rule ("hah")
+      5)
+    (phony-test-should-have-diagnostics)))
+
 (ert-deftest phony-open-rule-contribution ()
   "Rule contributions work."
   (phony-test
