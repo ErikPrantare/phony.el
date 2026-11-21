@@ -420,12 +420,27 @@ If NODE does not belong to a module, this function returns nil.")
     module))
 
 (phony-ag--define-synthesized phony--resolved (reference)
-  "Return the resolution to REFERENCE, or nil if it cannot be resolved.")
+  "Return the resolution to REFERENCE.
+
+By default, this returns REFERENCE directly.  Reference types that
+require resolution logic should override this generic."
+  reference)
 
 (cl-defmethod phony--resolved ((reference phony--rule-reference))
   "Return the rule referred to by REFERENCE, or nil if no such rule exists."
   (phony--get-rule (phony--rule-reference-name reference)
                    (phony--containing-grammar reference)))
+
+(cl-defgeneric phony--name (node)
+  "Return the name, a symbol, of named NODE.")
+
+(cl-defmethod phony--name ((reference phony--rule-reference))
+  "Return the name of REFERENCE."
+  (phony--rule-reference-name reference))
+
+(cl-defmethod phony--name ((rule phony--rule))
+  "Return the name of RULE."
+  (phony--rule-name rule))
 
 (provide 'phony-model)
 

@@ -301,14 +301,12 @@ A rule is always active if it is global."
   ;; TODO: Warn about duplicate :contributes-to and :alternatives
   (thread-last
     (append
-     (seq-map #'phony--rule-reference-name
-              (phony--open-rule-alternatives open))
-     (seq-map
-      #'phony--rule-name
-      (gethash
-       open
-       (phony--grammar-contributions-lookup
-        (phony--containing-grammar open)))))
+     (phony--open-rule-alternatives open)
+     (gethash
+      open
+      (phony--grammar-contributions-lookup
+       (phony--containing-grammar open))))
+    (seq-map #'phony--name)
     (seq-sort #'string<)
     seq-uniq))
 
