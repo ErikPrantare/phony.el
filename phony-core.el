@@ -296,19 +296,19 @@ A rule is always active if it is global."
                     target)))
                (phony--rule-contributes-to rule)))))
 
-(phony-ag--define-synthesized phony--open-rule-effective-alternatives-names (open)
+(phony-ag--define-synthesized phony--open-rule-effective-alternatives-references (open)
   "Return list of alternatives for OPEN as a list of names."
   ;; TODO: Warn about duplicate :contributes-to and :alternatives
-  (thread-last
-    (append
-     (phony--open-rule-alternatives open)
-     (gethash
-      open
-      (phony--grammar-contributions-lookup
-       (phony--containing-grammar open))))
-    (seq-map #'phony--name)
-    (seq-sort #'string<)
-    seq-uniq))
+  (seq-uniq
+   (thread-last
+     (append
+      (phony--open-rule-alternatives open)
+      (gethash
+       open
+       (phony--grammar-contributions-lookup
+        (phony--containing-grammar open))))
+     (seq-sort-by #'phony--name #'string<))
+   (lambda (x y) (eq (phony--name x) (phony--name y)))))
 
 (phony-ag--define-synthesized phony--open-rule-effective-alternatives (open)
   "Return list of alternatives for OPEN, including contributions.
@@ -316,9 +316,8 @@ A rule is always active if it is global."
 This function returns the rule objects, filtering out references to
 undefined rules."
   (seq-keep
-   (lambda (name)
-     (phony--get-rule name (phony--containing-grammar open)))
-   (phony--open-rule-effective-alternatives-names open)))
+   #'phony--resolved
+   (phony--open-rule-effective-alternatives-references open)))
 
 (defun phony--interactive-rules (grammar)
   "Return the interactive rules of GRAMMAR."
@@ -327,23 +326,22 @@ undefined rules."
                        (phony--interactive-p rule)))
    (phony--get-rules grammar)))
 
-(defun phony--product-names (rule)
-  "Return the names of the rules that may occur as submatches of RULE."
+(defun phony--product-references (rule)
+  "Return references to the rules that may occur as submatches of RULE."
   (cl-typecase rule
     (phony--procedure-rule
      (thread-last
        (phony--procedure-rule-pattern rule)
        (phony-pattern--collect #'phony-pattern--rule-p)
-       (seq-map #'phony-pattern--rule-name)))
+       (seq-map #'phony-pattern--rule-reference)))
     (phony--open-rule
-     (phony--open-rule-effective-alternatives-names rule))
+     (phony--open-rule-effective-alternatives-references rule))
     (phony--dictionary
      '())
     (phony--interface-rule
-     (and-let* ((provider (phony--interface-resolved-provider rule)))
-       (list (phony--rule-name provider))))
+     (ensure-list (phony--interface-resolved-provider rule)))
     (t
-     (error "Internal phony error, please submit a bug report: `phony--product-names' typecase failed for %s"
+     (error "Internal phony error, please submit a bug report: `phony--product-references' typecase failed for %s"
             rule))))
 
 (defun phony--undefined-product-diagnostics (rule)
@@ -351,9 +349,10 @@ undefined rules."
   ;; TODO: dedup across rules, see test
   ;; phony-undefined-rule-diagnostic-deduplication
   (let ((undefined-names
-         (seq-uniq (seq-remove
-                    (lambda (name) (phony--get-rule name (phony--containing-grammar rule)))
-                    (phony--product-names rule)))))
+         (seq-uniq (seq-map #'phony--name
+                            (seq-remove
+                             #'phony--resolved
+                             (phony--product-references rule))))))
     (seq-map (lambda (undefined)
                (phony--make-diagnostic
                 :type 'phony--undefined-rule
@@ -366,9 +365,7 @@ undefined rules."
   "Return the rules that may occur as submatches of RULE.
 
 References to undefined rules are not included in the return value."
-  (seq-keep
-   (lambda (name) (phony--get-rule name (phony--containing-grammar rule)))
-   (phony--product-names rule)))
+  (seq-keep #'phony--resolved (phony--product-references rule)))
 
 (defun phony--user-rule-p (rule)
   "Return non-nil if RULE is a user rule.
