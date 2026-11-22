@@ -1,6 +1,8 @@
 #+title: phony.el
 Bindings for defining voice commands in Emacs.
 
+/Part of [[https://emacslisten.org][Emacslisten]]./
+
 * Illustrative example
 :PROPERTIES:
 :CUSTOM_ID: illustrative-example
