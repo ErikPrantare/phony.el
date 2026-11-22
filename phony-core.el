@@ -73,6 +73,21 @@ recognition backend."
     (keymap-global-unset "<phony-command>" t)
     (cancel-function-timers #'phony--sync-state)))
 
+;;;###autoload
+(define-minor-mode phony-interactive-mode
+  "Mode for when the default interactivity of procedure rules is enabled.
+
+The value t to the interactivity parameter implicitly means this mode.
+Disabling this mode will disable interactivity of all rules with t as
+their parameter."
+  :global t
+  :group 'phony
+  :init-value t)
+
+;; bug#79518, solved in Emacs 31, where this is done automatically
+;; when :init-value t.  So this is only needed for earlier versions.
+(add-to-list 'global-minor-modes 'phony-interactive-mode)
+
 (defun phony-generate-event (ast)
   "Evaluate AST via `simulacrum-generate-event'."
   (simulacrum-generate-event 'phony-command ast))
@@ -1063,6 +1078,45 @@ The error signalled is `phony--dependency-cycle'."
   :risky t
   :group 'phony)
 
+(defun phony--wrap-interactive-rules (grammar)
+  "Modify GRAMMAR to wrap interactive rules in forwarding rules.
+
+This step is done to make the interactivity of procedure rules able to
+be conditional on modes.
+
+For each interactive procedure rule, a new procedure rule is added that
+is unconditionally interactive, but whose modes parameter is the same as
+the parameter passed to the original interactive rule.  The original
+rule is made uninteractive, with the new rule forwarding to it as the
+new top-level entry point.
+
+The new rules inherit anchors and modules from the original rules."
+  (dolist (rule (phony--get-rules grammar))
+    (when (and (phony--procedure-rule-p rule)
+               (phony--procedure-rule-interactive-p rule))
+
+      (phony--add-rule
+       (phony--make-procedure-rule
+        :name (make-symbol (format "phony-internal-generated--%s"
+                                   (phony--name rule)))
+        :pattern (phony-pattern--parse
+                  `(x ,(phony--name rule))
+                  '(x))
+        :function #'identity
+        :arglist '(x)
+        :generated-p t
+        :interactive-p t
+        :modes
+        (phony--procedure-rule-interactive-p rule)
+        :module
+        (phony--rule-module rule)
+        :anchor-beginning-p
+        (phony--procedure-rule-anchor-beginning-p rule)
+        :anchor-end-p
+        (phony--procedure-rule-anchor-end-p rule))
+       grammar)
+      (setf (phony--procedure-rule-interactive-p rule) nil))))
+
 (defun phony--finalize-grammar ()
   "Return copy of `phony--default-grammar'.
 
@@ -1070,6 +1124,7 @@ The returned grammar should not be mutated.  The attribute grammar has
 been initialized on it."
   (let ((grammar
          (phony--copy-grammar phony--default-grammar)))
+    (phony--wrap-interactive-rules grammar)
     (phony-ag--initialize grammar)
     grammar))
 
@@ -1123,11 +1178,17 @@ If `phony-mode' is not enabled, this function does nothing."
 See `phony-defun' for more information."
   (if (plist-member arguments :interactive)
       (progn (setf (plist-get arguments :interactive-p)
-                   (plist-get arguments :interactive))
+                   (ensure-list (plist-get arguments :interactive)))
              (cl-remf arguments :interactive))
     (setf (plist-get arguments :interactive-p)
           (and (not (map-contains-key arguments :contributes-to))
-               (not (map-contains-key arguments :provides)))))
+               (not (map-contains-key arguments :provides))
+               (list 'phony-interactive-mode))))
+  (setf (plist-get arguments :interactive-p)
+        (seq-map (lambda (mode) (if (eq mode t)
+                                    'phony-interactive-mode
+                                  mode))
+                 (plist-get arguments :interactive-p)))
   (when (plist-member arguments :anchor-beginning)
     (setf (plist-get arguments :anchor-beginning-p)
           (plist-get arguments :anchor-beginning))
@@ -1204,6 +1265,12 @@ Optional keywords unique to procedure rules are:
                      occur as part of other rules.  Default is t unless
                      `:contributes-to' or `:provides' is non-nil, in
                      which case the default is nil.
+
+                     In addition to t, this parameter can take an
+                     unquoted symbol or list of symbols, in which case
+                     the symbols specify under which modes the rule
+                     should be interactive.  The value t is equivalent
+                     to specifying `phony-interactive-mode'.
   :anchor-beginning  If t, this rule must occur first in an utterance.
                      Default is nil.
   :anchor-end        If t, this rule must occur last in an utterance.

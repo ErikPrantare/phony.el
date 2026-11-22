@@ -38,16 +38,17 @@ exporters do nothing, and export request debounce is turned off."
          (phony--dictionary-export-function #'ignore)
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
+         (phony-interactive-mode-was-enabled phony-interactive-mode)
          (phony-parser--literal-normalizer #'identity))
      (unwind-protect
          (progn
            (phony-mode 0)
            ,@body)
+       (phony-interactive-mode
+        (if phony-interactive-mode-was-enabled 1 0))
        ;; The export happening in (phony-mode 1) is fine, as it is
        ;; done still in our test environment.
-       (if phony-mode-was-enabled
-           (phony-mode 1)
-         (phony-mode 0)))))
+       (phony-mode (if phony-mode-was-enabled 1 0)))))
 
 (cl-defstruct (phony-test--diagnostic-specification
                (:constructor phony-test--make-diagnostic-specification)
@@ -918,30 +919,60 @@ If there is no parse, an error is thrown."
    (phony--export-all)
    (should (equal (phony-test--evaluate "x") 5))))
 
+(ert-deftest phony-conditional-interactivity ()
+  "Procedure rules can be interactive conditional on active modes."
+  (phony-test
+   (phony-defun almost-always "always"
+     :interactive t
+     t)
+   (phony-defun text "text"
+     :interactive text-mode
+     t)
+   (phony--export-all)
+   (should-error (phony-test--evaluate "text"))
+   (should (phony-test--evaluate "always"))
+   (text-mode)
+   (phony-interactive-mode -1)
+   (should (phony-test--evaluate "text"))
+   (should-error (phony-test--evaluate "always"))))
+
+(ert-deftest phony-conditional-interactivity-multiple-modes ()
+  "Procedure rules can be interactive conditional on active modes."
+  (phony-test
+   (phony-defun t-and-text "test"
+     :interactive (text-mode t)
+     t)
+   (phony--export-all)
+   (should (phony-test--evaluate "test"))
+   (phony-interactive-mode -1)
+   (should-error (phony-test--evaluate "test"))
+   (text-mode)
+   (should (phony-test--evaluate "test"))))
+
 (ert-deftest phony-anchors ()
   "Anchors limit parses correctly."
   (phony-test
-    (phony-defun x "x"
-      :anchor-beginning t
-      t)
-    (phony-defun y "y"
-      :anchor-end t
-      t)
-    (phony-defun z "z"
-      :anchor-end t
-      :anchor-beginning t
-      t)
-    (phony-defun w "w"
-      t)
-    (phony--export-all)
-    (should (phony-test--evaluate "x y"))
-    (should (phony-test--evaluate "x w w w y"))
-    (should (phony-test--evaluate "z"))
+   (phony-defun x "x"
+     :anchor-beginning t
+     t)
+   (phony-defun y "y"
+     :anchor-end t
+     t)
+   (phony-defun z "z"
+     :anchor-end t
+     :anchor-beginning t
+     t)
+   (phony-defun w "w"
+     t)
+   (phony--export-all)
+   (should (phony-test--evaluate "x y"))
+   (should (phony-test--evaluate "x w w w y"))
+   (should (phony-test--evaluate "z"))
 
-    (should-error (phony-test--evaluate "y w"))
-    (should-error (phony-test--evaluate "w x"))
-    (should-error (phony-test--evaluate "z w"))
-    (should-error (phony-test--evaluate "w z"))))
+   (should-error (phony-test--evaluate "y w"))
+   (should-error (phony-test--evaluate "w x"))
+   (should-error (phony-test--evaluate "z w"))
+   (should-error (phony-test--evaluate "w z"))))
 
 (ert-deftest phony-parser-literal-normalizer ()
   "`phony-experimental-set-parser-literal-normalizer' works as advertised."
