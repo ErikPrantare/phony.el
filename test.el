@@ -42,13 +42,13 @@ exporters do nothing, and export request debounce is turned off."
          (phony-parser--literal-normalizer #'identity))
      (unwind-protect
          (progn
-           (phony-mode 0)
+           (phony-mode -1)
            ,@body)
        (phony-interactive-mode
-        (if phony-interactive-mode-was-enabled 1 0))
+        (if phony-interactive-mode-was-enabled 1 -1))
        ;; The export happening in (phony-mode 1) is fine, as it is
        ;; done still in our test environment.
-       (phony-mode (if phony-mode-was-enabled 1 0)))))
+       (phony-mode (if phony-mode-was-enabled 1 -1)))))
 
 (cl-defstruct (phony-test--diagnostic-specification
                (:constructor phony-test--make-diagnostic-specification)
