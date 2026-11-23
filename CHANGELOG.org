@@ -1,4 +1,4 @@
-* NEXT
+* 4.0.0 [2026-11-23 Mon]
 - The ~:interactive~ parameter of ~phony-defun~ can now take a mode or
   a list of modes.  The rule will be interactive only if one of those
   modes is enabled.  The value t is interpreted as
