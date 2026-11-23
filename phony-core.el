@@ -27,7 +27,6 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'map)
-(require 'server)
 (require 'multisession)
 
 (require 'simulacrum)
@@ -1142,10 +1141,6 @@ If no rules are defined, this function does nothing."
                     'phony (phony--diagnostic-message diagnostic)))
                  (display-warning
                   'phony "Grammar contains errors, not exporting"))
-        (when (and (not noninteractive)
-                   (not (server-running-p))
-                   (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
-          (server-start))
         (cancel-function-timers #'phony--sync-state)
         (run-with-idle-timer 0.1 t #'phony--sync-state)
         (funcall phony-export-function grammar)

@@ -26,6 +26,8 @@
 
 ;;; Code:
 
+(require 'server)
+
 (require 'phony-core)
 
 (cl-defgeneric phony-talon--pattern-match-string (pattern)
@@ -268,6 +270,10 @@ This function creates .talon and .py files in the output directory."
 
 This function creates .talon and .py files in the output directory and
 symlinks them into ~/.talon/user/."
+  (when (and (not noninteractive)
+             (not (server-running-p))
+             (y-or-n-p "Emacs needs to run as a daemon for phony to work with Talon.  Start daemon?"))
+    (server-start))
   (phony-talon--generate-configuration grammar)
   (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
     (if (or (not (file-exists-p link-path))

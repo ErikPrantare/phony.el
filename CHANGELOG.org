@@ -13,6 +13,8 @@
   matching a literal, the literal command will be prioritized.
 - Presentation of diagnostics has improved.  All issues are now
   displayed in the ~*Warnings*~ buffer.
+- Phony now only asks to start Emacs daemon if a backend requiring
+  that is selected.
 
 * 3.0.0 [2026-11-15 Sun]
 - New pattern for ~phony-defun~: You can now specify a match of one of
