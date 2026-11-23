@@ -98,16 +98,36 @@ accepts any token."
     (setq parser (phony-parser--step parser (pop input))))
   (phony-parser--parses parser))
 
+(defun phony-parser--add-cost (cost parser)
+  "Return PARSER but where each parse has additional COST."
+  (if (phony-parser--empty-p parser)
+      (phony-parser--empty)
+    (phony-parser--make
+     :parses-function
+     (lambda ()
+       (mapcar
+        (pcase-lambda (`(,parse . ,old-cost))
+          (cons parse (+ cost old-cost)))
+        (phony-parser--parses parser)))
+     :step-function
+     (lambda (item)
+       (phony-parser--add-cost
+        cost (phony-parser--step parser item)))
+     :wants-function
+     (lambda ()
+       (phony-parser--wants parser)))))
+
 (defun phony-parser--any ()
   "Return a parser that accepts any single token."
-  (phony-parser--make
-   :parses-function (lambda () nil)
-   :step-function
-   (lambda (item)
-     (phony-parser--return item))
-   :wants-function
-   (lambda ()
-     (list phony-parser--wants-any-token))))
+  (phony-parser--add-cost
+   1 (phony-parser--make
+      :parses-function (lambda () nil)
+      :step-function
+      (lambda (item)
+        (phony-parser--return item))
+      :wants-function
+      (lambda ()
+        (list phony-parser--wants-any-token)))))
 
 (defun phony-parser--join (parser)
   "Flatten PARSER.
@@ -119,21 +139,27 @@ are run on subsequent tokens and their results collected."
     (phony-parser--make
      :parses-function
      (lambda ()
-       (seq-mapcat #'phony-parser--parses (phony-parser--parses parser)))
+       (seq-mapcat
+        (pcase-lambda (`(,inner-parser . ,cost))
+          (phony-parser--parses
+           (phony-parser--add-cost cost inner-parser)))
+        (phony-parser--parses parser)))
      :step-function
      (lambda (item)
        (phony-parser--alternative
         (cons
          (phony-parser--join (phony-parser--step parser item))
-         (seq-map (lambda (parse)
-                    (phony-parser--step parse item))
+         (seq-map (pcase-lambda (`(,inner-parser . ,cost))
+                    (phony-parser--add-cost
+                     cost (phony-parser--step inner-parser item)))
                   (phony-parser--parses parser)))))
      :wants-function
      (lambda ()
        (append
         (phony-parser--wants parser)
-        (seq-mapcat #'phony-parser--wants
-                    (phony-parser--parses parser)))))))
+        (seq-mapcat
+         #'phony-parser--wants
+         (mapcar #'car (phony-parser--parses parser))))))))
 
 (defun phony-parser--map (f parser)
   "Return a parser applying F to each result of PARSER."
@@ -142,7 +168,9 @@ are run on subsequent tokens and their results collected."
     (phony-parser--make
      :parses-function
      (lambda ()
-       (seq-map f (phony-parser--parses parser)))
+       (seq-map (pcase-lambda (`(,parse . ,cost))
+                  (cons (funcall f parse) cost))
+                (phony-parser--parses parser)))
      :step-function
      (lambda (item)
        (phony-parser--map f (phony-parser--step parser item)))
@@ -157,7 +185,7 @@ are run on subsequent tokens and their results collected."
 (defun phony-parser--return (x)
   "Return a parser that succeeds immediately with X."
   (phony-parser--make
-   :parses-function (lambda () (list x))
+   :parses-function (lambda () (list (cons x 0)))
    :step-function (lambda (_item) (phony-parser--empty))
    :wants-function (lambda () '())))
 
@@ -548,7 +576,9 @@ length of ENTRIES."
                           group))
                  child-parsers)))
     (phony-parser--make
-     :parses-function (lambda () values)
+     :parses-function
+     (lambda ()
+       (mapcar (lambda (v) (cons v 0)) values))
      :step-function
      (lambda (item)
        (gethash (funcall phony-parser--literal-normalizer item)
@@ -633,12 +663,18 @@ length of ENTRIES."
   "Parse UTTERANCE string into a list of possible parse results.
 
 Rules are taken from GRAMMAR or `phony--exported-grammar' if it is nil
-or not given.  GRAMMAR must be a finalized grammar."
+or not given.  GRAMMAR must be a finalized grammar.
+
+The parses are ordered from lowest cost to highest.  The cost is equal
+to the number of words parsed as free text."
   (setq grammar (or grammar phony--exported-grammar))
   (cl-incf phony-parser--current-generation)
-  (phony-parser--parse
-   (phony-parser--parser grammar)
-   (string-split utterance)))
+  (thread-last
+    (phony-parser--parse
+     (phony-parser--parser grammar)
+     (string-split utterance))
+    (seq-sort-by #'cdr #'<)
+    (mapcar #'car)))
 
 (provide 'phony-parser)
 ;;; phony-parser.el ends here

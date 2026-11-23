@@ -1480,8 +1480,10 @@ The parser interprets UTTERANCE as a sequence of expressions of
 is evaluated in turn.  The return value of this function is a list
 containing the return values from evaluating the expressions.
 
-If the parsing of UTTERANCE is ambiguous, this function picks an
-arbitrary parse.
+If the parsing of UTTERANCE is ambiguous, this function picks the parse
+containing the fewest number of free-text words.  If there are multiple
+parses with the same number of free-text words, an arbitrary parse is
+picked.
 
 If there is no possible parse of UTTERANCE then nil is returned, or
 DEFAULT if it is provided.

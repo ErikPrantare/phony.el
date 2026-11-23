@@ -7,6 +7,10 @@
   or implicitly, by disabling that mode.  This can e.g. be used for
   defining "sleep" modes, which disables all commands except for a
   wake-up command.
+- ~phony-evaluate~ and ~phony-evaluate-as-event~ now prioritizes
+  parses containing the fewest number of free-text words.  This means
+  that if you have one command matching a phrase and one command
+  matching a literal, the literal command will be prioritized.
 - Presentation of diagnostics has improved.  All issues are now
   displayed in the ~*Warnings*~ buffer.
 
