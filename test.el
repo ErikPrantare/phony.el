@@ -38,17 +38,74 @@ exporters do nothing, and export request debounce is turned off."
          (phony--dictionary-export-function #'ignore)
          (phony--debounce-export-requests nil)
          (phony-mode-was-enabled phony-mode)
-         (phony--last-analysis nil)
+         (phony-interactive-mode-was-enabled phony-interactive-mode)
          (phony-parser--literal-normalizer #'identity))
      (unwind-protect
          (progn
-           (phony-mode 0)
+           (phony-mode -1)
            ,@body)
+       (phony-interactive-mode
+        (if phony-interactive-mode-was-enabled 1 -1))
        ;; The export happening in (phony-mode 1) is fine, as it is
        ;; done still in our test environment.
-       (if phony-mode-was-enabled
-           (phony-mode 1)
-         (phony-mode 0)))))
+       (phony-mode (if phony-mode-was-enabled 1 -1)))))
+
+(cl-defstruct (phony-test--diagnostic-specification
+               (:constructor phony-test--make-diagnostic-specification)
+               (:copier nil))
+  "A specification for how diagnostics should be reported."
+  ( type 'phony--grammar-error
+    :type symbol
+    :documentation "The diagnostic type.")
+  ( cardinality 1
+    :type integer
+    :documentation "How many times the diagnostic should appear."))
+
+(defmacro phony-test-should-have-diagnostics (&rest diagnostic-specs)
+  "Fail if diagnostics of current grammar are not DIAGNOSTIC-SPECS.
+
+DIAGNOSTIC-SPECS is a list of elements (TYPE . ARGS), where TYPE is the
+diagnostic type and ARGS is a plist with the following entries:
+
+  :cardinality          How many times the diagnostic should appear.
+
+If an entry is a symbol, :cardinality defaults to 1.
+
+This macro fails the test if the real diagnostics don't match the
+specification exactly."
+  `(let ((specs (seq-map
+                 (lambda (spec-entry)
+                   (when (symbolp spec-entry)
+                     (setq spec-entry
+                           `(,spec-entry :cardinality 1)))
+                   (pcase-let* ((`(,type . ,args) spec-entry))
+                     (phony-test--make-diagnostic-specification
+                      :type type
+                      :cardinality (plist-get args :cardinality))))
+                 ',diagnostic-specs))
+         (diagnostics (phony--grammar-diagnostics
+                       (phony--finalize-grammar))))
+     (while-let ((diagnostic (pop diagnostics)))
+       (let ((spec (seq-find
+                    (lambda (spec) (eq (phony--diagnostic-type diagnostic)
+                                       (phony-test--diagnostic-specification-type spec)))
+                    specs)))
+         (unless spec
+           (ert-fail
+            (format "Got unexpected diagnostic %s"
+                    (phony--diagnostic-type diagnostic))))
+         (cl-decf (phony-test--diagnostic-specification-cardinality spec))))
+     (dolist (spec specs)
+       (let ((cardinality (phony-test--diagnostic-specification-cardinality
+                           spec)))
+         (when (> cardinality 0)
+           (ert-fail
+            (format "Too few diagnostics of type %s"
+                    (phony-test--diagnostic-specification-type spec))))
+         (when (< cardinality 0)
+           (ert-fail
+            (format "Too many diagnostics of type %s"
+                    (phony-test--diagnostic-specification-type spec))))))))
 
 (ert-deftest phony-dictionary-get-setf-roundtrip ()
   "Setting a dictionary entry via setf is readable via the getter."
@@ -76,7 +133,7 @@ exporters do nothing, and export request debounce is turned off."
            (phony--dictionary-export-function
             (lambda (_grammar) (cl-incf dictionary-export-count)))
            (phony-export-function
-            (lambda (_analysis-data) (cl-incf rule-export-count))))
+            (lambda (_grammar) (cl-incf rule-export-count))))
       (phony-mode 1)
       (phony-define-dictionary test-dict
         '(("alpha" . 1)))
@@ -88,7 +145,7 @@ exporters do nothing, and export request debounce is turned off."
   (phony-test
     (let* ((rule-export-count 0)
            (phony-export-function
-            (lambda (_analysis-data) (cl-incf rule-export-count))))
+            (lambda (_grammar) (cl-incf rule-export-count))))
       (phony-mode 1)
       (phony-define-open-rule test-open-rule)
       (should (= rule-export-count 1)))))
@@ -98,7 +155,7 @@ exporters do nothing, and export request debounce is turned off."
   (phony-test
     (let* ((rule-export-count 0)
            (phony-export-function
-            (lambda (_analysis-data) (cl-incf rule-export-count))))
+            (lambda (_grammar) (cl-incf rule-export-count))))
       (phony-mode 1)
       (cl-letf (((symbol-function 'server-running-p) #'always))
         (phony-defun test-procedure-rule "alpha"
@@ -116,7 +173,7 @@ exporters do nothing, and export request debounce is turned off."
            (phony--dictionary-export-function
             (lambda (_grammar) (cl-incf dictionary-export-count)))
            (phony-export-function
-            (lambda (_analysis-data) (cl-incf rule-export-count))))
+            (lambda (_grammar) (cl-incf rule-export-count))))
       (phony-dictionary-put "beta" 'test-dict 2)
       (should (= dictionary-export-count 1))
       (should (= rule-export-count 0))
@@ -279,6 +336,71 @@ If there is no parse, an error is thrown."
     (should (= (phony-test--evaluate "one two three") 3))
     (should (= (phony-test--evaluate "wild white space") 42))))
 
+(ert-deftest phony-undefined-rule-in-pattern ()
+  "Undefined rules in patterns yield diagnostics."
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule))
+      x)
+    (phony-test-should-have-diagnostics phony--undefined-rule)))
+
+(ert-deftest phony-unreachable-undefined-rule-in-pattern ()
+  "Undefined rules in unreachable patterns do not yield diagnostics."
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule))
+      :interactive nil
+      x)
+    (phony-test-should-have-diagnostics)))
+
+(ert-deftest phony-undefined-rule-in-alternatives ()
+  "Undefined rules in open rule alternatives yield diagnostics."
+  (phony-test
+    (phony-define-open-rule open-rule
+      :alternatives (undefined-rule))
+    (phony-defun some-rule ("hah" (x open-rule))
+      x)
+    (phony-test-should-have-diagnostics phony--undefined-rule)))
+
+(ert-deftest phony-unreachable-undefined-rule-in-alternatives ()
+  "Undefined rules in unreachable alternatives do not yield diagnostics."
+  (phony-test
+    (phony-define-open-rule open-rule
+      :alternatives (undefined-rule))
+    (phony-defun some-rule ("hah")
+      5)
+    (phony-test-should-have-diagnostics)))
+
+(ert-deftest phony-multiple-undefined-rule-diagnostics ()
+  "References to different undefined rules gets a diagnostic each."
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule))
+      x)
+    (phony-defun some-other-rule ("hah" (x other-undefined-rule))
+      x)
+    (phony-test-should-have-diagnostics
+     (phony--undefined-rule
+      :cardinality 2))))
+
+(ert-deftest phony-undefined-rule-diagnostic-deduplication-one-rule ()
+  "Multiple references to undefined rule in one rule gets deduplicated."
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule) (y undefined-rule))
+      (cons x y))
+    (phony-test-should-have-diagnostics
+     (phony--undefined-rule
+      :cardinality 1))))
+
+(ert-deftest phony-undefined-rule-diagnostic-deduplication ()
+  "Multiple references to same undefined rule gets deduplicated."
+  (ert-skip "Not implemented")
+  (phony-test
+    (phony-defun some-rule ("hah" (x undefined-rule))
+      x)
+    (phony-defun some-other-rule ("hah" (x undefined-rule))
+      x)
+    (phony-test-should-have-diagnostics
+     (phony--undefined-rule
+      :cardinality 1))))
+
 (ert-deftest phony-open-rule-contribution ()
   "Rule contributions work."
   (phony-test
@@ -296,14 +418,54 @@ If there is no parse, an error is thrown."
     (should (= (phony-test--evaluate "add five and five") 10))
     (should (= (phony-test--evaluate "add three and three") 6))))
 
+(ert-deftest phony-contribution-to-undefined-rule ()
+  "Contribution to undefined rule yields diagnostic."
+  (phony-test
+    (phony-defun three "three"
+      :contributes-to number
+      3)
+    (phony-defun add ("add" (first three) "and" (second three))
+      (+ first second))
+
+    (phony-test-should-have-diagnostics phony--undefined-rule)))
+
+(ert-deftest phony-contribution-to-non-open-rule ()
+  "Contribution to non-open rule yields diagnostic."
+  (phony-test
+    (phony-defun number "five" 5)
+    (phony-defun three "three"
+      :contributes-to number
+      3)
+    (phony-defun add ("add" (first number) "and" (second number))
+      (+ first second))
+
+    (phony-test-should-have-diagnostics phony--contribution-to-non-open-rule)))
+
 (ert-deftest phony-open-rule-contribution-to-module ()
   "Rule contributions work."
   (phony-test
-   (phony-define-module module)
-   (phony-define-open-rule number
-     :module module)
+    (phony-define-module module)
+    (phony-define-open-rule number
+      :module module)
     (phony-defun three "three"
       :contributes-to number
+      3)
+    (phony-defun five "five"
+      :contributes-to number
+      5)
+    (phony-defun add ("add" (first number) "and" (second number))
+      (+ first second))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "add five and three") 8))
+    (should (= (phony-test--evaluate "add five and five") 10))
+    (should (= (phony-test--evaluate "add three and three") 6))))
+
+(ert-deftest phony-open-rule-alternatives ()
+  "Given alternatives work."
+  (phony-test
+    (phony-define-open-rule number
+      :alternatives (three))
+    (phony-defun three "three"
       3)
     (phony-defun five "five"
       :contributes-to number
@@ -318,14 +480,50 @@ If there is no parse, an error is thrown."
 (ert-deftest phony-interface-uses-provider ()
   "Providers are used in place of interfaces."
   (phony-test
-   (phony-define-interface number)
-   (phony-defun my-number "three"
-     :provides number
-     3)
-   (phony-defun double ("double" number)
-     (* 2 number))
-   (phony--export-all)
-   (should (= (phony-test--evaluate "double three") 6))))
+    (phony-define-interface number)
+    (phony-defun my-number "three"
+      :provides number
+      3)
+    (phony-defun double ("double" number)
+      (* 2 number))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "double three") 6))))
+
+(ert-deftest phony-interface-honors-mode ()
+  "Interfaces honor the mode parameter."
+  (phony-test
+    (phony-define-interface number
+      :mode text-mode)
+    (phony-defun my-number "three"
+      :provides number
+      3)
+    (phony-defun double ("double" number)
+      (* 2 number))
+    (phony--export-all)
+    (should-error (phony-test--evaluate "double three"))
+    (text-mode)
+    (should (= (phony-test--evaluate "double three") 6))))
+
+(ert-deftest phony-nestled-interface-honors-mode ()
+  "Nestled interfaces honor the mode parameter."
+  (phony-test
+    (phony-define-interface number
+      :mode (fundamental-mode text-mode))
+    (phony-define-interface number-indirection
+      :mode (fundamental-mode prog-mode)
+      :provides number)
+    (phony-defun my-number "three"
+      :provides number-indirection
+      3)
+    (phony-defun double ("double" number)
+      (* 2 number))
+    (phony--export-all)
+    (prog-mode)
+    (should-error (phony-test--evaluate "double three"))
+    (text-mode)
+    (should-error (phony-test--evaluate "double three"))
+    (fundamental-mode)
+    (should (= (phony-test--evaluate "double three") 6))))
 
 (ert-deftest phony-interface-nestled ()
   "Nestled interfaces resolve."
@@ -341,44 +539,99 @@ If there is no parse, an error is thrown."
    (phony--export-all)
    (should (= (phony-test--evaluate "double elite") 2674))))
 
+(ert-deftest phony-interface-nestled-without-provider ()
+  "Nestled interfaces without a provider yield a diagnostic."
+  (phony-test
+    (phony-define-interface number)
+    (phony-define-interface real
+      :provides number)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics phony--provider-not-found)))
+
 (ert-deftest phony-interface-cycle-detection ()
   "Cyclic interfaces error."
   (phony-test
-   (phony-define-interface number
-     :provides number)
-   (phony-defun double ("double" number)
-     (* 2 number))
-   (should-error (phony--export-all) :type 'phony--interface-cycle)))
+    (phony-define-interface number
+      :provides number)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics phony--interface-cycle)))
+
+(ert-deftest phony-interface-default-cycle-detection ()
+  "Cyclic interface defaults error."
+  (phony-test
+    (phony-define-interface number
+      :default number)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics phony--interface-cycle)))
+
+(ert-deftest phony-interface-undefined-default ()
+  "Undefined defaults error."
+  (phony-test
+    (phony-define-interface number
+      :default some-number)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics phony--undefined-interface-default)))
+
+(ert-deftest phony-interface-undefined-default-unreachable ()
+  "Undefined defaults do not error when interface is unreachable."
+  (phony-test
+    (phony-define-interface number
+      :default some-number)
+    (phony-defun double ("double two")
+      (* 2 2))
+
+    (phony-test-should-have-diagnostics)))
+
+(ert-deftest phony-interface-undefined-default-unsued ()
+  "Undefined defaults do not error when unused."
+  (phony-test
+    (phony-define-interface number
+      :default some-number)
+    (phony-defun three "three"
+      :provides number
+      3)
+    (phony-defun double ("double" number)
+      (* 2 number))
+
+    (phony-test-should-have-diagnostics)))
 
 (ert-deftest phony-interface-uses-selected-provider ()
   "Only the selected provider is used for interface."
   (phony-test
-   (phony-define-module number-module)
-   (phony-define-interface number
-     :module number-module)
-   (phony-define-module three-module)
-   (phony-define-module five-module)
+    (phony-define-module number-module)
+    (phony-define-interface number
+      :module number-module)
+    (phony-define-module three-module)
+    (phony-define-module five-module)
 
-   (phony-defun three "three"
-     :module three-module
-     :provides number
-     3)
-   (phony-defun five "five"
-     :module five-module
-     :provides number
-     5)
-   (phony-defun double ("double" number)
-     (* 2 number))
+    (phony-defun three "three"
+      :module three-module
+      :provides number
+      3)
+    (phony-defun five "five"
+      :module five-module
+      :provides number
+      5)
+    (phony-defun double ("double" number)
+      (* 2 number))
 
-   (phony-provide-from number-module three-module)
-   (phony--export-all)
-   (should (= (phony-test--evaluate "double three") 6))
-   (should-error (phony-test--evaluate "double five"))
+    (phony-provide-from number-module three-module)
+    (phony--export-all)
+    (should (= (phony-test--evaluate "double three") 6))
+    (should-error (phony-test--evaluate "double five"))
 
-   (phony-provide-from number-module five-module)
-   (phony--export-all)
-   (should-error (phony-test--evaluate "double three"))
-   (should (= (phony-test--evaluate "double five") 10))))
+    (phony-provide-from number-module five-module)
+    (phony--export-all)
+    (should-error (phony-test--evaluate "double three"))
+    (should (= (phony-test--evaluate "double five") 10))))
 
 (ert-deftest phony-interface-selected-vs-user-provider ()
   "User providers are preferred over module providers."
@@ -420,7 +673,8 @@ If there is no parse, an error is thrown."
      (* 2 number))
 
    (phony-provide-from number-module my-numbers)
-   (should-error (phony--export-all))))
+
+   (phony-test-should-have-diagnostics phony--ambiguous-interface)))
 
 (ert-deftest phony-interface-error-on-no-selected-provider ()
   "Reachable interfaces must have a selected provider."
@@ -442,7 +696,7 @@ If there is no parse, an error is thrown."
    (phony-defun double ("double" number)
      (* 2 number))
 
-   (should-error (phony--export-all))))
+   (phony-test-should-have-diagnostics phony--provider-not-found)))
 
 (ert-deftest phony-interface-elide-unused ()
   "Interfaces with more or less than one provider is ok if unreachable."
@@ -538,25 +792,34 @@ If there is no parse, an error is thrown."
 (ert-deftest phony-interface-default-provider-vs-user-provider ()
   "Interface default providers are lower priority than user providers."
   (phony-test
-   (phony-define-module interface-module)
-   (phony-define-interface number
-     :default three
-     :module interface-module)
+    (phony-define-module interface-module)
+    (phony-define-interface number
+      :default three
+      :module interface-module)
 
-   (phony-defun three "three"
-     :provides number
-     :module interface-module
-     3)
-   (phony-defun five "five"
-     :provides number
-     5)
+    (phony-defun three "three"
+      :provides number
+      :module interface-module
+      3)
+    (phony-defun five "five"
+      :provides number
+      5)
 
-   (phony-defun sum ("double" number)
-     (* 2 number))
+    (phony-defun sum ("double" number)
+      (* 2 number))
 
-   (phony--export-all)
-   (should (= (phony-test--evaluate "double five") 10))
-   (should-error (phony-test--evaluate "double three"))))
+    (phony--export-all)
+    (should (= (phony-test--evaluate "double five") 10))
+    (should-error (phony-test--evaluate "double three"))))
+
+(ert-deftest phony-cyclic-dependency-diagnostic ()
+  "Cyclic dependencies generate diagnostics."
+  (phony-test
+    (phony-defun some-word ((word another-word))
+      word)
+    (phony-defun another-word ((word some-word))
+      word)
+    (phony-test-should-have-diagnostics phony--dependency-cycle)))
 
 (ert-deftest phony-builtin-word ()
   "Word builtins parse."
@@ -631,40 +894,85 @@ If there is no parse, an error is thrown."
 (ert-deftest phony-disabled-rules-may-be-used-explicitly ()
   "Disabled rules can still be used explicitly."
   (phony-test
+    (phony-define-module x)
+    (phony-defun x "x"
+      :module x
+      5)
+    (phony-defun y ("y" x)
+      (+ x 3))
+    (phony-disable-module 'x)
+    (phony--export-all)
+    (should (equal (phony-test--evaluate "y x") 8))))
+
+(ert-deftest phony-disabled-rules-not-interactive ()
+  "Disabled rules are not interactive."
+  (phony-test
    (phony-define-module x)
    (phony-defun x "x"
+     :interactive t
      :module x
      5)
-   (phony-defun y ("y" x)
-     (+ x 3))
    (phony-disable-module 'x)
    (phony--export-all)
-   (should (equal (phony-test--evaluate "y x") 8))))
+   (should-error (phony-test--evaluate "x"))
+   (phony-enable-module 'x)
+   (phony--export-all)
+   (should (equal (phony-test--evaluate "x") 5))))
+
+(ert-deftest phony-conditional-interactivity ()
+  "Procedure rules can be interactive conditional on active modes."
+  (phony-test
+   (phony-defun almost-always "always"
+     :interactive t
+     t)
+   (phony-defun text "text"
+     :interactive text-mode
+     t)
+   (phony--export-all)
+   (should-error (phony-test--evaluate "text"))
+   (should (phony-test--evaluate "always"))
+   (text-mode)
+   (phony-interactive-mode -1)
+   (should (phony-test--evaluate "text"))
+   (should-error (phony-test--evaluate "always"))))
+
+(ert-deftest phony-conditional-interactivity-multiple-modes ()
+  "Procedure rules can be interactive conditional on active modes."
+  (phony-test
+   (phony-defun t-and-text "test"
+     :interactive (text-mode t)
+     t)
+   (phony--export-all)
+   (should (phony-test--evaluate "test"))
+   (phony-interactive-mode -1)
+   (should-error (phony-test--evaluate "test"))
+   (text-mode)
+   (should (phony-test--evaluate "test"))))
 
 (ert-deftest phony-anchors ()
   "Anchors limit parses correctly."
   (phony-test
-    (phony-defun x "x"
-      :anchor-beginning t
-      t)
-    (phony-defun y "y"
-      :anchor-end t
-      t)
-    (phony-defun z "z"
-      :anchor-end t
-      :anchor-beginning t
-      t)
-    (phony-defun w "w"
-      t)
-    (phony--export-all)
-    (should (phony-test--evaluate "x y"))
-    (should (phony-test--evaluate "x w w w y"))
-    (should (phony-test--evaluate "z"))
+   (phony-defun x "x"
+     :anchor-beginning t
+     t)
+   (phony-defun y "y"
+     :anchor-end t
+     t)
+   (phony-defun z "z"
+     :anchor-end t
+     :anchor-beginning t
+     t)
+   (phony-defun w "w"
+     t)
+   (phony--export-all)
+   (should (phony-test--evaluate "x y"))
+   (should (phony-test--evaluate "x w w w y"))
+   (should (phony-test--evaluate "z"))
 
-    (should-error (phony-test--evaluate "y w"))
-    (should-error (phony-test--evaluate "w x"))
-    (should-error (phony-test--evaluate "z w"))
-    (should-error (phony-test--evaluate "w z"))))
+   (should-error (phony-test--evaluate "y w"))
+   (should-error (phony-test--evaluate "w x"))
+   (should-error (phony-test--evaluate "z w"))
+   (should-error (phony-test--evaluate "w z"))))
 
 (ert-deftest phony-parser-literal-normalizer ()
   "`phony-experimental-set-parser-literal-normalizer' works as advertised."
@@ -698,6 +1006,10 @@ If there is no parse, an error is thrown."
               :contributes-to number
               :module some-module
               3)
+            (phony-define-interface additional-number
+              :contributes-to number)
+            (phony-defun four "four"
+              :provides additional-number)
             (phony-defun five "five"
               :contributes-to number
               3)
@@ -714,8 +1026,7 @@ If there is no parse, an error is thrown."
             (phony-defun insert-phrase ("insert" (phrase phony--builtin-phrase))
               (insert phrase))
             (phony--export-all)
-            (phony-talon--generate-configuration
-             (phony--grammar-analysis phony--exported-grammar))
+            (phony-talon--generate-configuration phony--exported-grammar)
             (with-temp-buffer
               (unless (zerop (call-process "python" nil t nil "-m" "py_compile"
                                            (phony-talon--output-path "rules.py")

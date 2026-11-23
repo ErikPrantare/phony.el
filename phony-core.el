@@ -27,7 +27,6 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'map)
-(require 'server)
 (require 'multisession)
 
 (require 'simulacrum)
@@ -70,7 +69,23 @@ recognition backend."
       (progn
         (phony-request-export)
         (keymap-global-set "<phony-command>" #'phony--evaluate-ast-command))
-    (keymap-global-unset "<phony-command>" t)))
+    (keymap-global-unset "<phony-command>" t)
+    (cancel-function-timers #'phony--sync-state)))
+
+;;;###autoload
+(define-minor-mode phony-interactive-mode
+  "Mode for when the default interactivity of procedure rules is enabled.
+
+The value t to the interactivity parameter implicitly means this mode.
+Disabling this mode will disable interactivity of all rules with t as
+their parameter."
+  :global t
+  :group 'phony
+  :init-value t)
+
+;; bug#79518, solved in Emacs 31, where this is done automatically
+;; when :init-value t.  So this is only needed for earlier versions.
+(add-to-list 'global-minor-modes 'phony-interactive-mode)
 
 (defun phony-generate-event (ast)
   "Evaluate AST via `simulacrum-generate-event'."
@@ -276,89 +291,95 @@ contribute to open rules."
 A rule is always active if it is global."
   (memq 'global (phony--rule-modes rule)))
 
-(defun phony--internalize-contributions (grammar)
-  "Insert all contributions to open rules as alternatives.
+(phony-ag--define-synthesized phony--rule-sealed-p (rule)
+  "Return non-nil if RULE is in a sealed module."
+  (and-let* ((module (phony--containing-module rule)))
+    (not (phony--module-enabled-p module))))
 
-This mutates GRAMMAR so that all contributions are directly reflected by
-the `phony--open-rule-alternatives' field."
-  (maphash
-   (lambda (name rule)
-     (seq-doseq (contribution (phony--rule-contributes-to rule))
-       (push name (phony--open-rule-alternatives
-                   (phony--get-rule contribution grammar))))
-     (setf (phony--rule-contributes-to rule) nil))
-   (phony--grammar-rules grammar)))
+(phony-ag--define-synthesized phony--grammar-contributions-lookup (grammar)
+  "Return hash table mapping open rules of GRAMMAR to their contributors."
+  (phony--inverse-rule-graph
+   grammar
+   (lambda (rule)
+     (seq-keep (lambda (name)
+                 (and-let* ((target (phony--get-rule name grammar)))
+                   (and
+                    (or (not (phony--rule-sealed-p rule))
+                        (eq (phony--containing-module target)
+                            (phony--containing-module rule)))
+                    target)))
+               (phony--rule-contributes-to rule)))))
 
-(cl-defgeneric phony--substitute-in-rule (rule from to)
-  "Change references to rule FROM to rule TO in RULE.
+(phony-ag--define-synthesized phony--open-rule-effective-alternatives-references (open)
+  "Return list of alternatives for OPEN as a list of names."
+  ;; TODO: Warn about duplicate :contributes-to and :alternatives
+  (seq-uniq
+   (thread-last
+     (append
+      (phony--open-rule-alternatives open)
+      (gethash
+       open
+       (phony--grammar-contributions-lookup
+        (phony--containing-grammar open))))
+     (seq-sort-by #'phony--name #'string<))
+   (lambda (x y) (eq (phony--name x) (phony--name y)))))
 
-This function assumes that contributions have been internalized.  See
-`phony--internalize-contributions'.")
+(phony-ag--define-synthesized phony--open-rule-effective-alternatives (open)
+  "Return list of alternatives for OPEN, including contributions.
 
-(cl-defmethod phony--substitute-in-rule ((rule phony--open-rule) from to)
-  "Change references to rule FROM to rule TO in RULE."
-  (setf (phony--open-rule-alternatives rule)
-        (seq-map (lambda (alternative)
-                   (if (eq alternative from)
-                       to
-                     alternative))
-                 (phony--open-rule-alternatives rule))))
-
-(cl-defmethod phony--substitute-in-rule ((rule phony--dictionary) _from _to)
-  "Change references to rule FROM to rule TO in RULE."
-  rule)
-
-(cl-defmethod phony--substitute-in-rule ((rule phony--procedure-rule) from to)
-  "Change references to rule FROM to rule TO in RULE."
-  (setf (phony--procedure-rule-pattern rule)
-        (phony-pattern--transform
-         (lambda (pattern)
-           (if (and (phony-pattern--rule-p pattern)
-                    (eq (phony-pattern--rule-name pattern) from))
-               (phony-pattern--make-rule :name to)
-             pattern))
-         (phony--procedure-rule-pattern rule))))
-
-(cl-defmethod phony--substitute-in-rule ((rule phony--interface-rule) _from _to)
-  "Change references to rule FROM to rule TO in RULE."
-  rule)
-
-(defun phony--substitute-in-grammar (grammar from to)
-  "Change references to rule FROM to rule TO in GRAMMAR."
-  (seq-doseq (rule (map-values (phony--grammar-rules grammar)))
-    (phony--substitute-in-rule rule from to)))
-
-(defun phony--replace-in-grammar (grammar from to)
-  "Remove FROM and change references to rule FROM to rule TO in GRAMMAR."
-  (phony--substitute-in-grammar grammar from to)
-  (remhash from (phony--grammar-rules grammar)))
+This function returns the rule objects, filtering out references to
+undefined rules."
+  (seq-keep
+   #'phony--resolved
+   (phony--open-rule-effective-alternatives-references open)))
 
 (defun phony--interactive-rules (grammar)
   "Return the interactive rules of GRAMMAR."
   (seq-filter
    (lambda (rule) (and (phony--procedure-rule-p rule)
-                       (phony--procedure-rule-interactive-p rule)))
+                       (phony--interactive-p rule)))
    (phony--get-rules grammar)))
 
-(defun phony--products (rule)
-  "Return the names of the rules that may occur as submatches of RULE.
-
-This does not resolve interfaces nor contributions to open rules."
+(defun phony--product-references (rule)
+  "Return references to the rules that may occur as submatches of RULE."
   (cl-typecase rule
     (phony--procedure-rule
-     (seq-map #'phony-pattern--rule-name
-              (phony-pattern--collect
-               #'phony-pattern--rule-p
-               (phony--procedure-rule-pattern rule))))
+     (thread-last
+       (phony--procedure-rule-pattern rule)
+       (phony-pattern--collect #'phony-pattern--rule-p)
+       (seq-map #'phony-pattern--rule-reference)))
     (phony--open-rule
-     (phony--open-rule-alternatives rule))
+     (phony--open-rule-effective-alternatives-references rule))
     (phony--dictionary
      '())
     (phony--interface-rule
-     '())
+     (ensure-list (phony--interface-resolved-provider rule)))
     (t
-     (error "Internal phony error, please submit a bug report: `phony--products' typecase failed for %s"
+     (error "Internal phony error, please submit a bug report: `phony--product-references' typecase failed for %s"
             rule))))
+
+(defun phony--undefined-product-diagnostics (rule)
+  "Return list of diagnostics for undefined possible submatches of RULE."
+  ;; TODO: dedup across rules, see test
+  ;; phony-undefined-rule-diagnostic-deduplication
+  (let ((undefined-names
+         (seq-uniq (seq-map #'phony--name
+                            (seq-remove
+                             #'phony--resolved
+                             (phony--product-references rule))))))
+    (seq-map (lambda (undefined)
+               (phony--make-diagnostic
+                :type 'phony--undefined-rule
+                :message (format
+                          "Rule `%s' references undefined rule `%s'"
+                          (phony--rule-name rule) undefined)))
+             undefined-names)))
+
+(defun phony--products (rule)
+  "Return the rules that may occur as submatches of RULE.
+
+References to undefined rules are not included in the return value."
+  (seq-keep #'phony--resolved (phony--product-references rule)))
 
 (defun phony--user-rule-p (rule)
   "Return non-nil if RULE is a user rule.
@@ -367,113 +388,97 @@ A rule is a user rule when it is not part of a module.  This is
 interpreted as the rule being part of the user's personal configuration."
   (not (phony--rule-module rule)))
 
-(defun phony--remove-unreachable-resolve-interfaces (grammar)
-  "Remove unreachable rules and replace interfaces with their providers.
-
-This mutates GRAMMAR so that references to an interface rule instead
-reference the provider of the interface.  The interface rules are
-removed from the grammar.  In addition, any rules that cannot be reached
-are removed.
-
-This function assumes `phony--internalize-contributions' has been
-applied to the grammar."
-  ;; Removing unreachables and resolving interfaces must be done as
-  ;; one, because we should only error on unresolved interfaces if
-  ;; they are reachable, but reachability in turn depends on interface
-  ;; resolution.
-  (let* ((worklist (mapcar #'phony--rule-name
-                           (phony--interactive-rules grammar)))
+(phony-ag--define-synthesized phony--reachable-rule-table (grammar)
+  "Return a hash map containing rules mapping to t if reachable in GRAMMAR."
+  (let* ((worklist (phony--interactive-rules grammar))
          (reachable (make-hash-table :test 'eq)))
     (while worklist
-      (let* ((current (pop worklist)))
-        (unless (gethash current reachable)
-          (puthash current current reachable)
-          (dolist (task (phony--products (phony--get-rule current grammar)))
-            (unless (phony--get-rule task grammar)
-              (error "Rule `%s' references undefined rule `%s'"
-                     current task))
+      (let ((current-rule (pop worklist)))
+        (unless (gethash current-rule reachable)
+          (puthash current-rule t reachable)
+          (dolist (task (phony--products current-rule))
             (unless (gethash task reachable)
-              (push task worklist)))
-          (when (phony--interface-rule-p (phony--get-rule current grammar))
-            (when-let* ((provider (phony--interface-resolved-provider
-                                   (phony--get-rule current grammar))))
-              (unless (gethash (phony--rule-name provider) reachable)
-                (push (phony--rule-name provider) worklist)))))))
-    (dolist (rule (phony--get-rules grammar))
-      (let ((name (phony--rule-name rule)))
-        (unless (gethash name reachable)
-          (remhash name (phony--grammar-rules grammar)))))
-    (dolist (interface (seq-filter #'phony--interface-rule-p
-                                   (phony--get-rules grammar)))
-      (let ((provider (phony--interface-resolved-provider interface)))
-        (phony--replace-in-grammar
-         grammar
-         (phony--rule-name interface)
-         (phony--rule-name provider))))))
+              (push task worklist))))))
+    reachable))
 
-(defun phony--seal-disabled-modules (grammar)
-  "Remove external impact of disabled modules in GRAMMAR.
+(phony-ag--define-synthesized phony--rule-reachable-p (rule)
+  "Return t if RULE is reachable."
+  (gethash
+   rule
+   (phony--reachable-rule-table
+    (phony--containing-grammar rule))))
 
-This removes interactivity and contributions to rules external to the
-module from rules in disabled modules."
-  (dolist (rule (phony--get-rules grammar))
-    (when (and (phony--rule-module rule)
-               (not (phony--module-enabled-p (phony--get-module
-                                              (phony--rule-module rule)
-                                              grammar))))
-      (setf (phony--rule-contributes-to rule)
-            (seq-filter (lambda (name)
-                          (eq
-                           (phony--rule-module rule)
-                           (phony--rule-module
-                            (phony--get-rule name grammar))))
-                        (phony--rule-contributes-to rule)))
-      (when (phony--procedure-rule-p rule)
-        (setf (phony--procedure-rule-interactive-p rule) nil)))))
+(phony-ag--define-synthesized phony--interactive-p (procedure-rule)
+  "Return non-nil if PROCEDURE-RULE is interactive."
+  (and (phony--procedure-rule-interactive-p procedure-rule)
+       (not (phony--rule-sealed-p procedure-rule))))
 
-(define-error 'phony--interface-cycle "Cycle in providers")
+(define-error 'phony--grammar-error "Error in grammar")
+
+(define-error 'phony--dependency-cycle
+              "Cycle in dependencies"
+              'phony--grammar-error)
+
+(define-error 'phony--interface-cycle
+              "Cycle in interfaces"
+              'phony--dependency-cycle)
+
+(define-error 'phony--ambiguous-interface
+              "More than one candidate provider"
+              'phony--grammar-error)
+
+(define-error 'phony--provider-not-found
+              "No provider found"
+              'phony--grammar-error)
+
+(define-error 'phony--undefined-rule
+              "Undefined rule"
+              'phony--grammar-error)
+
+(define-error 'phony--undefined-interface-default
+              "Undefined default parameter to interface"
+              'phony--undefined-rule)
+
+(define-error 'phony--contribution-to-non-open-rule
+              "Contribution to non-open rule"
+              'phony--grammar-error)
 
 (defun phony--detect-interface-cycles (grammar)
-  "Error if there is a rule provision cycle in GRAMMAR."
-  (let* ((rules (phony--get-rules grammar))
-         (providers (seq-filter #'phony--rule-provides rules))
-         (provision-map
-          (map-into (seq-map (lambda (provider)
-                               (cons provider
-                                     (phony--get-rule
-                                      (phony--rule-provides provider)
-                                      grammar)))
-                             providers)
-                    '(hash-table :test eq))))
-    (dolist (provider providers)
-      (let ((current provider)
-            (cycle (list provider))
-            (visited (make-hash-table :test 'eq)))
-        (while current
-          (puthash current t visited)
-          (setq current (gethash current provision-map))
-          (push current cycle)
-          (when (gethash current visited)
-            (signal 'phony--interface-cycle
-                    (seq-map
-                     #'phony--rule-name
-                     ;; Emacs 31: drop-while
-                     (seq-drop-while (lambda (rule) (not (eq rule current)))
-                                     (nreverse cycle))))))))))
-
-(defun phony--canonicalize-grammar (grammar)
-  "Rewrite GRAMMAR into canonical form.
-
-In canonical form, all alternatives in open rules are order
-lexicographically on name."
-  (maphash
-   (lambda (_name rule)
-     (when (phony--open-rule-p rule)
-       (setf (phony--open-rule-alternatives rule)
-             (seq-sort-by
-              #'symbol-name #'string<
-              (phony--open-rule-alternatives rule)))))
-   (phony--grammar-rules grammar)))
+  "Error if there is an interface cycle in GRAMMAR."
+  (cl-flet ((successors (node)
+              (seq-filter
+               #'phony--interface-rule-p
+               (or (phony--interface-provider-candidates node)
+                   (ensure-list (phony--interface-default-resolved node))))))
+    (let* ((rules (phony--get-rules grammar))
+           (interfaces (seq-filter #'phony--interface-rule-p rules)))
+      (dolist (interface interfaces)
+        (let ((stack '())
+              (done (make-hash-table :test 'eq)))
+          (cl-labels ((dfs (node)
+                        (push node stack)
+                        (when (memq node (cdr stack))
+                          ;; TODO: Make this diagnostic non-blocking
+                          ;; for unreachables
+                          (signal 'phony--interface-cycle
+                                  (list
+                                   (format
+                                    "Cycle in interface resolution: %s"
+                                    (string-join
+                                     (thread-last
+                                       (nreverse stack)
+                                       ;; Emacs 31: drop-while
+                                       (seq-drop-while
+                                        (lambda (rule) (not (eq rule node))))
+                                       (seq-map #'phony--rule-name)
+                                       (seq-map #'symbol-name))
+                                     " -> ")))))
+                        (dolist (successor (successors node))
+                          (unless (gethash successor done)
+                            (dfs successor)))
+                        (pop stack)
+                        (puthash node t done)))
+            (dfs interface)))))))
 
 (defun phony--detect-non-open-contributions (grammar)
   "Throw error if GRAMMAR contains rules who contribute to non-open rules.
@@ -482,34 +487,27 @@ This function also checks for contributions to non-existent rules."
   (dolist (rule (phony--get-rules grammar))
     (dolist (contribution (phony--rule-contributes-to rule))
       (let ((lookup (phony--get-rule contribution grammar)))
+        ;; TODO: Make these diagnostics non-blocking
         (unless lookup
-          (error "Rule `%s' contributes to undefined rule `%s'"
-                 (phony--rule-name rule) contribution))
+          (signal
+           'phony--undefined-rule
+           (list (format "Rule `%s' contributes to undefined rule `%s'"
+                         (phony--rule-name rule) contribution))))
         (unless (phony--open-rule-p lookup)
-          (error "Rule `%s' contributes to non-open rule `%s'"
-                 (phony--rule-name rule) contribution))))))
+          (signal
+           'phony--contribution-to-non-open-rule
+           (list (format "Rule `%s' contributes to non-open rule `%s'"
+                         (phony--rule-name rule) contribution))))))))
 
-(phony-ag--define-synthesized phony--provider-alist (grammar)
-  "Return alist from providers to their provided interfaces in GRAMMAR.
-
-Keys and values are rule objects."
-  (seq-keep
+(phony-ag--define-synthesized phony--interface-provider-candidates-table (grammar)
+  "Return hash table mapping interfaces to the providers of it in GRAMMAR."
+  (phony--inverse-rule-graph
+   grammar
    (lambda (rule)
-     (and (phony--rule-provides rule)
-          (cons rule (phony--get-rule (phony--rule-provides rule) grammar))))
-   (phony--get-rules grammar)))
+     (and-let* ((provides (phony--rule-provides rule)))
+       (list (phony--get-rule provides grammar))))))
 
-(phony-ag--define-synthesized phony--interface-candidate-alist (grammar)
-  "Return alist mapping interfaces to the providers of it in GRAMMAR."
-  (let* ((inverse-provider-alist
-          (seq-map (lambda (entry) (cons (cdr entry) (car entry)))
-                   (phony--provider-alist grammar)))
-         (grouped (seq-group-by #'car inverse-provider-alist)))
-    (seq-map (lambda (entry)
-               (cons (car entry) (seq-map #'cdr (cdr entry))))
-             grouped)))
-
-(phony-ag--define-synthesized phony--interface-candidates (interface)
+(phony-ag--define-synthesized phony--interface-provider-candidates (interface)
   "Return candidates for INTERFACE."
   (seq-filter
    (lambda (candidate)
@@ -519,7 +517,7 @@ Keys and values are rule objects."
           (phony--containing-module candidate)
           (phony--containing-grammar interface))))
    (map-elt
-    (phony--interface-candidate-alist
+    (phony--interface-provider-candidates-table
      (phony--containing-grammar interface))
     interface)))
 
@@ -530,60 +528,109 @@ If the resolution fails or there is no default, this returns nil."
   (phony--get-rule (phony--interface-rule-default interface)
                    (phony--containing-grammar interface)))
 
-(cl-defgeneric phony--resolved-rule (rule)
-  "Return resolution of RULE."
-  rule)
+(phony-ag--define-synthesized phony--interface-resolved-provider-or-diagnostic (interface)
+  "Return the resolved provider for INTERFACE.
+
+If it fails to resolve, a diagnostic is returned instead."
+  (cl-block nil
+    (let ((providers (phony--interface-provider-candidates interface)))
+      ;; If rules in the user's configuration provide for the
+      ;; interface, they take precedence.
+      (when-let* ((user-providers (seq-filter #'phony--user-rule-p providers)))
+        (setq providers user-providers))
+      ;; :default provider has lowest priority
+      (unless providers
+        (when-let* ((default-name (phony--interface-rule-default interface)))
+          (let ((default (phony--interface-default-resolved interface)))
+            (unless default
+              (cl-return
+               (phony--make-diagnostic
+                :type 'phony--undefined-interface-default
+                :message
+                (format "The default provider `%s' for interface `%s' is not defined"
+                        default-name
+                        (phony--rule-name interface)))))
+            (setq providers (list default)))))
+      (when (> (length providers) 1)
+        (cl-return
+         (phony--make-diagnostic
+          :type 'phony--ambiguous-interface
+          :message
+          (format "More than one eligible provider available for interface `%s'\nProviders: `%s'"
+                  (phony--rule-name interface)
+                  (mapconcat
+                   (lambda (provider) (symbol-name (phony--rule-name provider)))
+                   providers
+                   ", ")))))
+      (when (= (length providers) 0)
+        ;; TODO: Hint about providers in non-selected modules
+        (cl-return
+         (phony--make-diagnostic
+          :type 'phony--provider-not-found
+          :message
+          (format "No eligible provider available for interface `%s'"
+                  (phony--rule-name interface)))))
+      (car providers))))
+
+(defun phony--result-value (result)
+  "Return RESULT if it is not a diagnostic, otherwise nil."
+  (and (not (phony--diagnostic-p result)) result))
+
+(defun phony--result-diagnostic (result)
+  "Return RESULT if it is a diagnostic, otherwise nil."
+  (and (phony--diagnostic-p result) result))
 
 (phony-ag--define-synthesized phony--interface-resolved-provider (interface)
-  "Return the resolved provider for INTERFACE."
-  (let ((providers (phony--interface-candidates interface)))
-    ;; If rules in the user's configuration provide for the
-    ;; interface, they take precedence.
-    (when-let* ((user-providers (seq-filter #'phony--user-rule-p providers)))
-      (setq providers user-providers))
-    ;; :default provider has lowest priority
-    (unless providers
-      (when-let* ((default-name (phony--interface-rule-default interface))
-                  (default (phony--interface-default-resolved interface)))
-        (unless default
-          ;; TODO: Factor out error reporting
-          (error "The default provider `%s' for interface %s is not defined"
-                 default-name (phony--rule-name interface)))
-        (setq providers (list default))))
-    (when (> (length providers) 1)
-      (error "More than one eligible provider available for %s\nProviders: %s"
-             (phony--rule-name interface)
-             (mapconcat
-              (lambda (provider) (symbol-name (phony--rule-name provider)))
-              providers
-              ", ")))
-    (when (= (length providers) 0)
-      ;; TODO: Hint about providers in non-selected modules
-      (error "No eligible provider available for %s"
-             (phony--rule-name interface)))
-    (phony--resolved-rule (car providers))))
+  "Return the resolved provider for INTERFACE, or nil if resolution fails.
 
-(cl-defmethod phony--resolved-rule ((interface phony--interface-rule))
-  "Return resolution of INTERFACE."
-  (phony--interface-resolved-provider interface))
+This returns the immediate resolution, not the transitive one."
+  (phony--result-value
+   (phony--interface-resolved-provider-or-diagnostic interface)))
 
-(defun phony--prepare-grammar (grammar)
-  "Prepare GRAMMAR for export.
+(phony-ag--define-synthesized phony--interface-resolved-provider-diagnostics (interface)
+  "Return diagnostics for provider resolution of INTERFACE."
+  (ensure-list
+   (phony--result-diagnostic
+    (phony--interface-resolved-provider-or-diagnostic interface))))
 
-The returned grammar must not be mutated."
-  (let ((prepared (phony--copy-grammar grammar)))
-    (phony--seal-disabled-modules prepared)
-    (phony--detect-non-open-contributions prepared)
-    (phony--internalize-contributions prepared)
-    (phony--detect-interface-cycles prepared)
-    ;; HACK: This lil clone dance is necessary until we remove
-    ;; rewriting from reachability pruning.
-    (phony-ag--initialize prepared)
-    (phony--remove-unreachable-resolve-interfaces prepared)
-    (setq prepared (phony--copy-grammar prepared))
-    (phony--canonicalize-grammar prepared)
-    (phony-ag--initialize prepared)
-    prepared))
+(cl-defstruct (phony--diagnostic
+               (:constructor phony--make-diagnostic)
+               (:copier nil))
+  "A diagnostic."
+  ( message ""
+    :type string
+    :documentation "The diagnostic message.")
+  ( type nil
+    :type symbol
+    :documentation "The diagnostic type."))
+
+(phony-ag--define-synthesized phony--grammar-diagnostics (grammar)
+  "Return diagnostics for GRAMMAR."
+  (cl-block nil
+    (condition-case e
+        (progn
+          (when-let* ((undefined-reference-diagnostics
+                       (seq-mapcat (lambda (rule)
+                                     (and (phony--rule-reachable-p rule)
+                                          (phony--undefined-product-diagnostics rule)))
+                                   (phony--get-rules grammar))))
+            (cl-return undefined-reference-diagnostics))
+          (when-let* ((interface-resolution-diagnostics
+                       (seq-mapcat (lambda (rule)
+                                     (and (phony--interface-rule-p rule)
+                                          (phony--rule-reachable-p rule)
+                                          (phony--interface-resolved-provider-diagnostics rule)))
+                                   (phony--get-rules grammar))))
+            (cl-return interface-resolution-diagnostics))
+          ;; TODO: Move cycle detection to diagnostics function above
+          (phony--detect-interface-cycles grammar)
+          (phony--detect-non-open-contributions grammar)
+          (phony--detect-dependency-cycle grammar))
+      (phony--grammar-error
+       (list (phony--make-diagnostic
+              ;; Emacs 31: error-type
+              :type (car e)
+              :message (cadr e)))))))
 
 (defun phony--add-rule (rule grammar)
   "Add RULE to GRAMMAR.
@@ -613,7 +660,10 @@ This function must be invoked every time a rule is declared."
                            #'phony--open-rule-p
                            (phony--get-rules grammar)))
       (setf (phony--open-rule-alternatives open-rule)
-            (remove rule-name (phony--open-rule-alternatives open-rule))))
+            (seq-remove (lambda (reference)
+                          (eq (phony--rule-reference-name reference)
+                              rule-name))
+                        (phony--open-rule-alternatives open-rule))))
     (phony-request-export)))
 
 (defun phony--add-new-rule (constructor parameters)
@@ -746,8 +796,10 @@ dictionaries."
   (with-temp-file (phony--output-directory "dictionaries.json")
     (json-insert
      (mapcar #'phony--prepare-dictionary-for-serialization
-             (seq-filter #'phony--dictionary-p
-                         (phony--get-rules grammar))))))
+             (thread-last
+               (phony--get-rules grammar)
+               (seq-filter #'phony--dictionary-p)
+               (seq-filter #'phony--rule-reachable-p))))))
 
 (defvar phony--dictionary-export-function #'phony--write-dictionaries-to-file
   "Function called to export dictionaries.")
@@ -858,6 +910,14 @@ rule types.
   "Define an open rule from ARGUMENTS.
 
 See documentation of `phony-define-open-rule' for more information."
+  (when-let* ((alternatives (plist-get arguments :alternatives)))
+    (unless (and (listp alternatives) (not (eq (car alternatives) 'quote)))
+      (error ":alternatives keyword argument must be an unquoted list"))
+    (setf (plist-get arguments :alternatives)
+          (seq-map (lambda (name)
+                     (phony--make-rule-reference
+                      :name name))
+                   alternatives)))
   (phony--add-new-rule #'phony--make-open-rule arguments)
   (phony-request-export)
   (map-elt arguments :name))
@@ -936,120 +996,40 @@ rule types.
                     :documentation ,documentation)
               ',arguments))))
 
-(cl-defstruct (phony--analysis-data
-               (:constructor nil)
-               (:constructor phony--make-analysis-data))
-  "Storage struct for results of statically analyzing the grammar."
-  (productions
-   (make-hash-table)
-   :type hash-table
-   :documentation "Hash table mapping a rule to a list of its submatches.
-A production of a rule is a rule whose match is included in the
-producing rule's match.  If a production is matched multiple times, it
-is duplicated.")
-  (producers
-   (make-hash-table)
-   :type hash-table
-   :documentation "Hash table mapping a rule to a list of rules it is a submatch of.
-A producer of a rule is a rule whose match includes this rule's match.
-If a rule is produced multiple times, it is duplicated.")
-  (cycle
-   nil
-   :type list
-   :documentation "If non-nil, a sequence of rule names forming a dependency cycle.")
-  (contains-errors
-   nil
-   :type boolean
-   :documentation "Whether the analysis detected errors in the grammar.")
-  (linear-extension
-   nil
-   :type list
-   :documentation "Linear extension of the dependency graph.
-Also commonly known as topological order.  Rules occurring in this list
-are guaranteed to only depend on preceding rules.")
-  (grammar
-   nil
-   :type phony--grammar
-   :documentation "The grammar that was analyzed."))
+(defun phony--inverse-rule-graph (grammar successor-function)
+  "Return a hash table for an inverse rule graph for GRAMMAR.
 
-(defun phony--get-productions (analysis-data rule)
-  ;; checkdoc-params: (analysis-data)
-  "Get list of rules that are submatches of RULE.
+SUCCESSOR-FUNCTION encodes the graph.  It takes a rule as input and
+returns a list of the successors.
 
-If a rule is a submatch multiple times, it will also occur as many times
-in the returned list."
-  (gethash rule (phony--analysis-data-productions analysis-data)))
+This function returns a hash table corresponding to the inverse graph
+given by SUCCESSOR-FUNCTION."
+  (let ((graph (make-hash-table :test 'eq)))
+    (dolist (predecessor (phony--get-rules grammar))
+      (dolist (successor (funcall successor-function predecessor))
+        (push predecessor (gethash successor graph))))
+    graph))
 
-(defun phony--get-producers (analysis-data rule)
-  ;; checkdoc-params: (analysis-data)
-  "Get list of rules whose match includes RULE as a submatch.
+(phony-ag--define-synthesized phony--get-producers-table (grammar)
+  "Return hash table mapping rules to rules that produce them in GRAMMAR."
+  (phony--inverse-rule-graph grammar #'phony--products))
 
-If a rule includes RULE multiple times, it will also occur as many times
-in the returned list."
-  (gethash rule (phony--analysis-data-producers analysis-data)))
+(defun phony--get-producers (rule)
+  "Get list of rules whose match includes RULE as a submatch."
+  (gethash rule (phony--get-producers-table
+                 (phony--containing-grammar rule))))
 
-(defun phony--maximum-producer-multiplicity (analysis-data rule)
-  ;; checkdoc-params: (analysis-data)
-  "Return maximum amount of times RULE is produced by a single rule."
-  (thread-last
-    (phony--get-producers analysis-data rule)
-    (seq-map #'phony--rule-name)
-    (seq-map #'symbol-name)
-    (seq-sort #'string<)
-    (seq-group-by #'identity)
-    (seq-map #'cdr)
-    (seq-map #'length)
-    (apply #'max 0)))
+(defun phony--find-dependency-cycle-impl (rule visited finished)
+  "Ensure grammar rule dependencies forms a DAG.
 
-(defun phony--populate-dependency-graph (analysis-data grammar)
-  "Populate the dependency graph of ANALYSIS-DATA from GRAMMAR.
-
-If an undefined rule is mentioned in some pattern, a warning will be
-emitted and `phony--analysis-data-contains-errors' will be set to t."
-  (let ((productions (make-hash-table))
-        (producers (make-hash-table))
-        (undefined-references (make-hash-table)))
-    (seq-doseq (rule (phony--get-rules grammar))
-      (puthash rule '() productions)
-      (puthash rule '() producers))
-    (seq-doseq (rule (phony--get-rules grammar))
-      (seq-doseq (reference (phony--products rule))
-        (if-let* ((reference-rule (phony--get-rule reference grammar)))
-            (progn
-              (push reference-rule (gethash rule productions))
-              (push rule (gethash reference-rule producers)))
-          (cl-pushnew (phony--rule-name rule)
-                      (gethash reference undefined-references))
-          (oset analysis-data contains-errors t))))
-    (oset analysis-data productions productions)
-    (oset analysis-data producers producers)
-    (maphash
-     (lambda (name mentioner-names)
-       (display-warning
-        'phony
-        (format "Rule %S is not defined (required by %s)"
-                name
-                (mapconcat (lambda (n) (format "%S" n))
-                           mentioner-names ", "))))
-     undefined-references)))
-
-(defun phony--try-linear-extension-impl (rule visited finished analysis-data)
-  "Find linear extension of dependency graph in ANALYSIS-DATA.
-
-This function assumes that `phony--analysis-data-productions' has been
-populated in ANALYSIS-DATA.
-
-This function populates `phony--analysis-data-linear-extension' in
-ANALYSIS-DATA.  If a cycle is detected
-`phony--analysis-data-contains-errors' is set to t and the cycle is
-returned without visiting any more rules.  Otherwise, this function
-returns nil.
+If a cycle is detected it is returned without visiting any more rules.
+Otherwise, this function returns nil.
 
 RULE is the currently visited rule.  VISITED is a hash table of the
 already visited rules.  FINISHED is a hash table of rules that have been
 fully processed.  This function adds RULE to VISITED before recusing to
 its children, and to FINISHED afterwards."
-  (let ((dependencies (oref analysis-data productions)))
+  (let ((dependencies (phony--products rule)))
     (cl-block nil
       (when (gethash rule finished)
         (cl-return nil))
@@ -1057,69 +1037,38 @@ its children, and to FINISHED afterwards."
         (cl-return (list rule)))
 
       (puthash rule t visited)
-      (seq-doseq (dependency (gethash rule dependencies))
-        (when-let* ((path (phony--try-linear-extension-impl
-                           dependency visited finished analysis-data)))
+      (seq-doseq (dependency dependencies)
+        (when-let* ((path (phony--find-dependency-cycle-impl
+                           dependency visited finished)))
           (if (and (not (length= path 1))
                    (eq (seq-first path) (car (last path))))
               (cl-return path)
             (cl-return (cons rule path)))))
 
       (puthash rule t finished)
-      (push rule (oref analysis-data linear-extension))
       (cl-return nil))))
 
-(cl-defun phony--try-linear-extension (analysis-data grammar)
-  "Try to construct the linear extension of GRAMMAR's dependency graph.
+(cl-defun phony--detect-dependency-cycle (grammar)
+  "Signal if there is a dependency cycle in GRAMMAR.
 
-This function assumes that `phony--analysis-data-productions' has been
-populated in ANALYSIS-DATA.
-
-If it is not possible to create a linear extension because of a cycle,
-`phony--analysis-data-cycle' of ANALYSIS-DATA is set to that cycle and
-`phony--analysis-data-contains-errors' is set to t.  Otherwise,
-`phony--analysis-data-linear-extension' is populated with a valid linear
-extension."
+The error signalled is `phony--dependency-cycle'."
   (let ((visited (make-hash-table))
         (finished (make-hash-table)))
     (seq-doseq (rule (phony--get-rules grammar))
-      (when-let* ((cycle (phony--try-linear-extension-impl
-                          rule visited finished
-                          analysis-data)))
-        (oset analysis-data cycle (seq-map #'phony--rule-name cycle))
-        (cl-return-from phony--try-linear-extension)))))
+      (when-let* ((cycle (phony--find-dependency-cycle-impl rule visited finished)))
+        ;; TODO: Only diagnose if reachable (eventually categorize
+        ;; severity by reachability instead)
+        (signal
+         'phony--dependency-cycle
+         (list
+          (concat "Cycle found: "
+                  (string-join
+                   (seq-map #'symbol-name
+                            (seq-map #'phony--rule-name cycle))
+                   " -> "))))))
+    nil))
 
-(defvar phony--last-analysis nil
-  "Results of the last performed analysis.")
-
-(defun phony--analyze-grammar (grammar)
-  "Analyze GRAMMAR.
-
-This returns a `phony--analysis-data' structure populated with the
-results of the analysis."
-  ;; TODO: Make this side-effect free and move definition to
-  ;; phony--grammar-analysis.
-  (let ((analysis-data (phony--make-analysis-data)))
-    (phony--populate-dependency-graph analysis-data grammar)
-    (phony--try-linear-extension analysis-data grammar)
-    (setf (phony--analysis-data-linear-extension analysis-data)
-          (reverse
-           (phony--analysis-data-linear-extension analysis-data)))
-    (when-let* ((cycle (phony--analysis-data-cycle analysis-data)))
-      (display-warning 'phony (concat "Cycle found: "
-                                      (string-join
-                                       (seq-map #'symbol-name cycle)
-                                       " -> ")))
-      (setf (phony--analysis-data-contains-errors analysis-data) t))
-    (setq phony--last-analysis analysis-data)
-    (setf (phony--analysis-data-grammar analysis-data) grammar)
-    analysis-data))
-
-(phony-ag--define-synthesized phony--grammar-analysis (grammar)
-  "Return the analysis data for GRAMMAR."
-  (phony--analyze-grammar grammar))
-
-(defcustom phony-export-function 'phony-talon-export
+(defcustom phony-export-function #'ignore
   "Function to be used for exporting spoken rules."
   ;; Using radio instead of choice did not display :tag
   :type '(choice (function-item :tag "Talon exporter"
@@ -1128,6 +1077,78 @@ results of the analysis."
   :risky t
   :group 'phony)
 
+(make-obsolete-variable
+ 'phony-export-function
+ 'phony-recognition-engine
+ "2026-11-23")
+
+(defcustom phony-recognition-engine nil
+  "Which recognition engine to use.
+
+This is a symbol.  Allowed values are
+
+- The symbol `talon' for Talon, or
+- nil for no engine."
+  :type '(radio (const :tag "None" nil)
+                (const :tag "Talon" talon))
+  :risky t
+  :group 'phony)
+
+(defun phony--wrap-interactive-rules (grammar)
+  "Modify GRAMMAR to wrap interactive rules in forwarding rules.
+
+This step is done to make the interactivity of procedure rules able to
+be conditional on modes.
+
+For each interactive procedure rule, a new procedure rule is added that
+is unconditionally interactive, but whose modes parameter is the same as
+the parameter passed to the original interactive rule.  The original
+rule is made uninteractive, with the new rule forwarding to it as the
+new top-level entry point.
+
+The new rules inherit anchors and modules from the original rules."
+  (dolist (rule (phony--get-rules grammar))
+    (when (and (phony--procedure-rule-p rule)
+               (phony--procedure-rule-interactive-p rule))
+
+      (phony--add-rule
+       (phony--make-procedure-rule
+        :name (make-symbol (format "phony-internal-generated--%s"
+                                   (phony--name rule)))
+        :pattern (phony-pattern--parse
+                  `(x ,(phony--name rule))
+                  '(x))
+        :function #'identity
+        :arglist '(x)
+        :generated-p t
+        :interactive-p t
+        :modes
+        (phony--procedure-rule-interactive-p rule)
+        :module
+        (phony--rule-module rule)
+        :anchor-beginning-p
+        (phony--procedure-rule-anchor-beginning-p rule)
+        :anchor-end-p
+        (phony--procedure-rule-anchor-end-p rule))
+       grammar)
+      (setf (phony--procedure-rule-interactive-p rule) nil))))
+
+(defun phony--finalize-grammar ()
+  "Return copy of `phony--default-grammar'.
+
+The returned grammar should not be mutated.  The attribute grammar has
+been initialized on it."
+  (let ((grammar
+         (phony--copy-grammar phony--default-grammar)))
+    (phony--wrap-interactive-rules grammar)
+    (phony-ag--initialize grammar)
+    grammar))
+
+(declare-function phony-talon-export "phony-talon")
+
+(defvar phony--warned-about-deprecated-backend nil
+  "Non-nil if we've displayed a warning about `phony-export-function'.")
+
 (defun phony--export-all ()
   "Export all rules to the speech recognition engine.
 
@@ -1135,19 +1156,32 @@ If any errors are detected in the grammar, the rules are not exported.
 
 If no rules are defined, this function does nothing."
   (when (phony--get-rules phony--default-grammar)
-    (let* ((prepared-grammar (phony--prepare-grammar phony--default-grammar))
-           (analysis-data (phony--analyze-grammar prepared-grammar)))
-      (if (phony--analysis-data-contains-errors analysis-data)
-          (display-warning 'phony "Grammar contains errors, not exporting")
-        (when (and (not noninteractive)
-                   (not (server-running-p))
-                   (y-or-n-p "Emacs needs to run as a daemon for phony to work.  Start daemon?"))
-          (server-start))
+    (let* ((grammar (phony--finalize-grammar)))
+      (if-let* ((diagnostics (phony--grammar-diagnostics grammar)))
+          (progn (dolist (diagnostic diagnostics)
+                   (display-warning
+                    'phony (phony--diagnostic-message diagnostic)))
+                 (display-warning
+                  'phony "Grammar contains errors, not exporting"))
         (cancel-function-timers #'phony--sync-state)
         (run-with-idle-timer 0.1 t #'phony--sync-state)
-        (funcall phony-export-function analysis-data)
-        (phony--export-dictionaries prepared-grammar)
-        (setq phony--exported-grammar prepared-grammar)))))
+        (cond
+         ((not (eq phony-export-function #'ignore))
+          (unless phony--warned-about-deprecated-backend
+            (display-warning
+             'phony
+             "phony-export-function is obsolete, use `phony-recognition-engine' instead"))
+          (setq phony--warned-about-deprecated-backend t)
+          (funcall phony-export-function grammar))
+         ((eq phony-recognition-engine 'talon)
+          (phony-talon-export grammar))
+         ((eq phony-recognition-engine nil)
+          (ignore))
+         (t (display-warning
+             'phony
+             (format "Invalid speech engine `%s'" phony-recognition-engine))))
+        (phony--export-dictionaries grammar)
+        (setq phony--exported-grammar grammar)))))
 
 (defun phony--debounce (f &rest args)
   "Debounce the invocation of F by waiting until next idle.
@@ -1175,11 +1209,17 @@ If `phony-mode' is not enabled, this function does nothing."
 See `phony-defun' for more information."
   (if (plist-member arguments :interactive)
       (progn (setf (plist-get arguments :interactive-p)
-                   (plist-get arguments :interactive))
+                   (ensure-list (plist-get arguments :interactive)))
              (cl-remf arguments :interactive))
     (setf (plist-get arguments :interactive-p)
           (and (not (map-contains-key arguments :contributes-to))
-               (not (map-contains-key arguments :provides)))))
+               (not (map-contains-key arguments :provides))
+               (list 'phony-interactive-mode))))
+  (setf (plist-get arguments :interactive-p)
+        (seq-map (lambda (mode) (if (eq mode t)
+                                    'phony-interactive-mode
+                                  mode))
+                 (plist-get arguments :interactive-p)))
   (when (plist-member arguments :anchor-beginning)
     (setf (plist-get arguments :anchor-beginning-p)
           (plist-get arguments :anchor-beginning))
@@ -1256,6 +1296,12 @@ Optional keywords unique to procedure rules are:
                      occur as part of other rules.  Default is t unless
                      `:contributes-to' or `:provides' is non-nil, in
                      which case the default is nil.
+
+                     In addition to t, this parameter can take an
+                     unquoted symbol or list of symbols, in which case
+                     the symbols specify under which modes the rule
+                     should be interactive.  The value t is equivalent
+                     to specifying `phony-interactive-mode'.
   :anchor-beginning  If t, this rule must occur first in an utterance.
                      Default is nil.
   :anchor-end        If t, this rule must occur last in an utterance.
@@ -1424,14 +1470,14 @@ dictionary."
   "Export information about which rules are currently active."
   ;; We must filter the enabled rules /before/ doing with-temp-file,
   ;; as the temporary buffer may influence which rules are enabled.
-  (let ((active-rules (seq-filter #'phony--rule-active-p
-                                  (phony--get-rules phony--exported-grammar))))
+  (let ((active-rules
+         (thread-last
+           (phony--get-rules phony--exported-grammar)
+           (seq-filter #'phony--rule-active-p)
+           (seq-filter #'phony--rule-reachable-p)
+           (seq-remove #'phony--rule-always-active-p))))
     (with-temp-file (phony--output-directory "active-rules")
-      (insert (mapconcat
-               #'phony--rule-external-name
-               (seq-remove #'phony--rule-always-active-p
-                           active-rules)
-               "\n")
+      (insert (mapconcat #'phony--rule-external-name active-rules "\n")
               "\n"))))
 
 (defun phony--evaluate-ast (ast)
@@ -1465,8 +1511,10 @@ The parser interprets UTTERANCE as a sequence of expressions of
 is evaluated in turn.  The return value of this function is a list
 containing the return values from evaluating the expressions.
 
-If the parsing of UTTERANCE is ambiguous, this function picks an
-arbitrary parse.
+If the parsing of UTTERANCE is ambiguous, this function picks the parse
+containing the fewest number of free-text words.  If there are multiple
+parses with the same number of free-text words, an arbitrary parse is
+picked.
 
 If there is no possible parse of UTTERANCE then nil is returned, or
 DEFAULT if it is provided.

@@ -26,6 +26,8 @@
 
 ;;; Code:
 
+(require 'server)
+
 (require 'phony-core)
 
 (cl-defgeneric phony-talon--pattern-match-string (pattern)
@@ -39,7 +41,8 @@
   "Return the Talon pattern string for matching PATTERN."
   (format "<user.%s>"
           (phony--rule-external-name
-           (phony-pattern--rule-name pattern))))
+           (phony--resolved
+            (phony-pattern--rule-reference pattern)))))
 
 (cl-defmethod phony-talon--pattern-match-string ((pattern phony-pattern--sequence))
   "Return the Talon pattern string for matching PATTERN."
@@ -82,30 +85,37 @@
   (phony-talon--pattern-match-string
    (phony-pattern--argument-pattern pattern)))
 
-(cl-defgeneric phony-talon--rule-match-string (rule analysis-data)
-  "Return the full Talon rule pattern for RULE given ANALYSIS-DATA.")
+(cl-defgeneric phony-talon--rule-match-string (rule)
+  "Return the full Talon rule pattern for RULE.")
 
-(cl-defmethod phony-talon--rule-match-string ((rule phony--procedure-rule) _analysis-data)
-  "Return the full Talon rule pattern for RULE given ANALYSIS-DATA."
+(cl-defmethod phony-talon--rule-match-string ((rule phony--procedure-rule))
+  "Return the full Talon rule pattern for RULE."
   (let* ((pattern (phony--procedure-rule-pattern rule)))
     (concat "'" (phony-talon--pattern-match-string pattern) "'")))
 
-(cl-defmethod phony-talon--rule-match-string ((rule phony--open-rule) analysis-data)
-  "Return the full Talon rule pattern for RULE given ANALYSIS-DATA."
-  (if (gethash rule (phony--analysis-data-productions analysis-data))
+(cl-defmethod phony-talon--rule-match-string ((rule phony--open-rule))
+  "Return the full Talon rule pattern for RULE."
+  (if-let* ((alternatives (phony--open-rule-effective-alternatives rule)))
       (concat
        "\n        '  "
        (string-join (seq-map
                      (lambda (alternative)
                        (format "<user.%s>'"
                                (phony--rule-external-name alternative)))
-                     (gethash rule (phony--analysis-data-productions analysis-data)))
+                     alternatives)
                     "\n        '| "))
     "'{user.phony_disabled_rule}'"))
 
-(cl-defmethod phony-talon--rule-match-string ((rule phony--dictionary) _analysis-data)
-  "Return the full Talon rule pattern for RULE given ANALYSIS-DATA."
+(cl-defmethod phony-talon--rule-match-string ((rule phony--dictionary))
+  "Return the full Talon rule pattern for RULE."
   (concat "'{user." (phony--rule-external-name rule) "}'"))
+
+(cl-defmethod phony-talon--rule-match-string ((rule phony--interface-rule))
+  "Return the full Talon rule pattern for RULE."
+  (format
+   "'<user.%s>'"
+   (phony--rule-external-name
+    (phony--interface-resolved-provider rule))))
 
 (defun phony-talon--speech-insert-rule (rule)
   "Insert a .talon rule entry for procedure RULE."
@@ -117,37 +127,21 @@
   (insert (format ":\n    user.phony_evaluate_emacs_lisp(%s)\n\n"
                   (phony--rule-external-name rule))))
 
-(defun phony-talon--insert-capture-preamble (rule analysis-data)
-  ;; checkdoc-params: (analysis-data)
+(defun phony-talon--insert-capture-preamble (rule)
   "Insert the Python capture preamble for RULE."
   (if (phony--rule-always-active-p rule)
-      (insert "@module.capture(rule=" (phony-talon--rule-match-string rule analysis-data) ")\n")
+      (insert "@module.capture(rule=" (phony-talon--rule-match-string rule) ")\n")
     (insert "# Base case for when the rule is inactive\n")
     (phony-talon--insert-python-disabled rule)
     (insert "\ncontext = talon.Context()\n")
     (insert "context.matches = \"\"\"\ntag: user." (phony--rule-external-name rule) "\n\"\"\"\n")
     (insert "@context.capture('user." (phony--rule-external-name rule)
-            "', rule=" (phony-talon--rule-match-string rule analysis-data) ")\n")))
+            "', rule=" (phony-talon--rule-match-string rule) ")\n")))
 
-(cl-defgeneric phony-talon--insert-python (rule)
-  "Insert python code for capturing RULE.")
-
-(cl-defmethod phony-talon--insert-python ((rule phony--open-rule))
-  "Insert python code for capturing RULE."
-  (insert
-   (format "def %s(m) -> str:\n    return %s\n"
-           (phony--rule-external-name rule)
-           "m[0]")))
-
-(cl-defmethod phony-talon--insert-python ((rule phony--procedure-rule))
+(defun phony-talon--insert-python (rule)
   "Insert python code for capturing RULE."
   (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
           "     return ' '.join(str(x) for x in m)\n"))
-
-(cl-defmethod phony-talon--insert-python ((rule phony--dictionary))
-  "Insert python code for capturing RULE."
-  (insert "def " (phony--rule-external-name rule) "(m) -> str:\n"
-          "    return m[0]"))
 
 (defun phony-talon--insert-python-disabled (rule)
   "Insert a Python stub for disabled RULE returning False."
@@ -168,7 +162,7 @@ If you are using EXWM, you probably want this to be t.")
   (seq-doseq (rule rules)
     (when (and
            (phony--procedure-rule-p rule)
-           (phony--procedure-rule-interactive-p rule))
+           (phony--interactive-p rule))
       (phony-talon--speech-insert-rule rule))))
 
 (defun phony-talon--output-path (&rest components)
@@ -177,14 +171,12 @@ If you are using EXWM, you probably want this to be t.")
 COMPONENTS are appended as components to the returned path."
   (apply #'phony--output-directory "talon" components))
 
-(defun phony-talon--generate-configuration (analysis-data)
-  ;; checkdoc-params: (analysis-data)
-  "Generate all Talon files from the current phony grammar.
+(defun phony-talon--generate-configuration (grammar)
+  "Generate all Talon files from GRAMMAR.
 
 This function creates .talon and .py files in the output directory."
   (mkdir (phony-talon--output-path) t)
-  (let* ((grammar (phony--analysis-data-grammar analysis-data))
-         (rules (phony--get-rules grammar)))
+  (let* ((rules (phony--get-rules grammar)))
     (with-temp-file (phony-talon--output-path "exported-rules.talon")
       (phony-talon--insert-exported-rules rules))
 
@@ -265,21 +257,24 @@ This function creates .talon and .py files in the output directory."
               "        lambda x, y: update_active_tags())\n"
               "\n"
               "module.list(\"phony_disabled_rule\", desc=\"This cannot match\")\n")
-      (seq-doseq (rule rules)
+      (seq-doseq (rule (seq-filter #'phony--rule-reachable-p rules))
         (insert "\n")
         (unless (phony--rule-always-active-p rule)
           (insert (format "module.tag('%1$s', desc='Enabled when %1$s should be enabled')\n"
                           (phony--rule-external-name rule))))
-        (phony-talon--insert-capture-preamble rule analysis-data)
+        (phony-talon--insert-capture-preamble rule)
         (phony-talon--insert-python rule)))))
 
-(defun phony-talon-export (analysis-data)
-  ;; checkdoc-params: (analysis-data)
-  "Generate all Talon files from the current phony grammar.
+(defun phony-talon-export (grammar)
+  "Generate Talon configuration for detecting utterances of GRAMMAR.
 
 This function creates .talon and .py files in the output directory and
 symlinks them into ~/.talon/user/."
-  (phony-talon--generate-configuration analysis-data)
+  (when (and (not noninteractive)
+             (not (server-running-p))
+             (y-or-n-p "Emacs needs to run as a daemon for phony to work with Talon.  Start daemon?"))
+    (server-start))
+  (phony-talon--generate-configuration grammar)
   (let ((link-path (expand-file-name "~/.talon/user/phony-generated-rules")))
     (if (or (not (file-exists-p link-path))
             (file-symlink-p link-path))

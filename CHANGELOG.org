@@ -1,3 +1,25 @@
+* 4.0.0 [2026-11-23 Mon]
+- The ~:interactive~ parameter of ~phony-defun~ can now take a mode or
+  a list of modes.  The rule will be interactive only if one of those
+  modes is enabled.  The value t is interpreted as
+  ~phony-interactive-mode~.  This means that one can also disable
+  interactivity of all rules with ~:interactive~ set to t, explicitly
+  or implicitly, by disabling that mode.  This can e.g. be used for
+  defining "sleep" modes, which disables all commands except for a
+  wake-up command.
+- ~phony-evaluate~ and ~phony-evaluate-as-event~ now prioritizes
+  parses containing the fewest number of free-text words.  This means
+  that if you have one command matching a phrase and one command
+  matching a literal, the literal command will be prioritized.
+- Presentation of diagnostics has improved.  All issues are now
+  displayed in the ~*Warnings*~ buffer.
+- Phony now only asks to start Emacs daemon if a backend requiring
+  that is selected.
+- Talon is no longer the default backend.  To set Talon as the
+  backend, set the new variable ~phony-recognition-engine~ to ~talon~.
+  The old variable ~phony-export-function~ now defaults to ~#'ignore~
+  and is obsolete.
+
 * 3.0.0 [2026-11-15 Sun]
 - New pattern for ~phony-defun~: You can now specify a match of one of
   multiple alternatives using |.  See ~phony-defun~ documentation for

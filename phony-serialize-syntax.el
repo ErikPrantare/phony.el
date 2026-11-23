@@ -72,7 +72,10 @@ syntax from untrusted sources!"
 
 (cl-defmethod phony--unparse ((module phony--module))
   "Unparse MODULE."
-  `(phony-define-module ,(phony--module-name module)))
+  `(progn
+     (phony-define-module ,(phony--module-name module))
+     ,@(and (phony--module-enabled-p module)
+            `((phony-enable-module ',(phony--module-name module))))))
 
 (cl-defgeneric phony--rule-parameters (rule)
   "Return keyword parameters of RULE as a plist.")
@@ -101,7 +104,7 @@ syntax from untrusted sources!"
 (cl-defmethod phony--rule-parameters ((rule phony--open-rule))
   "Return keyword parameters of RULE."
   `(,@(and-let* ((alternatives (phony--open-rule-alternatives rule)))
-        `(:alternatives ,alternatives))
+        `(:alternatives ,(seq-map #'phony--rule-reference-name alternatives)))
     ,@(cl-call-next-method)))
 
 (cl-defmethod phony--rule-parameters ((rule phony--interface-rule))
