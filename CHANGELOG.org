@@ -15,6 +15,10 @@
   displayed in the ~*Warnings*~ buffer.
 - Phony now only asks to start Emacs daemon if a backend requiring
   that is selected.
+- Talon is no longer the default backend.  To set Talon as the
+  backend, set the new variable ~phony-recognition-engine~ to ~talon~.
+  The old variable ~phony-export-function~ now defaults to ~#'ignore~
+  and is obsolete.
 
 * 3.0.0 [2026-11-15 Sun]
 - New pattern for ~phony-defun~: You can now specify a match of one of

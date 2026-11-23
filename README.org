@@ -56,10 +56,8 @@ through our matrix room [[https://matrix.to/#/#emacslisten:matrix.org][#emacslis
 :PROPERTIES:
 :CUSTOM_ID: setup
 :END:
-For speech recognition, this package assumes that you have Talon up
-and running.  See [[https://talon.wiki/Resource%20Hub/Talon%20Installation/installation_guide/][steps 1-3 on their wiki]] for instructions.  If you
-just want to try out phony without a speech recognition engine, use
-~phony-evaluate~.
+Phony has the best support for Talon as the speech recognition engine.
+See [[https://talon.wiki/Resource%20Hub/Talon%20Installation/installation_guide/][steps 1-3 on their wiki]] for installation instructions.
 
 This package is on MELPA as [[https://melpa.org/#/phony][phony]].  After installation, enable
 ~phony-mode~:
@@ -67,8 +65,14 @@ This package is on MELPA as [[https://melpa.org/#/phony][phony]].  After install
 #+begin_src elisp
   (use-package phony
     :config
+    (setopt phony-recognition-engine 'talon)
     (phony-mode 1))
 #+end_src
+
+If you just want to try out phony without a speech recognition engine,
+use ~phony-evaluate~.  There is also some community work on
+alternative engines.  Get in contact with us through our matrix room
+[[https://matrix.to/#/#emacslisten:matrix.org][#emacslisten:matrix.org]] for more on that.
 
 * Usage
 :PROPERTIES:

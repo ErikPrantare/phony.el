@@ -1068,12 +1068,29 @@ The error signalled is `phony--dependency-cycle'."
                    " -> "))))))
     nil))
 
-(defcustom phony-export-function 'phony-talon-export
+(defcustom phony-export-function #'ignore
   "Function to be used for exporting spoken rules."
   ;; Using radio instead of choice did not display :tag
   :type '(choice (function-item :tag "Talon exporter"
                                 phony-talon-export))
   :tag "Phony Rule Exporter"
+  :risky t
+  :group 'phony)
+
+(make-obsolete-variable
+ 'phony-export-function
+ 'phony-recognition-engine
+ "2026-11-23")
+
+(defcustom phony-recognition-engine nil
+  "Which recognition engine to use.
+
+This is a symbol.  Allowed values are
+
+- The symbol `talon' for Talon, or
+- nil for no engine."
+  :type '(radio (const :tag "None" nil)
+                (const :tag "Talon" talon))
   :risky t
   :group 'phony)
 
@@ -1127,6 +1144,11 @@ been initialized on it."
     (phony-ag--initialize grammar)
     grammar))
 
+(declare-function phony-talon-export "phony-talon")
+
+(defvar phony--warned-about-deprecated-backend nil
+  "Non-nil if we've displayed a warning about `phony-export-function'.")
+
 (defun phony--export-all ()
   "Export all rules to the speech recognition engine.
 
@@ -1143,7 +1165,21 @@ If no rules are defined, this function does nothing."
                   'phony "Grammar contains errors, not exporting"))
         (cancel-function-timers #'phony--sync-state)
         (run-with-idle-timer 0.1 t #'phony--sync-state)
-        (funcall phony-export-function grammar)
+        (cond
+         ((not (eq phony-export-function #'ignore))
+          (unless phony--warned-about-deprecated-backend
+            (display-warning
+             'phony
+             "phony-export-function is obsolete, use `phony-recognition-engine' instead"))
+          (setq phony--warned-about-deprecated-backend t)
+          (funcall phony-export-function grammar))
+         ((eq phony-recognition-engine 'talon)
+          (phony-talon-export grammar))
+         ((eq phony-recognition-engine nil)
+          (ignore))
+         (t (display-warning
+             'phony
+             (format "Invalid speech engine `%s'" phony-recognition-engine))))
         (phony--export-dictionaries grammar)
         (setq phony--exported-grammar grammar)))))
 
